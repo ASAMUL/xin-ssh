@@ -1,7 +1,19 @@
-# Tauri + Vue 3
+# Xin Terminal
 
-This template should help get you started developing with Tauri + Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Xin Terminal is a modern SSH client focused on visual remote file management. The product direction is: operate a remote server like a local file explorer, while keeping terminal access one click away.
 
-## Recommended IDE Setup
+## Current Slice
 
-- [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- Vue 3 desktop workspace shell matching the product reference: connection sidebar, session tabs, file explorer, terminal dock, transfer queue, and status bar.
+- Tauri command skeleton for connection profiles, sessions, remote directory listing, transfer tasks, and terminal snapshots.
+- Mock data is intentionally isolated so the next phase can replace it with real SSH/SFTP state without reshaping the UI.
+
+## Development
+
+```sh
+pnpm install
+pnpm dev
+pnpm tauri dev
+```
+
+See [docs/plan.md](docs/plan.md) for the full product and architecture plan.

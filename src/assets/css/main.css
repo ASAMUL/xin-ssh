@@ -1,2 +1,77 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+:root {
+  color: #0f172a;
+  background: #eaf1f9;
+  font-family:
+    "SF Pro Display",
+    "Segoe UI Variable",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(244, 248, 255, 0.95), rgba(223, 236, 252, 0.92)),
+    radial-gradient(circle at 9% 91%, rgba(34, 197, 94, 0.11), transparent 28%),
+    radial-gradient(circle at 82% 3%, rgba(37, 99, 235, 0.12), transparent 32%);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: default;
+}
+
+.app-shell {
+  width: min(100vw - 28px, 1536px);
+  height: min(100vh - 28px, 970px);
+  min-width: 900px;
+  min-height: 690px;
+  position: fixed;
+  inset: 14px;
+  margin: auto;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 28px 90px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.workspace-frame {
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+::selection {
+  color: #ffffff;
+  background: #0757e6;
+}

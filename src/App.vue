@@ -1,64 +1,99 @@
 <script setup>
-import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { computed, ref } from "vue";
+import SidebarConnections from "./components/SidebarConnections.vue";
+import SessionTabs from "./components/SessionTabs.vue";
+import FileExplorer from "./components/FileExplorer.vue";
+import TerminalDock from "./components/TerminalDock.vue";
+import TransferToast from "./components/TransferToast.vue";
+import StatusBar from "./components/StatusBar.vue";
+import {
+  connections,
+  fileEntries,
+  pathCrumbs,
+  sessions,
+  terminalLines,
+  transferSummary,
+  transferTasks,
+} from "./data/workspace";
 
-const greetMsg = ref("");
-const name = ref("");
+const selectedConnectionId = ref("prod-web");
+const activeSessionId = ref("prod-web");
+const selectedFileId = ref("assets");
+const activePanel = ref("terminal");
 
-const data = ref([
-  {
-    id: '4600',
-    date: '2024-03-11T15:30:00',
-    status: 'paid',
-    email: 'james.anderson@example.com',
-    amount: 594
-  },
-  {
-    id: '4599',
-    date: '2024-03-11T10:10:00',
-    status: 'failed',
-    email: 'mia.white@example.com',
-    amount: 276
-  },
-  {
-    id: '4598',
-    date: '2024-03-11T08:50:00',
-    status: 'refunded',
-    email: 'william.brown@example.com',
-    amount: 315
-  },
-  {
-    id: '4597',
-    date: '2024-03-10T19:45:00',
-    status: 'paid',
-    email: 'emma.davis@example.com',
-    amount: 529
-  },
-  {
-    id: '4596',
-    date: '2024-03-10T15:55:00',
-    status: 'paid',
-    email: 'ethan.harris@example.com',
-    amount: 639
+const activeConnection = computed(() =>
+  connections.find((connection) => connection.id === selectedConnectionId.value),
+);
+
+const activeSession = computed(() =>
+  sessions.find((session) => session.id === activeSessionId.value),
+);
+
+const selectedFile = computed(() =>
+  fileEntries.find((fileEntry) => fileEntry.id === selectedFileId.value),
+);
+
+function selectConnection(connectionId) {
+  selectedConnectionId.value = connectionId;
+
+  const matchingSession = sessions.find((session) => session.connectionId === connectionId);
+  if (matchingSession) {
+    activeSessionId.value = matchingSession.id;
   }
-])
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsg.value = await invoke("greet", { name: name.value });
+}
+
+function selectSession(sessionId) {
+  activeSessionId.value = sessionId;
+
+  const matchingSession = sessions.find((session) => session.id === sessionId);
+  if (matchingSession) {
+    selectedConnectionId.value = matchingSession.connectionId;
+  }
 }
 </script>
 
 <template>
   <UApp>
-    <div class="flex flex-col items-center justify-center">
-      <UBanner title="This is a banner with an important message." />
+    <main class="app-shell">
+      <SidebarConnections
+        :connections="connections"
+        :active-connection-id="selectedConnectionId"
+        @select="selectConnection"
+      />
 
-      <UButton icon="i-lucide-rocket" size="md" color="error" variant="solid">Button</UButton>
+      <section class="workspace-frame" aria-label="Xin Terminal workspace">
+        <SessionTabs
+          :sessions="sessions"
+          :active-session-id="activeSessionId"
+          @select="selectSession"
+        />
 
-      <UTable :data="data" class="flex-1" />
-    </div>
+        <FileExplorer
+          :active-session="activeSession"
+          :files="fileEntries"
+          :path-crumbs="pathCrumbs"
+          :selected-file-id="selectedFileId"
+          @select-file="selectedFileId = $event"
+        />
+
+        <TerminalDock
+          :active-panel="activePanel"
+          :connection="activeConnection"
+          :terminal-lines="terminalLines"
+          @update-panel="activePanel = $event"
+        />
+
+        <TransferToast
+          :summary="transferSummary"
+          :tasks="transferTasks"
+        />
+
+        <StatusBar
+          :connection="activeConnection"
+          :selected-file="selectedFile"
+          :summary="transferSummary"
+        />
+      </section>
+    </main>
   </UApp>
-
 </template>
-
-<style scoped></style>
