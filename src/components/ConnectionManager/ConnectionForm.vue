@@ -1,10 +1,17 @@
 <script setup>
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProfileStore } from "../../stores/profileStore";
 import { useAppStore } from "../../stores/appStore";
 import { testConnection as testConnectionRequest } from "../../services/workspaceApi";
+
+const props = defineProps({
+  profileId: {
+    type: String,
+    default: null,
+  },
+});
 
 const emit = defineEmits(["close"]);
 const { t } = useI18n();
@@ -20,10 +27,22 @@ const connectionTestResult = ref(null);
 const saveProgressKey = ref("");
 
 const defaultGroupId = computed(() => profileStore.activeGroups[0]?.id ?? "group-default");
+const editingProfile = computed(() =>
+  props.profileId ? profileStore.profiles.find((profile) => profile.id === props.profileId) : null,
+);
+const isEditingProfile = computed(() => Boolean(editingProfile.value));
+const formTitle = computed(() => t(isEditingProfile.value ? "profile.editTitle" : "profile.newTitle"));
+const saveButtonText = computed(() => {
+  if (isSavingProfile.value) return t("profile.saving");
+
+  return t(isEditingProfile.value ? "profile.update" : "profile.save");
+});
 const saveProgressMessage = computed(() => (saveProgressKey.value ? t(saveProgressKey.value) : ""));
+const groupOptions = computed(() => profileStore.activeGroups);
 
 const form = reactive({
   name: "",
+  groupId: "",
   host: "",
   port: 22,
   username: "",
@@ -35,10 +54,41 @@ const form = reactive({
 const canSave = computed(
   () =>
     form.name.trim() &&
+    form.groupId &&
     form.host.trim() &&
     form.username.trim() &&
     Number(form.port) > 0,
 );
+
+watch(
+  [editingProfile, defaultGroupId],
+  () => {
+    resetForm();
+  },
+  { immediate: true },
+);
+
+function resetForm() {
+  const profile = editingProfile.value;
+
+  form.name = profile?.name ?? "";
+  form.groupId = profile?.groupId ?? defaultGroupId.value;
+  form.host = profile?.host ?? "";
+  form.port = profile?.port ?? 22;
+  form.username = profile?.username ?? "";
+  form.authMethod = profile?.authMethod ?? "password";
+  form.privateKeyPath = profile?.privateKeyPath ?? "";
+  form.defaultRemotePath = profile?.defaultRemotePath ?? "/";
+  secretPassword.value = "";
+  passphrase.value = "";
+  error.value = "";
+  connectionTestResult.value = null;
+  saveProgressKey.value = "";
+}
+
+function groupDisplayName(group) {
+  return group.name === "Ungrouped" ? t("sidebar.ungrouped") : group.name;
+}
 
 const testResultMessage = computed(() => {
   if (!connectionTestResult.value) return "";
@@ -74,25 +124,26 @@ async function submitProfile() {
   isSavingProfile.value = true;
   try {
     const now = Date.now().toString();
-    const profileId = crypto.randomUUID();
+    const currentProfile = editingProfile.value;
+    const profileId = currentProfile?.id ?? crypto.randomUUID();
 
     const workspaceSnapshot = await runSaveStep("profile.saveProgress.saveProfile", () =>
       profileStore.saveProfile({
         id: profileId,
-        syncId: profileId,
-        groupId: defaultGroupId.value,
+        syncId: currentProfile?.syncId ?? profileId,
+        groupId: form.groupId || defaultGroupId.value,
         name: form.name.trim(),
         host: form.host.trim(),
         port: Number(form.port),
         username: form.username.trim(),
         authMethod: form.authMethod,
         privateKeyPath: form.authMethod === "privateKey" ? form.privateKeyPath : null,
-        credentialRef: null,
+        credentialRef: currentProfile?.credentialRef ?? null,
         defaultRemotePath: form.defaultRemotePath || "/",
-        sortOrder: profileStore.activeProfiles.length,
-        createdAt: now,
+        sortOrder: currentProfile?.sortOrder ?? profileStore.activeProfiles.length,
+        createdAt: currentProfile?.createdAt ?? now,
         updatedAt: now,
-        deletedAt: null,
+        deletedAt: currentProfile?.deletedAt ?? null,
       }),
     );
 
@@ -169,7 +220,7 @@ async function testCurrentConnection() {
   <div class="modal-backdrop">
     <form class="connection-form" @submit.prevent="submitProfile">
       <header>
-        <h2>{{ t("profile.newTitle") }}</h2>
+        <h2>{{ formTitle }}</h2>
         <button type="button" :aria-label="t('profile.cancel')" @click="emit('close')">
           <UIcon name="i-lucide-x" />
         </button>
@@ -179,6 +230,14 @@ async function testCurrentConnection() {
         <label>
           <span>{{ t("profile.name") }}</span>
           <input v-model="form.name" type="text" />
+        </label>
+        <label>
+          <span>{{ t("profile.group") }}</span>
+          <select v-model="form.groupId">
+            <option v-for="group in groupOptions" :key="group.id" :value="group.id">
+              {{ groupDisplayName(group) }}
+            </option>
+          </select>
         </label>
         <label>
           <span>{{ t("profile.host") }}</span>
@@ -268,7 +327,7 @@ async function testCurrentConnection() {
             :name="isSavingProfile ? 'i-lucide-loader-circle' : 'i-lucide-save'"
             :class="{ 'spin-icon': isSavingProfile }"
           />
-          <span>{{ isSavingProfile ? t("profile.saving") : t("profile.save") }}</span>
+          <span>{{ saveButtonText }}</span>
         </button>
       </footer>
     </form>

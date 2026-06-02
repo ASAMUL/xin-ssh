@@ -32,7 +32,11 @@ const hasProfiles = computed(() => profileStore.activeProfiles.length > 0);
       <EmptyWorkspace :has-profiles="hasProfiles" @create-connection="uiStore.openConnectionForm" />
     </section>
 
-    <ConnectionForm v-if="uiStore.isConnectionFormOpen" @close="uiStore.closeConnectionForm" />
+    <ConnectionForm
+      v-if="uiStore.isConnectionFormOpen"
+      :profile-id="uiStore.editingProfileId"
+      @close="uiStore.closeConnectionForm"
+    />
     <SettingsPanel v-if="uiStore.isSettingsOpen" @close="uiStore.closeSettings" />
   </section>
 </template>

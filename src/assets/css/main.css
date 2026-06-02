@@ -438,6 +438,12 @@ select:focus {
   text-transform: uppercase;
 }
 
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .section-heading button,
 .sidebar-footer button,
 .toolbar-actions button {
@@ -461,6 +467,38 @@ select:focus {
   flex-direction: column;
   gap: 12px;
   overflow: auto;
+}
+
+.group-creator {
+  display: grid;
+  grid-template-columns: 1fr 32px 32px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.group-creator input {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.group-creator button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: #475569;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.group-creator button:hover {
+  color: #0757e6;
+  background: rgba(37, 99, 235, 0.08);
 }
 
 .group-heading {
@@ -499,6 +537,10 @@ select:focus {
 
 .connection-item:hover {
   background: rgba(37, 99, 235, 0.08);
+}
+
+.connection-item.deleting {
+  opacity: 0.6;
 }
 
 .status-dot {
@@ -544,6 +586,49 @@ select:focus {
   display: flex;
   justify-content: space-between;
   padding: 0 8px;
+}
+
+.connection-context-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(16px);
+}
+
+.connection-context-menu button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 0 10px;
+  color: #334155;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 13px;
+}
+
+.connection-context-menu button:hover {
+  color: #0f172a;
+  background: rgba(148, 163, 184, 0.13);
+}
+
+.connection-context-menu button.danger {
+  color: #dc2626;
+}
+
+.connection-context-menu button.danger:hover {
+  color: #991b1b;
+  background: rgba(248, 113, 113, 0.12);
 }
 
 .workspace-main {
