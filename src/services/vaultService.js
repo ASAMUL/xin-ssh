@@ -1,7 +1,6 @@
 import { Stronghold } from "@tauri-apps/plugin-stronghold";
 
 const CLIENT_NAME = "xin-terminal";
-const MARKER_KEY = "vault:marker";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -9,26 +8,25 @@ let stronghold = null;
 let client = null;
 let store = null;
 
-export async function unlockStronghold(vaultPath, unlockPassword) {
-  stronghold = await Stronghold.load(vaultPath, unlockPassword);
+export async function unlockStronghold(vaultPath, unlockPassword, onProgress) {
+  stronghold = await runVaultStep(
+    "loadStronghold",
+    () => Stronghold.load(vaultPath, unlockPassword),
+    onProgress,
+  );
 
   try {
-    client = await stronghold.loadClient(CLIENT_NAME);
+    client = await runVaultStep("loadClient", () => stronghold.loadClient(CLIENT_NAME), onProgress);
   } catch {
-    client = await stronghold.createClient(CLIENT_NAME);
+    client = await runVaultStep("createClient", () => stronghold.createClient(CLIENT_NAME), onProgress);
   }
 
   store = client.getStore();
-  const marker = await store.get(MARKER_KEY);
-  if (!marker) {
-    await store.insert(MARKER_KEY, bytes("xin-terminal-vault"));
-    await stronghold.save();
-  }
 }
 
-export async function lockStronghold() {
+export async function lockStronghold(onProgress) {
   if (stronghold) {
-    await stronghold.unload();
+    await runVaultStep("unloadStronghold", () => stronghold.unload(), onProgress);
   }
 
   stronghold = null;
@@ -36,18 +34,26 @@ export async function lockStronghold() {
   store = null;
 }
 
-export async function saveCredential(credentialRef, secret) {
+export async function saveCredential(credentialRef, secret, onProgress) {
   assertUnlocked();
 
   if (secret.password) {
-    await store.insert(secretKey(credentialRef, "password"), bytes(secret.password));
+    await runVaultStep(
+      "insertPassword",
+      () => store.insert(secretKey(credentialRef, "password"), bytes(secret.password)),
+      onProgress,
+    );
   }
 
   if (secret.passphrase) {
-    await store.insert(secretKey(credentialRef, "passphrase"), bytes(secret.passphrase));
+    await runVaultStep(
+      "insertPassphrase",
+      () => store.insert(secretKey(credentialRef, "passphrase"), bytes(secret.passphrase)),
+      onProgress,
+    );
   }
 
-  await stronghold.save();
+  await runVaultStep("saveStronghold", () => stronghold.save(), onProgress);
 }
 
 export async function readCredential(credentialRef, kind) {
@@ -68,4 +74,18 @@ function secretKey(credentialRef, kind) {
 
 function bytes(value) {
   return Array.from(encoder.encode(value));
+}
+
+async function runVaultStep(step, task, onProgress) {
+  onProgress?.(step);
+  const startedAt = performance.now();
+
+  try {
+    return await task();
+  } finally {
+    console.info("[Xin Terminal] vault step", {
+      step,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+  }
 }

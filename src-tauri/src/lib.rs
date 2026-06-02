@@ -8,19 +8,15 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_stronghold::Builder::new(|password| {
-                use argon2::{hash_raw, Config, Variant, Version};
+                use ring::digest::{digest, SHA256};
 
-                let config = Config {
-                    lanes: 4,
-                    mem_cost: 10_000,
-                    time_cost: 10,
-                    variant: Variant::Argon2id,
-                    version: Version::Version13,
-                    ..Default::default()
-                };
-                let salt = b"xin-terminal-stronghold-v1";
+                let mut material = Vec::with_capacity(
+                    b"xin-terminal-stronghold-v1:".len() + password.len(),
+                );
+                material.extend_from_slice(b"xin-terminal-stronghold-v1:");
+                material.extend_from_slice(password.as_bytes());
 
-                hash_raw(password.as_ref(), salt, &config).expect("failed to derive vault key")
+                digest(&SHA256, &material).as_ref().to_vec()
             })
             .build(),
         )

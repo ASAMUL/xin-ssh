@@ -41,6 +41,22 @@ button {
   cursor: default;
 }
 
+.spin-icon {
+  animation: icon-spin 0.82s linear infinite;
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin-icon {
+    animation: none;
+  }
+}
+
 input,
 select {
   color: #0f172a;
@@ -290,7 +306,8 @@ select:focus {
 }
 
 .setup-hint,
-.form-error {
+.form-error,
+.form-progress {
   margin: 0;
   color: #64748b;
   font-size: 12px;

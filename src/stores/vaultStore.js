@@ -11,36 +11,42 @@ export const useVaultStore = defineStore("vault", {
   }),
   actions: {
     hydrate(vaultPath) {
+      const vaultPathChanged = this.vaultPath !== vaultPath;
       this.vaultPath = vaultPath;
-      this.isUnlocked = false;
-      this.lastBackupPath = null;
+
+      if (vaultPathChanged) {
+        this.isUnlocked = false;
+        this.lastBackupPath = null;
+      }
     },
-    async unlock(unlockPassword) {
+    async unlock(unlockPassword, onProgress) {
       if (!this.vaultPath) {
         throw new Error("Vault path is not configured");
       }
 
       this.isBusy = true;
       try {
-        await unlockStronghold(this.vaultPath, unlockPassword);
+        await unlockStronghold(this.vaultPath, unlockPassword, onProgress);
         this.isUnlocked = true;
       } finally {
         this.isBusy = false;
       }
     },
-    async ensureUnlocked() {
+    async ensureUnlocked(onProgress) {
       if (this.isUnlocked) return;
 
+      onProgress?.("readDeviceVaultKey");
       const deviceVaultPassword = await getDeviceVaultPassword();
       try {
-        await this.unlock(deviceVaultPassword);
+        await this.unlock(deviceVaultPassword, onProgress);
       } catch (error) {
-        await lockStronghold();
+        await lockStronghold(onProgress);
         this.isUnlocked = false;
+        onProgress?.("archiveCredentialStore");
         this.lastBackupPath = await archiveCredentialStore();
 
         try {
-          await this.unlock(deviceVaultPassword);
+          await this.unlock(deviceVaultPassword, onProgress);
         } catch (retryError) {
           throw new Error(
             `Credential store could not be opened after rebuilding: ${String(retryError)}`,
@@ -52,8 +58,8 @@ export const useVaultStore = defineStore("vault", {
       await lockStronghold();
       this.isUnlocked = false;
     },
-    async saveCredential(credentialRef, secret) {
-      await saveCredential(credentialRef, secret);
+    async saveCredential(credentialRef, secret, onProgress) {
+      await saveCredential(credentialRef, secret, onProgress);
     },
   },
 });

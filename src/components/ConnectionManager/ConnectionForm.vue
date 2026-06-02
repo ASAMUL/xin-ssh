@@ -3,14 +3,12 @@ import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProfileStore } from "../../stores/profileStore";
-import { useVaultStore } from "../../stores/vaultStore";
 import { useAppStore } from "../../stores/appStore";
 import { testConnection as testConnectionRequest } from "../../services/workspaceApi";
 
 const emit = defineEmits(["close"]);
 const { t } = useI18n();
 const profileStore = useProfileStore();
-const vaultStore = useVaultStore();
 const appStore = useAppStore();
 
 const error = ref("");
@@ -19,8 +17,10 @@ const passphrase = ref("");
 const isTestingConnection = ref(false);
 const isSavingProfile = ref(false);
 const connectionTestResult = ref(null);
+const saveProgressKey = ref("");
 
 const defaultGroupId = computed(() => profileStore.activeGroups[0]?.id ?? "group-default");
+const saveProgressMessage = computed(() => (saveProgressKey.value ? t(saveProgressKey.value) : ""));
 
 const form = reactive({
   name: "",
@@ -39,13 +39,6 @@ const canSave = computed(
     form.username.trim() &&
     Number(form.port) > 0,
 );
-
-const secretToSave = computed(() => ({
-  password: form.authMethod === "password" ? secretPassword.value : "",
-  passphrase: form.authMethod === "privateKey" ? passphrase.value : "",
-}));
-
-const needsVault = computed(() => Boolean(secretToSave.value.password || secretToSave.value.passphrase));
 
 const testResultMessage = computed(() => {
   if (!connectionTestResult.value) return "";
@@ -80,37 +73,30 @@ async function submitProfile() {
 
   isSavingProfile.value = true;
   try {
-    if (needsVault.value) {
-      await vaultStore.ensureUnlocked();
-    }
-
     const now = Date.now().toString();
     const profileId = crypto.randomUUID();
-    const credentialRef = needsVault.value ? `credential-${profileId}` : null;
 
-    if (credentialRef) {
-      await vaultStore.saveCredential(credentialRef, secretToSave.value);
-    }
+    const workspaceSnapshot = await runSaveStep("profile.saveProgress.saveProfile", () =>
+      profileStore.saveProfile({
+        id: profileId,
+        syncId: profileId,
+        groupId: defaultGroupId.value,
+        name: form.name.trim(),
+        host: form.host.trim(),
+        port: Number(form.port),
+        username: form.username.trim(),
+        authMethod: form.authMethod,
+        privateKeyPath: form.authMethod === "privateKey" ? form.privateKeyPath : null,
+        credentialRef: null,
+        defaultRemotePath: form.defaultRemotePath || "/",
+        sortOrder: profileStore.activeProfiles.length,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      }),
+    );
 
-    await profileStore.saveProfile({
-      id: profileId,
-      syncId: profileId,
-      groupId: defaultGroupId.value,
-      name: form.name.trim(),
-      host: form.host.trim(),
-      port: Number(form.port),
-      username: form.username.trim(),
-      authMethod: form.authMethod,
-      privateKeyPath: form.authMethod === "privateKey" ? form.privateKeyPath : null,
-      credentialRef,
-      defaultRemotePath: form.defaultRemotePath || "/",
-      sortOrder: profileStore.activeProfiles.length,
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-    });
-
-    await appStore.bootstrap();
+    appStore.consumeSnapshot(workspaceSnapshot);
     emit("close");
   } catch (submitError) {
     const message = String(submitError);
@@ -118,7 +104,22 @@ async function submitProfile() {
       ? `${t("profile.credentialStoreUnavailable")}: ${message}`
       : message;
   } finally {
+    saveProgressKey.value = "";
     isSavingProfile.value = false;
+  }
+}
+
+async function runSaveStep(stepKey, task) {
+  saveProgressKey.value = stepKey;
+  const startedAt = performance.now();
+
+  try {
+    return await task();
+  } finally {
+    console.info("[Xin Terminal] connection save step", {
+      step: stepKey,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
   }
 }
 
@@ -243,7 +244,10 @@ async function testCurrentConnection() {
           :disabled="!canSave || isTestingConnection"
           @click="testCurrentConnection"
         >
-          <UIcon :name="isTestingConnection ? 'i-lucide-loader-circle' : 'i-lucide-plug-zap'" />
+          <UIcon
+            :name="isTestingConnection ? 'i-lucide-loader-circle' : 'i-lucide-plug-zap'"
+            :class="{ 'spin-icon': isTestingConnection }"
+          />
           <span>{{ isTestingConnection ? t("profile.testing") : t("profile.test") }}</span>
         </button>
         <p v-if="connectionTestResult" class="connection-test-result">
@@ -253,13 +257,17 @@ async function testCurrentConnection() {
       </div>
 
       <p v-if="error" class="form-error">{{ error }}</p>
+      <p v-else-if="saveProgressMessage" class="form-progress">{{ saveProgressMessage }}</p>
 
       <footer>
         <button type="button" class="secondary-action" @click="emit('close')">
           {{ t("profile.cancel") }}
         </button>
         <button type="submit" class="primary-action" :disabled="!canSave || isSavingProfile">
-          <UIcon :name="isSavingProfile ? 'i-lucide-loader-circle' : 'i-lucide-save'" />
+          <UIcon
+            :name="isSavingProfile ? 'i-lucide-loader-circle' : 'i-lucide-save'"
+            :class="{ 'spin-icon': isSavingProfile }"
+          />
           <span>{{ isSavingProfile ? t("profile.saving") : t("profile.save") }}</span>
         </button>
       </footer>

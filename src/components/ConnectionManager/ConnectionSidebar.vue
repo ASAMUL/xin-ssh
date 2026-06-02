@@ -8,6 +8,7 @@ const { t } = useI18n();
 const profileStore = useProfileStore();
 const uiStore = useUiStore();
 const query = ref("");
+const savingGroupId = ref(null);
 
 const filteredGroups = computed(() => {
   const normalizedQuery = query.value.trim().toLowerCase();
@@ -25,6 +26,41 @@ const filteredGroups = computed(() => {
     }))
     .filter(({ profiles }) => !normalizedQuery || profiles.length > 0);
 });
+
+function groupDisplayName(group) {
+  return group.name === "Ungrouped" ? t("sidebar.ungrouped") : group.name;
+}
+
+function groupToggleLabel(group) {
+  return t(group.collapsed ? "sidebar.expandGroup" : "sidebar.collapseGroup", {
+    name: groupDisplayName(group),
+  });
+}
+
+function groupIconName(group) {
+  if (savingGroupId.value === group.id) {
+    return "i-lucide-loader-circle";
+  }
+
+  return group.collapsed ? "i-lucide-chevron-right" : "i-lucide-chevron-down";
+}
+
+async function toggleGroupCollapsed(group) {
+  if (savingGroupId.value === group.id) return;
+
+  savingGroupId.value = group.id;
+  uiStore.clearError();
+  try {
+    await profileStore.saveGroup({
+      ...group,
+      collapsed: !group.collapsed,
+    });
+  } catch (error) {
+    uiStore.setError(`${t("sidebar.updateGroupFailed")}: ${String(error)}`);
+  } finally {
+    savingGroupId.value = null;
+  }
+}
 </script>
 
 <template>
@@ -54,9 +90,18 @@ const filteredGroups = computed(() => {
 
     <div class="group-list">
       <section v-for="{ group, profiles } in filteredGroups" :key="group.id" class="connection-group">
-        <button type="button" class="group-heading">
-          <UIcon :name="group.collapsed ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'" />
-          <span>{{ group.name === 'Ungrouped' ? t('sidebar.ungrouped') : group.name }}</span>
+        <button
+          type="button"
+          class="group-heading"
+          :aria-label="groupToggleLabel(group)"
+          :disabled="savingGroupId === group.id"
+          @click="toggleGroupCollapsed(group)"
+        >
+          <UIcon
+            :name="groupIconName(group)"
+            :class="{ 'spin-icon': savingGroupId === group.id }"
+          />
+          <span>{{ groupDisplayName(group) }}</span>
           <small>{{ profiles.length }}</small>
         </button>
 
