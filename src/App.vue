@@ -1,19 +1,23 @@
 <script setup>
 import { computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
+import TransferToast from "./components/TransferToast.vue";
 import WindowChrome from "./components/AppShell/WindowChrome.vue";
 import WorkspaceShell from "./components/AppShell/WorkspaceShell.vue";
 import { useAppStore } from "./stores/appStore";
+import { useTransferStore } from "./stores/transferStore";
 import { useUiStore } from "./stores/uiStore";
 
 const { t } = useI18n();
 const appStore = useAppStore();
+const transferStore = useTransferStore();
 const uiStore = useUiStore();
 
 const visibleError = computed(() => appStore.error || uiStore.error);
 
 onMounted(() => {
   appStore.bootstrap();
+  transferStore.startListening();
 });
 </script>
 
@@ -31,6 +35,13 @@ onMounted(() => {
         </div>
 
         <WorkspaceShell v-else />
+
+        <TransferToast
+          v-if="transferStore.hasVisibleTasks"
+          :summary="transferStore.summary"
+          :tasks="transferStore.visibleTasks"
+          @clear-finished="transferStore.clearFinished"
+        />
 
         <div v-if="visibleError" class="error-banner">
           <strong>{{ t("errors.title") }}</strong>

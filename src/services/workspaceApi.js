@@ -67,3 +67,11 @@ export function closeTerminalSession(sessionId) {
 export function listRemoteDirectory(request) {
   return invoke("list_remote_directory", { request });
 }
+
+export function startUploadTransfer(request) {
+  return invoke("start_upload_transfer", { request });
+}
+
+export function startDownloadTransfer(request) {
+  return invoke("start_download_transfer", { request });
+}

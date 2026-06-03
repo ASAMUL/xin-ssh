@@ -37,7 +37,9 @@ pub fn run() {
             commands::save_profile,
             commands::save_settings,
             commands::send_terminal_input,
+            commands::start_download_transfer,
             commands::start_terminal_session,
+            commands::start_upload_transfer,
             commands::test_connection,
         ])
         .run(tauri::generate_context!())

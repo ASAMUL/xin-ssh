@@ -158,6 +158,49 @@ pub struct RemoteFileEntry {
     pub is_symlink: bool,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteUploadRequest {
+    pub task_id: String,
+    pub session_id: String,
+    pub local_paths: Vec<String>,
+    pub remote_dir: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDownloadRequest {
+    pub task_id: String,
+    pub session_id: String,
+    pub remote_entries: Vec<RemoteTransferEntry>,
+    pub local_dir: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteTransferEntry {
+    pub path: String,
+    pub name: String,
+    pub is_directory: bool,
+    pub size: Option<u64>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferEventPayload {
+    pub task_id: String,
+    pub session_id: String,
+    pub direction: String,
+    pub kind: String,
+    pub label: Option<String>,
+    pub current_path: Option<String>,
+    pub bytes_transferred: u64,
+    pub bytes_total: u64,
+    pub files_done: u64,
+    pub files_total: u64,
+    pub error: Option<String>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalEventPayload {

@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -15,17 +15,22 @@ use russh::{
 };
 use russh_sftp::{
     client::{fs::DirEntry, SftpSession},
-    protocol::FileType,
+    protocol::{FileType, OpenFlags},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    fs as async_fs,
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::{mpsc, oneshot, Mutex as AsyncMutex},
+};
 use tokio::time::{timeout, Duration, Instant};
 
 use crate::models::{
     AppStateFile, AppStatus, AuthMethod, ConnectionGroup, ConnectionProfile, ConnectionTestRequest,
     ConnectionTestResult, ProfilesFile, RemoteDirectoryListRequest, RemoteDirectoryListing,
-    RemoteFileEntry, TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest,
-    TerminalStartRequest, WorkspaceSettings, WorkspaceSnapshot,
+    RemoteDownloadRequest, RemoteFileEntry, RemoteTransferEntry, RemoteUploadRequest,
+    TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest, TerminalStartRequest,
+    TransferEventPayload, WorkspaceSettings, WorkspaceSnapshot,
 };
 
 const APP_STATE_FILE: &str = "app-state.json";
@@ -36,6 +41,8 @@ const VAULT_FILE: &str = "vault.xinvault";
 const CURRENT_SCHEMA_VERSION: u16 = 1;
 const DEVICE_VAULT_KEY_BYTES: usize = 32;
 const TERMINAL_EVENT: &str = "terminal-event";
+const TRANSFER_EVENT: &str = "transfer-event";
+const TRANSFER_BUFFER_SIZE: usize = 256 * 1024;
 
 #[derive(Clone, Default)]
 pub struct TerminalRegistry {
@@ -49,6 +56,8 @@ enum TerminalControl {
         path: String,
         responder: oneshot::Sender<Result<RemoteDirectoryListing, String>>,
     },
+    StartUpload(RemoteUploadRequest),
+    StartDownload(RemoteDownloadRequest),
     Close,
 }
 
@@ -112,6 +121,28 @@ impl TerminalRegistry {
         receiver
             .await
             .map_err(|_| "SFTP request was canceled".to_string())?
+    }
+
+    fn start_upload(&self, request: RemoteUploadRequest) -> Result<(), String> {
+        let sessions = self.sessions.lock().map_err(error_message)?;
+        let sender = sessions
+            .get(&request.session_id)
+            .ok_or_else(|| "Terminal session is not running".to_string())?;
+
+        sender
+            .send(TerminalControl::StartUpload(request))
+            .map_err(|_| "Terminal session is not accepting upload requests".to_string())
+    }
+
+    fn start_download(&self, request: RemoteDownloadRequest) -> Result<(), String> {
+        let sessions = self.sessions.lock().map_err(error_message)?;
+        let sender = sessions
+            .get(&request.session_id)
+            .ok_or_else(|| "Terminal session is not running".to_string())?;
+
+        sender
+            .send(TerminalControl::StartDownload(request))
+            .map_err(|_| "Terminal session is not accepting download requests".to_string())
     }
 }
 
@@ -418,6 +449,24 @@ pub async fn list_remote_directory(
     .map_err(|_| "SFTP directory listing timed out after 15 seconds".to_string())?
 }
 
+#[tauri::command]
+pub fn start_upload_transfer(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteUploadRequest,
+) -> Result<(), String> {
+    validate_upload_request(&request)?;
+    registry.start_upload(request)
+}
+
+#[tauri::command]
+pub fn start_download_transfer(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteDownloadRequest,
+) -> Result<(), String> {
+    validate_download_request(&request)?;
+    registry.start_download(request)
+}
+
 async fn run_connection_test(
     request: ConnectionTestRequest,
 ) -> Result<ConnectionTestResult, String> {
@@ -530,7 +579,14 @@ async fn run_terminal_shell(
     )
     .await?;
 
-    let mut channel = session.channel_open_session().await.map_err(connection_error)?;
+    let session = Arc::new(AsyncMutex::new(session));
+    let mut channel = {
+        let session_handle = session.lock().await;
+        session_handle
+            .channel_open_session()
+            .await
+            .map_err(connection_error)?
+    };
     channel
         .request_pty(
             false,
@@ -575,8 +631,27 @@ async fn run_terminal_shell(
                             .map_err(connection_error)?;
                     }
                     TerminalControl::ListDirectory { path, responder } => {
-                        let result = list_directory_on_session(&session_id, &session, &path).await;
+                        let result = list_directory_on_session(
+                            &session_id,
+                            Arc::clone(&session),
+                            &path,
+                        )
+                        .await;
                         let _ = responder.send(result);
+                    }
+                    TerminalControl::StartUpload(request) => {
+                        let app = app.clone();
+                        let session = Arc::clone(&session);
+                        tauri::async_runtime::spawn(async move {
+                            run_upload_transfer(app, session, request).await;
+                        });
+                    }
+                    TerminalControl::StartDownload(request) => {
+                        let app = app.clone();
+                        let session = Arc::clone(&session);
+                        tauri::async_runtime::spawn(async move {
+                            run_download_transfer(app, session, request).await;
+                        });
                     }
                     TerminalControl::Close => {
                         let _ = channel.close().await;
@@ -618,6 +693,8 @@ async fn run_terminal_shell(
     }
 
     let _ = session
+        .lock()
+        .await
         .disconnect(Disconnect::ByApplication, "terminal closed", "en")
         .await;
     emit_terminal_event(&app, &session_id, "closed", None, None);
@@ -626,20 +703,10 @@ async fn run_terminal_shell(
 
 async fn list_directory_on_session(
     session_id: &str,
-    session: &client::Handle<ConnectionTestClient>,
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     path: &str,
 ) -> Result<RemoteDirectoryListing, String> {
-    let channel = session
-        .channel_open_session()
-        .await
-        .map_err(connection_error)?;
-    channel
-        .request_subsystem(true, "sftp")
-        .await
-        .map_err(connection_error)?;
-    let sftp = SftpSession::new(channel.into_stream())
-        .await
-        .map_err(connection_error)?;
+    let sftp = open_sftp_session(session).await?;
     let requested_path = normalize_remote_path(path);
     let listing_path = sftp
         .canonicalize(requested_path.clone())
@@ -666,6 +733,27 @@ async fn list_directory_on_session(
         path: listing_path,
         entries,
     })
+}
+
+async fn open_sftp_session(
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+) -> Result<SftpSession, String> {
+    let channel = {
+        let session_handle = session.lock().await;
+        session_handle
+            .channel_open_session()
+            .await
+            .map_err(connection_error)?
+    };
+
+    channel
+        .request_subsystem(true, "sftp")
+        .await
+        .map_err(connection_error)?;
+
+    SftpSession::new(channel.into_stream())
+        .await
+        .map_err(connection_error)
 }
 
 fn remote_file_entry(entry: DirEntry) -> RemoteFileEntry {
@@ -701,6 +789,540 @@ fn remote_file_kind(file_type: FileType) -> &'static str {
         "file"
     } else {
         "other"
+    }
+}
+
+async fn run_upload_transfer(
+    app: AppHandle,
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+    request: RemoteUploadRequest,
+) {
+    if let Err(error) = upload_transfer(&app, session, request.clone()).await {
+        emit_transfer_event(
+            &app,
+            transfer_event(&request.task_id, &request.session_id, "upload", "failed")
+                .with_error(error),
+        );
+    }
+}
+
+async fn run_download_transfer(
+    app: AppHandle,
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+    request: RemoteDownloadRequest,
+) {
+    if let Err(error) = download_transfer(&app, session, request.clone()).await {
+        emit_transfer_event(
+            &app,
+            transfer_event(&request.task_id, &request.session_id, "download", "failed")
+                .with_error(error),
+        );
+    }
+}
+
+async fn upload_transfer(
+    app: &AppHandle,
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+    request: RemoteUploadRequest,
+) -> Result<(), String> {
+    let sftp = open_sftp_session(session).await?;
+    let result = upload_transfer_with_sftp(app, &sftp, &request).await;
+    let _ = sftp.close().await;
+    result
+}
+
+async fn upload_transfer_with_sftp(
+    app: &AppHandle,
+    sftp: &SftpSession,
+    request: &RemoteUploadRequest,
+) -> Result<(), String> {
+    let plan = plan_local_upload(&request.local_paths, &request.remote_dir).await?;
+    ensure_remote_targets_available(sftp, &plan.root_targets).await?;
+
+    let mut progress = TransferProgress::new(
+        &request.task_id,
+        &request.session_id,
+        "upload",
+        plan.bytes_total,
+        plan.files.len() as u64,
+        transfer_label_from_local_paths(&request.local_paths),
+    );
+    progress.emit(app, "started", None, true);
+
+    for directory in &plan.directories {
+        ensure_remote_directory(sftp, directory).await?;
+    }
+
+    let mut errors = Vec::new();
+    for file in &plan.files {
+        progress.label = file.label.clone();
+        if let Err(error) = upload_file(sftp, file, app, &mut progress).await {
+            let _ = sftp.remove_file(file.remote_path.clone()).await;
+            errors.push(format!("{}: {error}", file.label));
+        }
+    }
+
+    if !errors.is_empty() {
+        progress.fail(app, summarize_transfer_errors(errors));
+        return Ok(());
+    }
+
+    progress.emit(app, "completed", None, true);
+    Ok(())
+}
+
+async fn download_transfer(
+    app: &AppHandle,
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+    request: RemoteDownloadRequest,
+) -> Result<(), String> {
+    let sftp = open_sftp_session(session).await?;
+    let result = download_transfer_with_sftp(app, &sftp, &request).await;
+    let _ = sftp.close().await;
+    result
+}
+
+async fn download_transfer_with_sftp(
+    app: &AppHandle,
+    sftp: &SftpSession,
+    request: &RemoteDownloadRequest,
+) -> Result<(), String> {
+    let plan = plan_remote_download(sftp, &request.remote_entries, &request.local_dir).await?;
+    ensure_local_targets_available(&plan.root_targets)?;
+
+    let mut progress = TransferProgress::new(
+        &request.task_id,
+        &request.session_id,
+        "download",
+        plan.bytes_total,
+        plan.files.len() as u64,
+        transfer_label_from_remote_entries(&request.remote_entries),
+    );
+    progress.emit(app, "started", None, true);
+
+    for directory in &plan.directories {
+        async_fs::create_dir_all(directory)
+            .await
+            .map_err(error_message)?;
+    }
+
+    let mut errors = Vec::new();
+    for file in &plan.files {
+        progress.label = file.label.clone();
+        if let Err(error) = download_file(sftp, file, app, &mut progress).await {
+            let _ = async_fs::remove_file(&file.local_path).await;
+            errors.push(format!("{}: {error}", file.label));
+        }
+    }
+
+    if !errors.is_empty() {
+        progress.fail(app, summarize_transfer_errors(errors));
+        return Ok(());
+    }
+
+    progress.emit(app, "completed", None, true);
+    Ok(())
+}
+
+async fn upload_file(
+    sftp: &SftpSession,
+    file: &UploadFilePlan,
+    app: &AppHandle,
+    progress: &mut TransferProgress,
+) -> Result<(), String> {
+    let mut local_file = async_fs::File::open(&file.local_path)
+        .await
+        .map_err(error_message)?;
+    let mut remote_file = sftp
+        .open_with_flags(
+            file.remote_path.clone(),
+            OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+        )
+        .await
+        .map_err(connection_error)?;
+    let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
+
+    loop {
+        let read = local_file.read(&mut buffer).await.map_err(error_message)?;
+        if read == 0 {
+            break;
+        }
+
+        remote_file
+            .write_all(&buffer[..read])
+            .await
+            .map_err(error_message)?;
+        progress.bytes_transferred += read as u64;
+        progress.emit(app, "progress", Some(file.remote_path.clone()), false);
+    }
+
+    remote_file.flush().await.map_err(error_message)?;
+    remote_file.shutdown().await.map_err(error_message)?;
+    progress.files_done += 1;
+    progress.emit(app, "progress", Some(file.remote_path.clone()), true);
+    Ok(())
+}
+
+async fn download_file(
+    sftp: &SftpSession,
+    file: &DownloadFilePlan,
+    app: &AppHandle,
+    progress: &mut TransferProgress,
+) -> Result<(), String> {
+    if let Some(parent) = file.local_path.parent() {
+        async_fs::create_dir_all(parent).await.map_err(error_message)?;
+    }
+
+    let mut remote_file = sftp
+        .open(file.remote_path.clone())
+        .await
+        .map_err(connection_error)?;
+    let mut local_file = async_fs::File::create(&file.local_path)
+        .await
+        .map_err(error_message)?;
+    let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
+
+    loop {
+        let read = remote_file.read(&mut buffer).await.map_err(error_message)?;
+        if read == 0 {
+            break;
+        }
+
+        local_file
+            .write_all(&buffer[..read])
+            .await
+            .map_err(error_message)?;
+        progress.bytes_transferred += read as u64;
+        progress.emit(app, "progress", Some(file.remote_path.clone()), false);
+    }
+
+    local_file.flush().await.map_err(error_message)?;
+    remote_file.shutdown().await.map_err(error_message)?;
+    progress.files_done += 1;
+    progress.emit(app, "progress", Some(file.remote_path.clone()), true);
+    Ok(())
+}
+
+struct UploadPlan {
+    root_targets: Vec<String>,
+    directories: Vec<String>,
+    files: Vec<UploadFilePlan>,
+    bytes_total: u64,
+}
+
+struct UploadFilePlan {
+    local_path: PathBuf,
+    remote_path: String,
+    label: String,
+}
+
+struct DownloadPlan {
+    root_targets: Vec<PathBuf>,
+    directories: Vec<PathBuf>,
+    files: Vec<DownloadFilePlan>,
+    bytes_total: u64,
+}
+
+struct DownloadFilePlan {
+    remote_path: String,
+    local_path: PathBuf,
+    label: String,
+}
+
+async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<UploadPlan, String> {
+    let remote_dir = normalize_remote_path(remote_dir);
+    let mut root_targets = Vec::new();
+    let mut seen_root_targets = HashSet::new();
+    let mut directories = Vec::new();
+    let mut files = Vec::new();
+    let mut bytes_total = 0;
+
+    for local_path in local_paths {
+        let root = PathBuf::from(local_path);
+        let metadata = async_fs::metadata(&root).await.map_err(error_message)?;
+        let name = local_file_name(&root)?;
+        let remote_path = join_remote_path(&remote_dir, &name);
+
+        if !seen_root_targets.insert(remote_path.clone()) {
+            return Err(format!("Duplicate upload target: {remote_path}"));
+        }
+        root_targets.push(remote_path.clone());
+
+        if metadata.is_dir() {
+            directories.push(remote_path.clone());
+            let mut stack = vec![(root, remote_path)];
+
+            while let Some((local_dir, remote_parent)) = stack.pop() {
+                let mut read_dir = async_fs::read_dir(&local_dir).await.map_err(error_message)?;
+
+                while let Some(child) = read_dir.next_entry().await.map_err(error_message)? {
+                    let child_path = child.path();
+                    let child_file_type = child.file_type().await.map_err(error_message)?;
+                    let child_name = local_file_name(&child_path)?;
+                    let child_remote_path = join_remote_path(&remote_parent, &child_name);
+
+                    if child_file_type.is_dir() {
+                        directories.push(child_remote_path.clone());
+                        stack.push((child_path, child_remote_path));
+                    } else if child_file_type.is_file() {
+                        let child_metadata = child.metadata().await.map_err(error_message)?;
+                        bytes_total += child_metadata.len();
+                        files.push(UploadFilePlan {
+                            label: child_name,
+                            local_path: child_path,
+                            remote_path: child_remote_path,
+                        });
+                    }
+                }
+            }
+        } else if metadata.is_file() {
+            bytes_total += metadata.len();
+            files.push(UploadFilePlan {
+                label: name,
+                local_path: root,
+                remote_path,
+            });
+        }
+    }
+
+    Ok(UploadPlan {
+        root_targets,
+        directories,
+        files,
+        bytes_total,
+    })
+}
+
+async fn plan_remote_download(
+    sftp: &SftpSession,
+    remote_entries: &[RemoteTransferEntry],
+    local_dir: &str,
+) -> Result<DownloadPlan, String> {
+    let local_dir = PathBuf::from(local_dir);
+    let mut root_targets = Vec::new();
+    let mut seen_root_targets = HashSet::new();
+    let mut seen_local_paths = HashSet::new();
+    let mut directories = Vec::new();
+    let mut files = Vec::new();
+    let mut bytes_total = 0;
+
+    for entry in remote_entries {
+        let remote_path = normalize_remote_path(&entry.path);
+        let raw_local_name = if entry.name.trim().is_empty() {
+            remote_basename(&remote_path)
+        } else {
+            entry.name.clone()
+        };
+        let local_name = safe_local_name(&raw_local_name);
+        let local_path = local_dir.join(local_name);
+
+        if !seen_root_targets.insert(local_path.clone()) {
+            return Err(format!(
+                "Duplicate download target: {}",
+                path_to_string(&local_path)
+            ));
+        }
+        ensure_unique_local_download_path(&mut seen_local_paths, &local_path)?;
+        root_targets.push(local_path.clone());
+
+        let metadata = sftp
+            .symlink_metadata(remote_path.clone())
+            .await
+            .map_err(connection_error)?;
+        if metadata.file_type().is_dir() || entry.is_directory {
+            directories.push(local_path.clone());
+            let mut stack = vec![(remote_path, local_path)];
+
+            while let Some((remote_dir, local_parent)) = stack.pop() {
+                let read_dir = sftp
+                    .read_dir(remote_dir.clone())
+                    .await
+                    .map_err(connection_error)?;
+
+                for child in read_dir {
+                    let child_metadata = child.metadata();
+                    let child_remote_path = normalize_remote_path(&child.path());
+                    let child_local_path = local_parent.join(safe_local_name(&child.file_name()));
+                    ensure_unique_local_download_path(&mut seen_local_paths, &child_local_path)?;
+
+                    if child_metadata.file_type().is_dir() {
+                        directories.push(child_local_path.clone());
+                        stack.push((child_remote_path, child_local_path));
+                    } else {
+                        let size = child_metadata.size.unwrap_or(0);
+                        bytes_total += size;
+                        files.push(DownloadFilePlan {
+                            label: child.file_name(),
+                            remote_path: child_remote_path,
+                            local_path: child_local_path,
+                        });
+                    }
+                }
+            }
+        } else {
+            let size = entry.size.or(metadata.size).unwrap_or(0);
+            bytes_total += size;
+            files.push(DownloadFilePlan {
+                label: entry.name.clone(),
+                remote_path,
+                local_path,
+            });
+        }
+    }
+
+    Ok(DownloadPlan {
+        root_targets,
+        directories,
+        files,
+        bytes_total,
+    })
+}
+
+async fn ensure_remote_targets_available(
+    sftp: &SftpSession,
+    root_targets: &[String],
+) -> Result<(), String> {
+    for target in root_targets {
+        if sftp
+            .try_exists(target.clone())
+            .await
+            .map_err(connection_error)?
+        {
+            return Err(format!("Remote target already exists: {target}"));
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_local_targets_available(root_targets: &[PathBuf]) -> Result<(), String> {
+    for target in root_targets {
+        if target.exists() {
+            return Err(format!(
+                "Local target already exists: {}",
+                path_to_string(target)
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_unique_local_download_path(
+    seen_paths: &mut HashSet<PathBuf>,
+    path: &Path,
+) -> Result<(), String> {
+    if seen_paths.insert(path.to_path_buf()) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "Duplicate download target after name sanitizing: {}",
+        path_to_string(path)
+    ))
+}
+
+async fn ensure_remote_directory(sftp: &SftpSession, path: &str) -> Result<(), String> {
+    if path == "/" {
+        return Ok(());
+    }
+
+    if sftp
+        .try_exists(path.to_string())
+        .await
+        .map_err(connection_error)?
+    {
+        let metadata = sftp
+            .metadata(path.to_string())
+            .await
+            .map_err(connection_error)?;
+        if metadata.file_type().is_dir() {
+            return Ok(());
+        }
+
+        return Err(format!("Remote path is not a directory: {path}"));
+    }
+
+    sftp.create_dir(path.to_string())
+        .await
+        .map_err(connection_error)
+}
+
+struct TransferProgress {
+    task_id: String,
+    session_id: String,
+    direction: String,
+    label: String,
+    bytes_transferred: u64,
+    bytes_total: u64,
+    files_done: u64,
+    files_total: u64,
+    last_emit_at: Instant,
+}
+
+impl TransferProgress {
+    fn new(
+        task_id: &str,
+        session_id: &str,
+        direction: &str,
+        bytes_total: u64,
+        files_total: u64,
+        label: String,
+    ) -> Self {
+        Self {
+            task_id: task_id.to_string(),
+            session_id: session_id.to_string(),
+            direction: direction.to_string(),
+            label,
+            bytes_transferred: 0,
+            bytes_total,
+            files_done: 0,
+            files_total,
+            last_emit_at: Instant::now(),
+        }
+    }
+
+    fn emit(&mut self, app: &AppHandle, kind: &str, current_path: Option<String>, force: bool) {
+        if !force && self.last_emit_at.elapsed() < Duration::from_millis(120) {
+            return;
+        }
+
+        self.last_emit_at = Instant::now();
+        emit_transfer_event(
+            app,
+            TransferEventPayload {
+                task_id: self.task_id.clone(),
+                session_id: self.session_id.clone(),
+                direction: self.direction.clone(),
+                kind: kind.to_string(),
+                label: Some(self.label.clone()),
+                current_path,
+                bytes_transferred: self.bytes_transferred,
+                bytes_total: self.bytes_total,
+                files_done: self.files_done,
+                files_total: self.files_total,
+                error: None,
+            },
+        );
+    }
+
+    fn fail(&mut self, app: &AppHandle, error: String) {
+        emit_transfer_event(
+            app,
+            TransferEventPayload {
+                task_id: self.task_id.clone(),
+                session_id: self.session_id.clone(),
+                direction: self.direction.clone(),
+                kind: "failed".to_string(),
+                label: Some(self.label.clone()),
+                current_path: None,
+                bytes_transferred: self.bytes_transferred,
+                bytes_total: self.bytes_total,
+                files_done: self.files_done,
+                files_total: self.files_total,
+                error: Some(error),
+            },
+        );
     }
 }
 
@@ -818,6 +1440,46 @@ fn validate_remote_directory_list_request(
     Ok(())
 }
 
+fn validate_upload_request(request: &RemoteUploadRequest) -> Result<(), String> {
+    if request.task_id.trim().is_empty() {
+        return Err("Task id is required".to_string());
+    }
+
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.local_paths.is_empty() {
+        return Err("Choose at least one local file or folder".to_string());
+    }
+
+    if request.local_paths.iter().any(|path| path.trim().is_empty()) {
+        return Err("Local path is required".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_download_request(request: &RemoteDownloadRequest) -> Result<(), String> {
+    if request.task_id.trim().is_empty() {
+        return Err("Task id is required".to_string());
+    }
+
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.remote_entries.is_empty() {
+        return Err("Choose at least one remote file or folder".to_string());
+    }
+
+    if request.local_dir.trim().is_empty() {
+        return Err("Choose a local destination folder".to_string());
+    }
+
+    Ok(())
+}
+
 fn normalize_remote_path(path: &str) -> String {
     let trimmed = path.trim().replace('\\', "/");
     if trimmed.is_empty() {
@@ -842,6 +1504,96 @@ fn normalize_remote_path(path: &str) -> String {
     }
 }
 
+fn join_remote_path(base: &str, child: &str) -> String {
+    let base = normalize_remote_path(base);
+    let child: String = child
+        .chars()
+        .map(|character| if character == '/' || character == '\\' { '_' } else { character })
+        .collect();
+
+    if base == "/" {
+        format!("/{child}")
+    } else {
+        format!("{base}/{child}")
+    }
+}
+
+fn remote_basename(path: &str) -> String {
+    normalize_remote_path(path)
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .next_back()
+        .unwrap_or("remote-item")
+        .to_string()
+}
+
+fn local_file_name(path: &Path) -> Result<String, String> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| format!("Could not determine file name: {}", path_to_string(path)))?
+        .to_string_lossy()
+        .trim()
+        .to_string();
+
+    if name.is_empty() {
+        Err(format!("Could not determine file name: {}", path_to_string(path)))
+    } else {
+        Ok(name)
+    }
+}
+
+fn safe_local_name(name: &str) -> String {
+    let sanitized: String = name
+        .chars()
+        .map(|character| match character {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            value if value.is_control() => '_',
+            value => value,
+        })
+        .collect::<String>()
+        .trim()
+        .trim_matches('.')
+        .to_string();
+
+    if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
+        "remote-item".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn transfer_label_from_local_paths(local_paths: &[String]) -> String {
+    if local_paths.len() == 1 {
+        return local_file_name(&PathBuf::from(&local_paths[0]))
+            .unwrap_or_else(|_| "Upload".to_string());
+    }
+
+    format!("{} local items", local_paths.len())
+}
+
+fn transfer_label_from_remote_entries(entries: &[RemoteTransferEntry]) -> String {
+    if entries.len() == 1 {
+        return entries[0].name.clone();
+    }
+
+    format!("{} remote items", entries.len())
+}
+
+fn summarize_transfer_errors(errors: Vec<String>) -> String {
+    let total = errors.len();
+    let preview = errors
+        .into_iter()
+        .take(3)
+        .collect::<Vec<_>>()
+        .join("; ");
+
+    if total > 3 {
+        format!("{total} files failed. First errors: {preview}")
+    } else {
+        preview
+    }
+}
+
 fn format_permissions(mode: u32) -> String {
     [
         (0o400, 'r'),
@@ -857,6 +1609,34 @@ fn format_permissions(mode: u32) -> String {
     .iter()
     .map(|(flag, label)| if mode & flag != 0 { *label } else { '-' })
     .collect()
+}
+
+fn transfer_event(
+    task_id: &str,
+    session_id: &str,
+    direction: &str,
+    kind: &str,
+) -> TransferEventPayload {
+    TransferEventPayload {
+        task_id: task_id.to_string(),
+        session_id: session_id.to_string(),
+        direction: direction.to_string(),
+        kind: kind.to_string(),
+        label: None,
+        current_path: None,
+        bytes_transferred: 0,
+        bytes_total: 0,
+        files_done: 0,
+        files_total: 0,
+        error: None,
+    }
+}
+
+impl TransferEventPayload {
+    fn with_error(mut self, error: String) -> Self {
+        self.error = Some(error);
+        self
+    }
 }
 
 fn emit_terminal_event(
@@ -875,6 +1655,10 @@ fn emit_terminal_event(
             error,
         },
     );
+}
+
+fn emit_transfer_event(app: &AppHandle, event: TransferEventPayload) {
+    let _ = app.emit(TRANSFER_EVENT, event);
 }
 
 fn shell_quote(value: &str) -> String {

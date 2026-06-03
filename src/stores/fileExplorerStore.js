@@ -38,11 +38,27 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
 
       state.selectedPaths = [];
     },
+    setSelection(sessionId, entryPaths) {
+      const state = this.sessionStates[sessionId];
+      if (!state) return;
+
+      state.selectedPaths = Array.from(new Set(entryPaths.filter(Boolean)));
+    },
     selectEntry(sessionId, entryPath) {
       const state = this.sessionStates[sessionId];
       if (!state) return;
 
       state.selectedPaths = entryPath ? [entryPath] : [];
+    },
+    toggleEntrySelection(sessionId, entryPath) {
+      const state = this.sessionStates[sessionId];
+      if (!state || !entryPath) return;
+
+      if (state.selectedPaths.includes(entryPath)) {
+        state.selectedPaths = state.selectedPaths.filter((path) => path !== entryPath);
+      } else {
+        state.selectedPaths = [...state.selectedPaths, entryPath];
+      }
     },
     async loadDirectory(session, path, options = {}) {
       if (!session) return;
