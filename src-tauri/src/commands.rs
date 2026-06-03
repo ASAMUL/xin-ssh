@@ -13,14 +13,19 @@ use russh::{
     keys::{load_secret_key, ssh_key, PrivateKeyWithHashAlg, PublicKey},
     Disconnect,
 };
+use russh_sftp::{
+    client::{fs::DirEntry, SftpSession},
+    protocol::FileType,
+};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::{timeout, Duration, Instant};
 
 use crate::models::{
     AppStateFile, AppStatus, AuthMethod, ConnectionGroup, ConnectionProfile, ConnectionTestRequest,
-    ConnectionTestResult, ProfilesFile, TerminalEventPayload, TerminalInputRequest,
-    TerminalResizeRequest, TerminalStartRequest, WorkspaceSettings, WorkspaceSnapshot,
+    ConnectionTestResult, ProfilesFile, RemoteDirectoryListRequest, RemoteDirectoryListing,
+    RemoteFileEntry, TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest,
+    TerminalStartRequest, WorkspaceSettings, WorkspaceSnapshot,
 };
 
 const APP_STATE_FILE: &str = "app-state.json";
@@ -40,6 +45,10 @@ pub struct TerminalRegistry {
 enum TerminalControl {
     Input(Vec<u8>),
     Resize { columns: u32, rows: u32 },
+    ListDirectory {
+        path: String,
+        responder: oneshot::Sender<Result<RemoteDirectoryListing, String>>,
+    },
     Close,
 }
 
@@ -80,6 +89,29 @@ impl TerminalRegistry {
         }
 
         Ok(())
+    }
+
+    async fn list_directory(
+        &self,
+        session_id: &str,
+        path: String,
+    ) -> Result<RemoteDirectoryListing, String> {
+        let sender = self
+            .sessions
+            .lock()
+            .map_err(error_message)?
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::ListDirectory { path, responder })
+            .map_err(|_| "Terminal session is not accepting SFTP requests".to_string())?;
+
+        receiver
+            .await
+            .map_err(|_| "SFTP request was canceled".to_string())?
     }
 }
 
@@ -368,6 +400,24 @@ pub fn close_terminal_session(
     registry.close(&session_id)
 }
 
+#[tauri::command]
+pub async fn list_remote_directory(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteDirectoryListRequest,
+) -> Result<RemoteDirectoryListing, String> {
+    validate_remote_directory_list_request(&request)?;
+
+    timeout(
+        Duration::from_secs(15),
+        registry.list_directory(
+            &request.session_id,
+            normalize_remote_path(&request.path),
+        ),
+    )
+    .await
+    .map_err(|_| "SFTP directory listing timed out after 15 seconds".to_string())?
+}
+
 async fn run_connection_test(
     request: ConnectionTestRequest,
 ) -> Result<ConnectionTestResult, String> {
@@ -524,6 +574,10 @@ async fn run_terminal_shell(
                             .await
                             .map_err(connection_error)?;
                     }
+                    TerminalControl::ListDirectory { path, responder } => {
+                        let result = list_directory_on_session(&session_id, &session, &path).await;
+                        let _ = responder.send(result);
+                    }
                     TerminalControl::Close => {
                         let _ = channel.close().await;
                         break;
@@ -568,6 +622,86 @@ async fn run_terminal_shell(
         .await;
     emit_terminal_event(&app, &session_id, "closed", None, None);
     Ok(())
+}
+
+async fn list_directory_on_session(
+    session_id: &str,
+    session: &client::Handle<ConnectionTestClient>,
+    path: &str,
+) -> Result<RemoteDirectoryListing, String> {
+    let channel = session
+        .channel_open_session()
+        .await
+        .map_err(connection_error)?;
+    channel
+        .request_subsystem(true, "sftp")
+        .await
+        .map_err(connection_error)?;
+    let sftp = SftpSession::new(channel.into_stream())
+        .await
+        .map_err(connection_error)?;
+    let requested_path = normalize_remote_path(path);
+    let listing_path = sftp
+        .canonicalize(requested_path.clone())
+        .await
+        .unwrap_or(requested_path);
+    let entries_result: Result<Vec<RemoteFileEntry>, String> = sftp
+        .read_dir(listing_path.clone())
+        .await
+        .map_err(connection_error)
+        .map(|read_dir| read_dir.map(remote_file_entry).collect());
+
+    let _ = sftp.close().await;
+    let mut entries = entries_result?;
+
+    entries.sort_by(|left, right| {
+        right
+            .is_directory
+            .cmp(&left.is_directory)
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+    });
+
+    Ok(RemoteDirectoryListing {
+        session_id: session_id.to_string(),
+        path: listing_path,
+        entries,
+    })
+}
+
+fn remote_file_entry(entry: DirEntry) -> RemoteFileEntry {
+    let metadata = entry.metadata();
+    let file_type = entry.file_type();
+    let name = entry.file_name();
+    let path = normalize_remote_path(&entry.path());
+    let permissions_mode = metadata.permissions.map(|mode| mode & 0o777);
+
+    RemoteFileEntry {
+        id: path.clone(),
+        name: name.clone(),
+        path,
+        kind: remote_file_kind(file_type).to_string(),
+        size: metadata.size,
+        modified_at: metadata.mtime.map(u64::from),
+        permissions: permissions_mode.map(format_permissions),
+        permissions_mode,
+        owner: metadata.user.or_else(|| metadata.uid.map(|uid| uid.to_string())),
+        group: metadata.group.or_else(|| metadata.gid.map(|gid| gid.to_string())),
+        is_hidden: name.starts_with('.'),
+        is_directory: file_type.is_dir(),
+        is_symlink: file_type.is_symlink(),
+    }
+}
+
+fn remote_file_kind(file_type: FileType) -> &'static str {
+    if file_type.is_dir() {
+        "directory"
+    } else if file_type.is_symlink() {
+        "symlink"
+    } else if file_type.is_file() {
+        "file"
+    } else {
+        "other"
+    }
 }
 
 async fn authenticate_session(
@@ -672,6 +806,57 @@ fn validate_terminal_start_request(request: &TerminalStartRequest) -> Result<(),
     }
 
     Ok(())
+}
+
+fn validate_remote_directory_list_request(
+    request: &RemoteDirectoryListRequest,
+) -> Result<(), String> {
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    Ok(())
+}
+
+fn normalize_remote_path(path: &str) -> String {
+    let trimmed = path.trim().replace('\\', "/");
+    if trimmed.is_empty() {
+        return "/".to_string();
+    }
+
+    let mut parts = Vec::new();
+    for part in trimmed.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            value => parts.push(value),
+        }
+    }
+
+    if parts.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", parts.join("/"))
+    }
+}
+
+fn format_permissions(mode: u32) -> String {
+    [
+        (0o400, 'r'),
+        (0o200, 'w'),
+        (0o100, 'x'),
+        (0o040, 'r'),
+        (0o020, 'w'),
+        (0o010, 'x'),
+        (0o004, 'r'),
+        (0o002, 'w'),
+        (0o001, 'x'),
+    ]
+    .iter()
+    .map(|(flag, label)| if mode & flag != 0 { *label } else { '-' })
+    .collect()
 }
 
 fn emit_terminal_event(

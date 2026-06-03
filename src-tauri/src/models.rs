@@ -125,6 +125,39 @@ pub struct TerminalResizeRequest {
     pub rows: u32,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDirectoryListRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDirectoryListing {
+    pub session_id: String,
+    pub path: String,
+    pub entries: Vec<RemoteFileEntry>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteFileEntry {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub kind: String,
+    pub size: Option<u64>,
+    pub modified_at: Option<u64>,
+    pub permissions: Option<String>,
+    pub permissions_mode: Option<u32>,
+    pub owner: Option<String>,
+    pub group: Option<String>,
+    pub is_hidden: bool,
+    pub is_directory: bool,
+    pub is_symlink: bool,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalEventPayload {

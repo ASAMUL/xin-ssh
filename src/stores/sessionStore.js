@@ -126,6 +126,12 @@ export const useSessionStore = defineStore("sessions", {
         rows,
       }).catch(() => {});
     },
+    updateSessionRemotePath(sessionId, remotePath) {
+      const session = this.findSession(sessionId);
+      if (!session || !remotePath) return;
+
+      session.remotePath = remotePath;
+    },
     handleTerminalEvent(event) {
       const session = this.findSession(event.sessionId);
       if (!session) return;

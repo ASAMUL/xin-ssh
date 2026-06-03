@@ -63,3 +63,7 @@ export function resizeTerminal(request) {
 export function closeTerminalSession(sessionId) {
   return invoke("close_terminal_session", { sessionId });
 }
+
+export function listRemoteDirectory(request) {
+  return invoke("list_remote_directory", { request });
+}
