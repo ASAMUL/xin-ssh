@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -7,16 +8,19 @@ use std::{
 
 use ring::rand::{SecureRandom, SystemRandom};
 use russh::{
+    ChannelMsg,
     client,
     keys::{load_secret_key, ssh_key, PrivateKeyWithHashAlg, PublicKey},
     Disconnect,
 };
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration, Instant};
 
 use crate::models::{
     AppStateFile, AppStatus, AuthMethod, ConnectionGroup, ConnectionProfile, ConnectionTestRequest,
-    ConnectionTestResult, ProfilesFile, WorkspaceSettings, WorkspaceSnapshot,
+    ConnectionTestResult, ProfilesFile, TerminalEventPayload, TerminalInputRequest,
+    TerminalResizeRequest, TerminalStartRequest, WorkspaceSettings, WorkspaceSnapshot,
 };
 
 const APP_STATE_FILE: &str = "app-state.json";
@@ -26,6 +30,58 @@ const SETTINGS_FILE: &str = "settings.json";
 const VAULT_FILE: &str = "vault.xinvault";
 const CURRENT_SCHEMA_VERSION: u16 = 1;
 const DEVICE_VAULT_KEY_BYTES: usize = 32;
+const TERMINAL_EVENT: &str = "terminal-event";
+
+#[derive(Clone, Default)]
+pub struct TerminalRegistry {
+    sessions: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<TerminalControl>>>>,
+}
+
+enum TerminalControl {
+    Input(Vec<u8>),
+    Resize { columns: u32, rows: u32 },
+    Close,
+}
+
+impl TerminalRegistry {
+    fn replace(
+        &self,
+        session_id: String,
+        sender: mpsc::UnboundedSender<TerminalControl>,
+    ) -> Result<(), String> {
+        let mut sessions = self.sessions.lock().map_err(error_message)?;
+        if let Some(existing) = sessions.insert(session_id, sender) {
+            let _ = existing.send(TerminalControl::Close);
+        }
+
+        Ok(())
+    }
+
+    fn send(&self, session_id: &str, control: TerminalControl) -> Result<(), String> {
+        let sessions = self.sessions.lock().map_err(error_message)?;
+        let sender = sessions
+            .get(session_id)
+            .ok_or_else(|| "Terminal session is not running".to_string())?;
+
+        sender
+            .send(control)
+            .map_err(|_| "Terminal session is not accepting input".to_string())
+    }
+
+    fn close(&self, session_id: &str) -> Result<(), String> {
+        let sender = self
+            .sessions
+            .lock()
+            .map_err(error_message)?
+            .remove(session_id);
+
+        if let Some(sender) = sender {
+            let _ = sender.send(TerminalControl::Close);
+        }
+
+        Ok(())
+    }
+}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -250,6 +306,68 @@ pub async fn test_connection(
         .map_err(|_| "Connection test timed out after 12 seconds".to_string())?
 }
 
+#[tauri::command]
+pub async fn start_terminal_session(
+    app: AppHandle,
+    registry: State<'_, TerminalRegistry>,
+    request: TerminalStartRequest,
+) -> Result<(), String> {
+    validate_terminal_start_request(&request)?;
+
+    let session_id = request.session_id.clone();
+    let (control_sender, control_receiver) = mpsc::unbounded_channel();
+    registry.replace(session_id.clone(), control_sender)?;
+
+    emit_terminal_event(
+        &app,
+        &request.session_id,
+        "connecting",
+        None,
+        None,
+    );
+
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = run_terminal_shell(app.clone(), request, control_receiver).await {
+            emit_terminal_event(&app, &session_id, "error", None, Some(error));
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn send_terminal_input(
+    registry: State<'_, TerminalRegistry>,
+    request: TerminalInputRequest,
+) -> Result<(), String> {
+    registry.send(
+        &request.session_id,
+        TerminalControl::Input(request.data.into_bytes()),
+    )
+}
+
+#[tauri::command]
+pub fn resize_terminal(
+    registry: State<'_, TerminalRegistry>,
+    request: TerminalResizeRequest,
+) -> Result<(), String> {
+    registry.send(
+        &request.session_id,
+        TerminalControl::Resize {
+            columns: request.columns.max(1),
+            rows: request.rows.max(1),
+        },
+    )
+}
+
+#[tauri::command]
+pub fn close_terminal_session(
+    registry: State<'_, TerminalRegistry>,
+    session_id: String,
+) -> Result<(), String> {
+    registry.close(&session_id)
+}
+
 async fn run_connection_test(
     request: ConnectionTestRequest,
 ) -> Result<ConnectionTestResult, String> {
@@ -331,6 +449,176 @@ async fn run_connection_test(
     })
 }
 
+async fn run_terminal_shell(
+    app: AppHandle,
+    request: TerminalStartRequest,
+    mut control_receiver: mpsc::UnboundedReceiver<TerminalControl>,
+) -> Result<(), String> {
+    let session_id = request.session_id.clone();
+    let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
+    let handler = ConnectionTestClient {
+        server_key: Arc::clone(&server_key),
+    };
+    let config = Arc::new(client::Config {
+        inactivity_timeout: None,
+        ..Default::default()
+    });
+    let host = request.host.trim().to_string();
+    let username = request.username.trim().to_string();
+
+    let mut session = client::connect(config, (host.as_str(), request.port), handler)
+        .await
+        .map_err(connection_error)?;
+
+    authenticate_session(
+        &mut session,
+        username,
+        request.auth_method.clone(),
+        request.password,
+        request.private_key_path,
+        request.passphrase,
+    )
+    .await?;
+
+    let mut channel = session.channel_open_session().await.map_err(connection_error)?;
+    channel
+        .request_pty(
+            false,
+            "xterm-256color",
+            request.columns.max(1),
+            request.rows.max(1),
+            0,
+            0,
+            &[],
+        )
+        .await
+        .map_err(connection_error)?;
+    channel
+        .request_shell(true)
+        .await
+        .map_err(connection_error)?;
+
+    emit_terminal_event(&app, &session_id, "connected", None, None);
+
+    let initial_path = request.default_remote_path.trim();
+    if !initial_path.is_empty() && initial_path != "/" {
+        channel
+            .data_bytes(format!("cd {}\r", shell_quote(initial_path)).into_bytes())
+            .await
+            .map_err(connection_error)?;
+    }
+
+    loop {
+        tokio::select! {
+            Some(control) = control_receiver.recv() => {
+                match control {
+                    TerminalControl::Input(data) => {
+                        channel
+                            .data_bytes(data)
+                            .await
+                            .map_err(connection_error)?;
+                    }
+                    TerminalControl::Resize { columns, rows } => {
+                        channel
+                            .window_change(columns.max(1), rows.max(1), 0, 0)
+                            .await
+                            .map_err(connection_error)?;
+                    }
+                    TerminalControl::Close => {
+                        let _ = channel.close().await;
+                        break;
+                    }
+                }
+            }
+            message = channel.wait() => {
+                let Some(message) = message else {
+                    break;
+                };
+
+                match message {
+                    ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. } => {
+                        emit_terminal_event(
+                            &app,
+                            &session_id,
+                            "output",
+                            Some(String::from_utf8_lossy(&data).to_string()),
+                            None,
+                        );
+                    }
+                    ChannelMsg::Eof | ChannelMsg::Close => {
+                        break;
+                    }
+                    ChannelMsg::ExitStatus { exit_status } => {
+                        emit_terminal_event(
+                            &app,
+                            &session_id,
+                            "output",
+                            Some(format!("\r\n[exit status: {exit_status}]\r\n")),
+                            None,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    let _ = session
+        .disconnect(Disconnect::ByApplication, "terminal closed", "en")
+        .await;
+    emit_terminal_event(&app, &session_id, "closed", None, None);
+    Ok(())
+}
+
+async fn authenticate_session(
+    session: &mut client::Handle<ConnectionTestClient>,
+    username: String,
+    auth_method: AuthMethod,
+    password: Option<String>,
+    private_key_path: Option<String>,
+    passphrase: Option<String>,
+) -> Result<(), String> {
+    let auth_result = match auth_method {
+        AuthMethod::Password => {
+            let password = password
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "Password is required".to_string())?;
+
+            session
+                .authenticate_password(username, password)
+                .await
+                .map_err(connection_error)?
+        }
+        AuthMethod::PrivateKey => {
+            let private_key_path = private_key_path
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "Private key path is required".to_string())?;
+            let passphrase = passphrase.as_deref().filter(|value| !value.is_empty());
+            let key_pair =
+                load_secret_key(&private_key_path, passphrase).map_err(connection_error)?;
+            let rsa_hash = session
+                .best_supported_rsa_hash()
+                .await
+                .map_err(connection_error)?
+                .flatten();
+
+            session
+                .authenticate_publickey(
+                    username,
+                    PrivateKeyWithHashAlg::new(Arc::new(key_pair), rsa_hash),
+                )
+                .await
+                .map_err(connection_error)?
+        }
+    };
+
+    if auth_result.success() {
+        Ok(())
+    } else {
+        Err("Authentication failed".to_string())
+    }
+}
+
 fn validate_connection_test_request(request: &ConnectionTestRequest) -> Result<(), String> {
     if request.host.trim().is_empty() {
         return Err("Host is required".to_string());
@@ -345,6 +633,67 @@ fn validate_connection_test_request(request: &ConnectionTestRequest) -> Result<(
     }
 
     Ok(())
+}
+
+fn validate_terminal_start_request(request: &TerminalStartRequest) -> Result<(), String> {
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.host.trim().is_empty() {
+        return Err("Host is required".to_string());
+    }
+
+    if request.username.trim().is_empty() {
+        return Err("Username is required".to_string());
+    }
+
+    if request.port == 0 {
+        return Err("Port must be greater than 0".to_string());
+    }
+
+    match &request.auth_method {
+        AuthMethod::Password => {
+            if request.password.as_deref().unwrap_or_default().is_empty() {
+                return Err("Password is required".to_string());
+            }
+        }
+        AuthMethod::PrivateKey => {
+            if request
+                .private_key_path
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            {
+                return Err("Private key path is required".to_string());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn emit_terminal_event(
+    app: &AppHandle,
+    session_id: &str,
+    kind: &str,
+    data: Option<String>,
+    error: Option<String>,
+) {
+    let _ = app.emit(
+        TERMINAL_EVENT,
+        TerminalEventPayload {
+            session_id: session_id.to_string(),
+            kind: kind.to_string(),
+            data,
+            error,
+        },
+    );
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 #[derive(Clone, Default)]

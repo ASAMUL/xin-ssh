@@ -47,3 +47,19 @@ export function saveSettings(settings) {
 export function testConnection(request) {
   return invoke("test_connection", { request });
 }
+
+export function startTerminalSession(request) {
+  return invoke("start_terminal_session", { request });
+}
+
+export function sendTerminalInput(request) {
+  return invoke("send_terminal_input", { request });
+}
+
+export function resizeTerminal(request) {
+  return invoke("resize_terminal", { request });
+}
+
+export function closeTerminalSession(sessionId) {
+  return invoke("close_terminal_session", { sessionId });
+}

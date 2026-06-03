@@ -4,6 +4,7 @@ mod models;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(commands::TerminalRegistry::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -23,15 +24,19 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::archive_credential_store,
             commands::change_workspace_dir,
+            commands::close_terminal_session,
             commands::delete_group,
             commands::delete_profile,
             commands::get_device_vault_password,
             commands::get_app_status,
             commands::init_workspace,
             commands::load_workspace,
+            commands::resize_terminal,
             commands::save_group,
             commands::save_profile,
             commands::save_settings,
+            commands::send_terminal_input,
+            commands::start_terminal_session,
             commands::test_connection,
         ])
         .run(tauri::generate_context!())

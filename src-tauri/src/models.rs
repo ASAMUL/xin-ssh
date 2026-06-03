@@ -94,6 +94,46 @@ pub struct ConnectionTestResult {
     pub server_key_algorithm: Option<String>,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalStartRequest {
+    pub session_id: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth_method: AuthMethod,
+    pub password: Option<String>,
+    pub private_key_path: Option<String>,
+    pub passphrase: Option<String>,
+    pub default_remote_path: String,
+    pub columns: u32,
+    pub rows: u32,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalInputRequest {
+    pub session_id: String,
+    pub data: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalResizeRequest {
+    pub session_id: String,
+    pub columns: u32,
+    pub rows: u32,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalEventPayload {
+    pub session_id: String,
+    pub kind: String,
+    pub data: Option<String>,
+    pub error: Option<String>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSnapshot {

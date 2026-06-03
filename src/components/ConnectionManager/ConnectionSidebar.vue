@@ -2,10 +2,12 @@
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useProfileStore } from "../../stores/profileStore";
+import { useSessionStore } from "../../stores/sessionStore";
 import { useUiStore } from "../../stores/uiStore";
 
 const { t } = useI18n();
 const profileStore = useProfileStore();
+const sessionStore = useSessionStore();
 const uiStore = useUiStore();
 const query = ref("");
 const newGroupName = ref("");
@@ -36,6 +38,7 @@ const filteredGroups = computed(() => {
     }))
     .filter(({ profiles }) => !normalizedQuery || profiles.length > 0);
 });
+const activeProfileId = computed(() => sessionStore.activeSession?.profileId ?? null);
 
 function groupDisplayName(group) {
   return group.name === "Ungrouped" ? t("sidebar.ungrouped") : group.name;
@@ -118,6 +121,11 @@ function openProfileMenu(event, profile) {
   profileMenu.x = Math.max(8, Math.min(event.clientX, window.innerWidth - 184));
   profileMenu.y = Math.max(8, Math.min(event.clientY, window.innerHeight - 88));
   profileMenu.profile = profile;
+}
+
+function openProfileTerminal(profile) {
+  closeProfileMenu();
+  sessionStore.openProfileSession(profile);
 }
 
 function closeProfileMenu() {
@@ -226,7 +234,11 @@ async function deleteProfileFromMenu() {
             :key="profile.id"
             type="button"
             class="connection-item"
-            :class="{ deleting: deletingProfileId === profile.id }"
+            :class="{
+              active: activeProfileId === profile.id,
+              deleting: deletingProfileId === profile.id,
+            }"
+            @click="openProfileTerminal(profile)"
             @contextmenu.prevent="openProfileMenu($event, profile)"
           >
             <span class="status-dot disconnected"></span>
