@@ -1,23 +1,32 @@
 .host-monitor-sidebar {
-  width: 206px;
-  min-width: 206px;
+  width: 300px;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
-  color: #172033;
-  border-right: 1px solid #c5ccd5;
-  background:
-    linear-gradient(180deg, #fbfdff 0%, #f5f8fb 45%, #eef4f8 100%),
-    #f8fafc;
+  gap: 10px;
+  overflow: hidden auto;
+  padding: 0;
+  color: var(--xin-text);
+  border: 1px solid var(--xin-border);
+  border-radius: var(--xin-radius);
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: var(--xin-shadow-soft);
+  backdrop-filter: blur(22px);
 }
 
 .monitor-block {
-  padding: 10px 8px;
-  border-bottom: 1px solid #d8dde5;
+  margin: 0 10px;
+  padding: 12px;
+  border: 1px solid rgba(137, 148, 166, 0.18);
+  border-radius: var(--xin-radius);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.82) inset;
 }
 
 .monitor-block.compact {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .monitor-block.grow {
@@ -26,6 +35,10 @@
   flex: 1;
   flex-direction: column;
   gap: 10px;
+}
+
+.monitor-block.disk-block {
+  margin-bottom: 10px;
 }
 
 .sync-row,
@@ -41,8 +54,9 @@
 }
 
 .sync-row {
-  color: #334155;
+  color: #344054;
   font-size: 12px;
+  font-weight: 720;
 }
 
 .monitor-dot {
@@ -50,12 +64,12 @@
   height: 10px;
   border-radius: 50%;
   background: #a8b0ba;
-  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.12);
+  box-shadow: 0 0 0 4px rgba(137, 148, 166, 0.12);
 }
 
 .monitor-dot.active {
-  background: #19b978;
-  box-shadow: 0 0 0 3px rgba(25, 185, 120, 0.15);
+  background: var(--xin-success);
+  box-shadow: 0 0 0 4px rgba(97, 191, 134, 0.16);
 }
 
 .monitor-ip {
@@ -67,28 +81,29 @@
 .monitor-ip small,
 .refresh-control span,
 .network-panel small {
-  color: #64748b;
+  color: var(--xin-text-muted);
   font-size: 11px;
 }
 
 .monitor-ip strong {
   overflow: hidden;
-  font-size: 12px;
-  font-weight: 760;
+  color: var(--xin-text);
+  font-size: 15px;
+  font-weight: 820;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .monitor-actions {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(132px, 1fr);
   align-items: end;
-  gap: 7px;
+  gap: 9px;
 }
 
 .monitor-actions :deep(button) {
-  width: 30px;
-  height: 30px;
+  height: 34px;
+  border-radius: 8px;
 }
 
 .refresh-control {
@@ -98,13 +113,27 @@
 }
 
 .monitor-refresh-select {
-  min-width: 0;
+  min-width: 132px;
   width: 100%;
+}
+
+.monitor-refresh-select :deep(button),
+.monitor-refresh-select :deep([role="combobox"]) {
+  width: 100%;
+  min-width: 132px;
+  justify-content: space-between;
+  border-radius: 8px;
+}
+
+.monitor-refresh-select :deep(span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .monitor-summary {
   display: grid;
-  gap: 6px;
+  gap: 7px;
   margin: 0 0 10px;
 }
 
@@ -115,13 +144,13 @@
 }
 
 .monitor-summary dt {
-  color: #64748b;
+  color: var(--xin-text-muted);
 }
 
 .monitor-summary dd {
   min-width: 0;
   overflow: hidden;
-  color: #172033;
+  color: var(--xin-text);
   font-weight: 720;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -138,7 +167,7 @@
 }
 
 .metric-label {
-  color: #475569;
+  color: #475467;
   font-size: 12px;
 }
 
@@ -150,14 +179,14 @@
 }
 
 .metric-label strong {
-  color: #172033;
+  color: var(--xin-text);
   font-weight: 760;
 }
 
 .metric-row small {
   min-width: 0;
   overflow: hidden;
-  color: #64748b;
+  color: var(--xin-text-muted);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -167,16 +196,16 @@
   height: 12px;
   display: block;
   overflow: hidden;
-  border: 1px solid #d6dbe2;
-  border-radius: 4px;
-  background: #ffffff;
+  border: 1px solid rgba(137, 148, 166, 0.2);
+  border-radius: 7px;
+  background: rgba(241, 244, 249, 0.92);
 }
 
 .metric-track span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #4c8ac4, #19b978 68%, #f0a42b);
+  background: linear-gradient(90deg, var(--xin-accent), var(--xin-success) 68%, var(--xin-warning));
 }
 
 .monitor-error {
@@ -189,9 +218,9 @@
 .mini-table {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #d8dde5;
-  border-radius: 6px;
-  background: #ffffff;
+  border: 1px solid rgba(137, 148, 166, 0.2);
+  border-radius: var(--xin-radius);
+  background: rgba(255, 255, 255, 0.84);
 }
 
 .mini-heading,
@@ -200,7 +229,7 @@
   align-items: center;
   min-height: 24px;
   padding: 0 6px;
-  border-bottom: 1px solid #edf0f3;
+  border-bottom: 1px solid rgba(137, 148, 166, 0.12);
   font-size: 11px;
 }
 
@@ -215,13 +244,13 @@
 }
 
 .mini-heading {
-  color: #ffffff;
-  background: #4c8ac4;
+  color: #475467;
+  background: rgba(91, 124, 250, 0.1);
   font-weight: 720;
 }
 
 .mini-row {
-  color: #334155;
+  color: #344054;
 }
 
 .mini-row:last-child {
@@ -243,20 +272,20 @@
 .network-panel {
   display: grid;
   gap: 5px;
-  color: #334155;
+  color: #344054;
   font-size: 12px;
 }
 
 .network-head strong {
   min-width: 0;
   overflow: hidden;
-  color: #0f172a;
+  color: var(--xin-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .network-totals {
-  color: #64748b;
+  color: var(--xin-text-muted);
   font-size: 10px;
 }
 
@@ -266,11 +295,11 @@
   align-items: end;
   gap: 2px;
   padding: 6px 4px 3px;
-  border: 1px solid #d8dde5;
-  border-radius: 6px;
+  border: 1px solid rgba(137, 148, 166, 0.2);
+  border-radius: var(--xin-radius);
   background:
-    linear-gradient(180deg, transparent 0 24%, #edf0f3 25% 26%, transparent 27% 49%, #edf0f3 50% 51%, transparent 52% 74%, #edf0f3 75% 76%, transparent 77%),
-    #ffffff;
+    linear-gradient(180deg, transparent 0 24%, rgba(137, 148, 166, 0.14) 25% 26%, transparent 27% 49%, rgba(137, 148, 166, 0.14) 50% 51%, transparent 52% 74%, rgba(137, 148, 166, 0.14) 75% 76%, transparent 77%),
+    rgba(255, 255, 255, 0.86);
 }
 
 .network-chart span {
@@ -280,7 +309,7 @@
 }
 
 .network-chart span.active {
-  background: rgba(240, 116, 55, 0.58);
+  background: linear-gradient(180deg, rgba(91, 124, 250, 0.74), rgba(97, 191, 134, 0.62));
 }
 
 .disk-block {

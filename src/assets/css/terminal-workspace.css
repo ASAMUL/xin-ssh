@@ -2,17 +2,21 @@
   min-height: 0;
   display: grid;
   grid-template-rows: minmax(260px, 1.18fr) minmax(240px, 0.82fr);
+  gap: 8px;
   flex: 1;
   color: #dce7f7;
-  background: #f4f7fb;
+  background: transparent;
 }
 
 .terminal-panel-top {
   min-height: 0;
   display: grid;
-  grid-template-rows: 42px minmax(0, 1fr);
-  border-bottom: 1px solid #aeb8c5;
-  background: #0c1722;
+  grid-template-rows: 46px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(31, 42, 64, 0.28);
+  border-radius: var(--xin-radius);
+  background: #0d1728;
+  box-shadow: 0 18px 46px rgba(31, 41, 55, 0.18);
 }
 
 .terminal-panel-toolbar {
@@ -21,10 +25,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 14px 0 16px;
+  padding: 0 18px;
   color: #dce7f7;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.12);
-  background: linear-gradient(180deg, rgba(20, 31, 43, 0.96), rgba(10, 18, 28, 0.96));
+  border-bottom: 1px solid rgba(226, 232, 240, 0.1);
+  background: linear-gradient(180deg, rgba(20, 31, 49, 0.96), rgba(12, 22, 39, 0.96));
 }
 
 .terminal-title-block {
@@ -50,7 +54,7 @@
 
 .terminal-title-block strong {
   font-size: 13px;
-  font-weight: 760;
+  font-weight: 780;
 }
 
 .terminal-title-block small {
@@ -59,20 +63,20 @@
 }
 
 .terminal-live-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #8b98a8;
 }
 
 .terminal-live-dot.connected {
-  background: #18c27b;
-  box-shadow: 0 0 12px rgba(24, 194, 123, 0.52);
+  background: var(--xin-success);
+  box-shadow: 0 0 0 5px rgba(97, 191, 134, 0.12), 0 0 16px rgba(97, 191, 134, 0.42);
 }
 
 .terminal-live-dot.connecting {
-  background: #f0a42b;
-  box-shadow: 0 0 12px rgba(240, 164, 43, 0.45);
+  background: var(--xin-warning);
+  box-shadow: 0 0 0 5px rgba(215, 166, 65, 0.12), 0 0 16px rgba(215, 166, 65, 0.4);
 }
 
 .terminal-live-dot.error {
@@ -95,13 +99,13 @@
 }
 
 .terminal-window-actions button {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   color: rgba(220, 231, 247, 0.72);
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
 }
 
@@ -116,8 +120,8 @@
   overflow: hidden;
   outline: 0;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(180deg, #152d3c 0%, #102332 42%, #0b1723 100%);
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(180deg, #121e34 0%, #0f1a2d 44%, #0a1322 100%);
   background-size:
     14px 14px,
     auto;
@@ -172,16 +176,17 @@
   z-index: 3;
   left: 50%;
   top: 50%;
-  width: min(420px, calc(100% - 36px));
+  width: min(460px, calc(100% - 40px));
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px;
-  color: #0f172a;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 8px;
-  background: rgba(248, 250, 252, 0.94);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.26);
+  gap: 14px;
+  padding: 22px;
+  color: #eef4ff;
+  border: 1px solid rgba(197, 207, 226, 0.24);
+  border-radius: var(--xin-radius);
+  background: rgba(30, 41, 63, 0.82);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(24px);
   transform: translate(-50%, -50%);
 }
 
@@ -192,7 +197,8 @@
   flex-direction: row;
   justify-content: center;
   color: #dce7f7;
-  background: rgba(12, 23, 34, 0.92);
+  background: rgba(20, 31, 49, 0.9);
+  backdrop-filter: blur(20px);
 }
 
 .terminal-connecting.error {
@@ -207,15 +213,30 @@
 }
 
 .auth-panel-copy strong {
-  color: #0f172a;
-  font-size: 16px;
-  font-weight: 780;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 820;
 }
 
 .auth-panel-copy small {
-  color: #64748b;
+  color: rgba(226, 232, 240, 0.72);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.terminal-auth-panel label {
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.terminal-auth-panel input {
+  color: #f8fbff;
+  border-color: rgba(197, 207, 226, 0.22);
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.terminal-auth-panel input:focus {
+  border-color: rgba(127, 157, 255, 0.62);
+  box-shadow: 0 0 0 3px rgba(127, 157, 255, 0.16);
 }
 
 .terminal-auth-error {
