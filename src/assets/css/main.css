@@ -756,14 +756,17 @@ select:focus {
 
 .server-picker-popover header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) 32px 32px;
   gap: 8px;
   padding: 10px;
   border-bottom: 1px solid #edf0f3;
 }
 
 .server-picker-popover header > button,
-.server-option-edit {
+.server-option-edit,
+.server-group-actions button,
+.server-group-creator button,
+.server-group-editor button {
   width: 32px;
   height: 32px;
   display: grid;
@@ -775,7 +778,10 @@ select:focus {
 }
 
 .server-picker-popover header > button:hover,
-.server-option-edit:hover {
+.server-option-edit:hover,
+.server-group-actions button:hover,
+.server-group-creator button:hover,
+.server-group-editor button:hover {
   color: #0f172a;
   background: #eef2f7;
 }
@@ -812,15 +818,76 @@ select:focus {
   padding: 8px;
 }
 
+.server-group-creator,
+.server-group-editor {
+  display: grid;
+  align-items: center;
+  gap: 7px;
+  margin: 2px 0 8px;
+  padding: 6px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 8px;
+  background: rgba(247, 249, 252, 0.92);
+}
+
+.server-group-creator {
+  grid-template-columns: 20px minmax(0, 1fr) 32px 32px;
+  color: #64748b;
+}
+
+.server-group-editor {
+  grid-template-columns: minmax(0, 1fr) 32px 32px;
+}
+
+.server-group-creator input,
+.server-group-editor input {
+  height: 32px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
 .server-group-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
+  min-height: 30px;
   margin: 6px 5px;
   color: #64748b;
   font-size: 11px;
   font-weight: 780;
   text-transform: uppercase;
+}
+
+.server-group-title > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-group-title small {
+  margin-left: auto;
+}
+
+.server-group-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.server-group:hover .server-group-actions,
+.server-group-actions:focus-within {
+  opacity: 1;
+}
+
+.server-group-actions button {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 12px;
 }
 
 .server-option {
@@ -1081,6 +1148,63 @@ select:focus {
   border: 1px solid rgba(37, 99, 235, 0.22);
   border-radius: 8px;
   background: rgba(37, 99, 235, 0.06);
+}
+
+.group-select-field button {
+  width: 42px;
+  padding: 0;
+}
+
+.form-group-creator {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 34px 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  color: #64748b;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 8px;
+  background: rgba(247, 249, 252, 0.84);
+}
+
+.form-group-creator input {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.form-group-creator button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: #475569;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.form-group-creator button:hover {
+  color: #0757e6;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.credential-save-option {
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.credential-save-option label {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.credential-save-option p {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .connection-test-panel {

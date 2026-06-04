@@ -6,13 +6,21 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useI18n } from "vue-i18n";
 import FileExplorer from "../FileExplorer.vue";
+import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
+import { useUiStore } from "../../stores/uiStore";
+import { useVaultStore } from "../../stores/vaultStore";
 
 const TERMINAL_EVENT_NAME = "terminal-event";
 const { t } = useI18n();
+const profileStore = useProfileStore();
 const sessionStore = useSessionStore();
+const uiStore = useUiStore();
+const vaultStore = useVaultStore();
 const terminalMount = ref(null);
 const credentialInput = ref(null);
+const shouldSaveCredential = ref(false);
+const pendingCredentialSave = ref(null);
 const credentials = reactive({
   password: "",
   passphrase: "",
@@ -37,12 +45,17 @@ const terminalStatusText = computed(() => {
 
   return t(`monitor.status.${session.status}`);
 });
+const saveCredentialLabel = computed(() =>
+  t(isPasswordAuth.value ? "terminal.savePassword" : "terminal.savePassphrase"),
+);
 
 watch(
   () => activeSession.value?.id,
   async () => {
     credentials.password = "";
     credentials.passphrase = "";
+    shouldSaveCredential.value = Boolean(activeSession.value?.credentialRef);
+    pendingCredentialSave.value = null;
     await nextTick();
     syncTerminalBuffer(true);
     fitTerminal();
@@ -61,6 +74,21 @@ watch(needsCredentials, async () => {
   await nextTick();
   focusActiveInput();
 });
+
+watch(
+  () => activeSession.value?.status,
+  (status) => {
+    if (status === "connected") {
+      savePendingCredential();
+      clearCredentialInputs();
+      return;
+    }
+
+    if (status === "error" || status === "authRequired") {
+      pendingCredentialSave.value = null;
+    }
+  },
+);
 
 onMounted(async () => {
   terminal = new Terminal({
@@ -176,9 +204,21 @@ function syncTerminalBuffer(forceReset) {
 }
 
 function startTerminal() {
+  const session = activeSession.value;
+  const password = credentials.password;
+  const passphrase = credentials.passphrase;
+
+  pendingCredentialSave.value = shouldSaveCredential.value && session
+    ? {
+        sessionId: session.id,
+        password: isPasswordAuth.value ? password : "",
+        passphrase: isPrivateKeyAuth.value ? passphrase : "",
+      }
+    : null;
+
   sessionStore.startActiveTerminal({
-    password: credentials.password,
-    passphrase: credentials.passphrase,
+    password,
+    passphrase,
   });
   focusTerminal();
 }
@@ -186,7 +226,46 @@ function startTerminal() {
 function reconnectTerminal() {
   credentials.password = "";
   credentials.passphrase = "";
-  sessionStore.requestCredentials();
+  shouldSaveCredential.value = Boolean(activeSession.value?.credentialRef);
+  pendingCredentialSave.value = null;
+  sessionStore.reconnectActiveTerminal();
+}
+
+function clearCredentialInputs() {
+  credentials.password = "";
+  credentials.passphrase = "";
+}
+
+async function savePendingCredential() {
+  const pending = pendingCredentialSave.value;
+  const session = activeSession.value;
+  if (!pending || !session || pending.sessionId !== session.id) return;
+
+  pendingCredentialSave.value = null;
+
+  const secret = {
+    password: pending.password,
+    passphrase: pending.passphrase,
+  };
+
+  if (!secret.password && !secret.passphrase) return;
+
+  const credentialRef = session.credentialRef || crypto.randomUUID();
+  try {
+    await vaultStore.ensureUnlocked();
+    await vaultStore.saveCredential(credentialRef, secret);
+    session.credentialRef = credentialRef;
+
+    const profile = profileStore.profiles.find((item) => item.id === session.profileId);
+    if (profile && profile.credentialRef !== credentialRef) {
+      await profileStore.saveProfile({
+        ...profile,
+        credentialRef,
+      });
+    }
+  } catch (error) {
+    uiStore.setError(`${t("terminal.saveCredentialFailed")}: ${String(error)}`);
+  }
 }
 </script>
 
@@ -246,6 +325,13 @@ function reconnectTerminal() {
               autocomplete="current-password"
             />
           </label>
+
+          <UCheckbox
+            v-model="shouldSaveCredential"
+            class="terminal-save-credential"
+            :label="saveCredentialLabel"
+            :description="t('terminal.saveCredentialDescription')"
+          />
 
           <p v-if="activeSession?.error" class="terminal-auth-error">{{ activeSession.error }}</p>
 

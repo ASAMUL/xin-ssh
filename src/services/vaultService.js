@@ -62,6 +62,20 @@ export async function readCredential(credentialRef, kind) {
   return value ? decoder.decode(value) : null;
 }
 
+export async function removeCredential(credentialRef, kinds, onProgress) {
+  assertUnlocked();
+
+  for (const kind of kinds) {
+    await runVaultStep(
+      `remove${kind[0].toUpperCase()}${kind.slice(1)}`,
+      () => store.remove(secretKey(credentialRef, kind)),
+      onProgress,
+    );
+  }
+
+  await runVaultStep("saveStronghold", () => stronghold.save(), onProgress);
+}
+
 function assertUnlocked() {
   if (!store || !stronghold) {
     throw new Error("Credential store is not loaded");

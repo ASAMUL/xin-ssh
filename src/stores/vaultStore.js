@@ -1,5 +1,11 @@
 import { defineStore } from "pinia";
-import { lockStronghold, saveCredential, unlockStronghold } from "../services/vaultService";
+import {
+  lockStronghold,
+  readCredential,
+  removeCredential,
+  saveCredential,
+  unlockStronghold,
+} from "../services/vaultService";
 import { archiveCredentialStore, getDeviceVaultPassword } from "../services/workspaceApi";
 
 export const useVaultStore = defineStore("vault", {
@@ -60,6 +66,13 @@ export const useVaultStore = defineStore("vault", {
     },
     async saveCredential(credentialRef, secret, onProgress) {
       await saveCredential(credentialRef, secret, onProgress);
+    },
+    async readCredential(credentialRef, kind, onProgress) {
+      onProgress?.(`read${kind[0].toUpperCase()}${kind.slice(1)}`);
+      return readCredential(credentialRef, kind);
+    },
+    async removeCredential(credentialRef, kinds, onProgress) {
+      await removeCredential(credentialRef, kinds, onProgress);
     },
   },
 });

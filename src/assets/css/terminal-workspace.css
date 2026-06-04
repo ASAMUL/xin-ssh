@@ -239,6 +239,22 @@
   box-shadow: 0 0 0 3px rgba(127, 157, 255, 0.16);
 }
 
+.terminal-save-credential {
+  color: rgba(226, 232, 240, 0.84);
+}
+
+.terminal-save-credential :deep(label) {
+  color: #eef4ff;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.terminal-save-credential :deep(p) {
+  color: rgba(226, 232, 240, 0.62);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .terminal-auth-error {
   margin: 0;
   color: #dc2626;

@@ -6,6 +6,8 @@ import {
   sendTerminalInput,
   startTerminalSession,
 } from "../services/workspaceApi";
+import { i18n } from "../i18n";
+import { useVaultStore } from "./vaultStore";
 
 const INITIAL_TERMINAL_COLUMNS = 120;
 const INITIAL_TERMINAL_ROWS = 32;
@@ -24,7 +26,11 @@ export const useSessionStore = defineStore("sessions", {
     openProfileSession(profile) {
       const existingSession = this.sessions.find((session) => session.profileId === profile.id);
       if (existingSession) {
+        syncSessionFromProfile(existingSession, profile);
         this.activeSessionId = existingSession.id;
+        if (shouldAutoConnectWithSavedCredential(existingSession)) {
+          this.startSessionWithSavedCredential(existingSession.id);
+        }
         return existingSession;
       }
 
@@ -37,9 +43,11 @@ export const useSessionStore = defineStore("sessions", {
         username: profile.username,
         authMethod: profile.authMethod,
         privateKeyPath: profile.privateKeyPath,
+        credentialRef: profile.credentialRef ?? null,
         remotePath: profile.defaultRemotePath || "/",
         status: "authRequired",
         error: null,
+        savedCredentialAutoStarted: false,
         createdAt: Date.now(),
         terminalOutput: "",
         terminalColumns: INITIAL_TERMINAL_COLUMNS,
@@ -53,6 +61,9 @@ export const useSessionStore = defineStore("sessions", {
 
       this.sessions.push(session);
       this.activeSessionId = session.id;
+      if (shouldAutoConnectWithSavedCredential(session)) {
+        this.startSessionWithSavedCredential(session.id);
+      }
       return session;
     },
     selectSession(sessionId) {
@@ -84,7 +95,10 @@ export const useSessionStore = defineStore("sessions", {
       session.error = null;
     },
     async startActiveTerminal(credentials = {}) {
-      const session = this.activeSession;
+      await this.startTerminalForSession(this.activeSessionId, credentials);
+    },
+    async startTerminalForSession(sessionId, credentials = {}, options = {}) {
+      const session = this.findSession(sessionId);
       if (!session || session.status === "connecting") return;
 
       session.status = "connecting";
@@ -106,9 +120,66 @@ export const useSessionStore = defineStore("sessions", {
           rows: session.terminalRows,
         });
       } catch (error) {
-        session.status = "authRequired";
-        session.error = String(error);
+        const latestSession = this.findSession(session.id);
+        if (latestSession) {
+          latestSession.status = options.fallbackStatus ?? "authRequired";
+          latestSession.error = String(error);
+        }
       }
+    },
+    async startSessionWithSavedCredential(sessionId = this.activeSessionId) {
+      const session = this.findSession(sessionId);
+      if (!session?.credentialRef || session.status === "connected" || session.status === "connecting") {
+        return false;
+      }
+
+      session.status = "connecting";
+      session.error = null;
+      session.terminalOutput = "";
+      session.savedCredentialAutoStarted = true;
+
+      try {
+        const vaultStore = useVaultStore();
+        await vaultStore.ensureUnlocked();
+        const credentials = await readSavedCredentials(vaultStore, session);
+
+        if (session.authMethod === "password" && !credentials.password) {
+          throw new Error(i18n.global.t("terminal.savedCredentialMissing"));
+        }
+
+        await startTerminalSession({
+          sessionId: session.id,
+          host: session.host,
+          port: session.port,
+          username: session.username,
+          authMethod: session.authMethod,
+          password: credentials.password || null,
+          privateKeyPath: session.privateKeyPath || null,
+          passphrase: credentials.passphrase || null,
+          defaultRemotePath: session.remotePath,
+          columns: session.terminalColumns,
+          rows: session.terminalRows,
+        });
+        return true;
+      } catch (error) {
+        const latestSession = this.findSession(session.id);
+        if (latestSession) {
+          latestSession.status = "authRequired";
+          latestSession.error = String(error);
+        }
+        return false;
+      }
+    },
+    reconnectActiveTerminal() {
+      const session = this.activeSession;
+      if (!session) return;
+
+      if (session.credentialRef) {
+        this.startSessionWithSavedCredential(session.id);
+        return;
+      }
+
+      this.requestCredentials(session.id);
     },
     async sendActiveTerminalInput(data) {
       const session = this.activeSession;
@@ -205,6 +276,39 @@ export const useSessionStore = defineStore("sessions", {
     },
   },
 });
+
+function syncSessionFromProfile(session, profile) {
+  session.name = profile.name;
+  session.host = profile.host;
+  session.port = profile.port;
+  session.username = profile.username;
+  session.authMethod = profile.authMethod;
+  session.privateKeyPath = profile.privateKeyPath;
+  session.credentialRef = profile.credentialRef ?? null;
+  session.remotePath = session.remotePath || profile.defaultRemotePath || "/";
+}
+
+function shouldAutoConnectWithSavedCredential(session) {
+  return (
+    Boolean(session?.credentialRef) &&
+    !session.savedCredentialAutoStarted &&
+    ["authRequired", "closed", "error"].includes(session.status)
+  );
+}
+
+async function readSavedCredentials(vaultStore, session) {
+  if (session.authMethod === "password") {
+    return {
+      password: await vaultStore.readCredential(session.credentialRef, "password"),
+      passphrase: null,
+    };
+  }
+
+  return {
+    password: null,
+    passphrase: await vaultStore.readCredential(session.credentialRef, "passphrase"),
+  };
+}
 
 function normalizeSystemInfoSnapshot(snapshot) {
   return {

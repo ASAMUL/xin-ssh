@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProfileStore } from "../../stores/profileStore";
 import { useAppStore } from "../../stores/appStore";
+import { useVaultStore } from "../../stores/vaultStore";
 import { testConnection as testConnectionRequest } from "../../services/workspaceApi";
 
 const props = defineProps({
@@ -17,20 +18,26 @@ const emit = defineEmits(["close"]);
 const { t } = useI18n();
 const profileStore = useProfileStore();
 const appStore = useAppStore();
+const vaultStore = useVaultStore();
 
 const error = ref("");
 const secretPassword = ref("");
 const passphrase = ref("");
+const shouldSaveCredential = ref(false);
 const isTestingConnection = ref(false);
 const isSavingProfile = ref(false);
+const isGroupCreatorOpen = ref(false);
+const isSavingGroup = ref(false);
 const connectionTestResult = ref(null);
 const saveProgressKey = ref("");
+const newGroupName = ref("");
 
 const defaultGroupId = computed(() => profileStore.activeGroups[0]?.id ?? "group-default");
 const editingProfile = computed(() =>
   props.profileId ? profileStore.profiles.find((profile) => profile.id === props.profileId) : null,
 );
 const isEditingProfile = computed(() => Boolean(editingProfile.value));
+const hasSavedCredential = computed(() => Boolean(editingProfile.value?.credentialRef));
 const formTitle = computed(() => t(isEditingProfile.value ? "profile.editTitle" : "profile.newTitle"));
 const saveButtonText = computed(() => {
   if (isSavingProfile.value) return t("profile.saving");
@@ -39,6 +46,14 @@ const saveButtonText = computed(() => {
 });
 const saveProgressMessage = computed(() => (saveProgressKey.value ? t(saveProgressKey.value) : ""));
 const groupOptions = computed(() => profileStore.activeGroups);
+const saveCredentialLabel = computed(() =>
+  t(form.authMethod === "password" ? "profile.savePassword" : "profile.savePassphrase"),
+);
+const saveCredentialDescription = computed(() =>
+  hasSavedCredential.value
+    ? t("profile.credentialSavedHint")
+    : t("profile.saveCredentialDescription"),
+);
 
 const form = reactive({
   name: "",
@@ -81,6 +96,8 @@ function resetForm() {
   form.defaultRemotePath = profile?.defaultRemotePath ?? "/";
   secretPassword.value = "";
   passphrase.value = "";
+  shouldSaveCredential.value = Boolean(profile?.credentialRef);
+  closeInlineGroupCreator();
   error.value = "";
   connectionTestResult.value = null;
   saveProgressKey.value = "";
@@ -126,6 +143,7 @@ async function submitProfile() {
     const now = Date.now().toString();
     const currentProfile = editingProfile.value;
     const profileId = currentProfile?.id ?? crypto.randomUUID();
+    const credentialRef = await resolveCredentialRef(currentProfile, profileId);
 
     const workspaceSnapshot = await runSaveStep("profile.saveProgress.saveProfile", () =>
       profileStore.saveProfile({
@@ -138,7 +156,7 @@ async function submitProfile() {
         username: form.username.trim(),
         authMethod: form.authMethod,
         privateKeyPath: form.authMethod === "privateKey" ? form.privateKeyPath : null,
-        credentialRef: currentProfile?.credentialRef ?? null,
+        credentialRef,
         defaultRemotePath: form.defaultRemotePath || "/",
         sortOrder: currentProfile?.sortOrder ?? profileStore.activeProfiles.length,
         createdAt: currentProfile?.createdAt ?? now,
@@ -158,6 +176,45 @@ async function submitProfile() {
     saveProgressKey.value = "";
     isSavingProfile.value = false;
   }
+}
+
+async function resolveCredentialRef(currentProfile, profileId) {
+  const currentCredentialRef = currentProfile?.credentialRef ?? null;
+
+  if (!shouldSaveCredential.value) {
+    if (currentCredentialRef) {
+      await runSaveStep("profile.saveProgress.removeCredential", async () => {
+        await vaultStore.ensureUnlocked();
+        await vaultStore.removeCredential(currentCredentialRef, ["password", "passphrase"]);
+      });
+    }
+
+    return null;
+  }
+
+  if (form.authMethod === "password") {
+    if (!secretPassword.value && !currentCredentialRef) {
+      throw new Error(t("profile.savePasswordRequired"));
+    }
+
+    if (!secretPassword.value) return currentCredentialRef;
+
+    const credentialRef = currentCredentialRef || profileId;
+    await runSaveStep("profile.saveProgress.unlockVault", () => vaultStore.ensureUnlocked());
+    await runSaveStep("profile.saveProgress.saveCredential", () =>
+      vaultStore.saveCredential(credentialRef, { password: secretPassword.value }),
+    );
+    return credentialRef;
+  }
+
+  if (!passphrase.value) return currentCredentialRef;
+
+  const credentialRef = currentCredentialRef || profileId;
+  await runSaveStep("profile.saveProgress.unlockVault", () => vaultStore.ensureUnlocked());
+  await runSaveStep("profile.saveProgress.saveCredential", () =>
+    vaultStore.saveCredential(credentialRef, { passphrase: passphrase.value }),
+  );
+  return credentialRef;
 }
 
 async function runSaveStep(stepKey, task) {
@@ -214,6 +271,43 @@ async function testCurrentConnection() {
     isTestingConnection.value = false;
   }
 }
+
+function openInlineGroupCreator() {
+  isGroupCreatorOpen.value = true;
+}
+
+function closeInlineGroupCreator() {
+  isGroupCreatorOpen.value = false;
+  newGroupName.value = "";
+}
+
+async function createInlineGroup() {
+  const name = newGroupName.value.trim();
+  if (!name || isSavingGroup.value) return;
+
+  const now = Date.now().toString();
+  const groupId = crypto.randomUUID();
+
+  isSavingGroup.value = true;
+  try {
+    await profileStore.saveGroup({
+      id: groupId,
+      syncId: groupId,
+      name,
+      sortOrder: profileStore.activeGroups.length,
+      collapsed: false,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    });
+    form.groupId = groupId;
+    closeInlineGroupCreator();
+  } catch (groupError) {
+    error.value = `${t("sidebar.createGroupFailed")}: ${String(groupError)}`;
+  } finally {
+    isSavingGroup.value = false;
+  }
+}
 </script>
 
 <template>
@@ -233,11 +327,16 @@ async function testCurrentConnection() {
         </label>
         <label>
           <span>{{ t("profile.group") }}</span>
-          <select v-model="form.groupId">
-            <option v-for="group in groupOptions" :key="group.id" :value="group.id">
-              {{ groupDisplayName(group) }}
-            </option>
-          </select>
+          <div class="inline-field group-select-field">
+            <select v-model="form.groupId">
+              <option v-for="group in groupOptions" :key="group.id" :value="group.id">
+                {{ groupDisplayName(group) }}
+              </option>
+            </select>
+            <button type="button" :aria-label="t('sidebar.addGroup')" @click="openInlineGroupCreator">
+              <UIcon name="i-lucide-folder-plus" />
+            </button>
+          </div>
         </label>
         <label>
           <span>{{ t("profile.host") }}</span>
@@ -251,6 +350,26 @@ async function testCurrentConnection() {
           <span>{{ t("profile.username") }}</span>
           <input v-model="form.username" type="text" />
         </label>
+      </div>
+
+      <div v-if="isGroupCreatorOpen" class="form-group-creator">
+        <UIcon name="i-lucide-folder-plus" />
+        <input
+          v-model="newGroupName"
+          type="text"
+          :placeholder="t('sidebar.groupName')"
+          autofocus
+          @keydown.enter.prevent="createInlineGroup"
+        />
+        <button type="button" :disabled="!newGroupName.trim() || isSavingGroup" @click="createInlineGroup">
+          <UIcon
+            :name="isSavingGroup ? 'i-lucide-loader-circle' : 'i-lucide-check'"
+            :class="{ 'spin-icon': isSavingGroup }"
+          />
+        </button>
+        <button type="button" @click="closeInlineGroupCreator">
+          <UIcon name="i-lucide-x" />
+        </button>
       </div>
 
       <div class="segmented-control">
@@ -274,7 +393,12 @@ async function testCurrentConnection() {
 
       <label v-if="form.authMethod === 'password'">
         <span>{{ t("profile.password") }}</span>
-        <input v-model="secretPassword" type="password" autocomplete="new-password" />
+        <input
+          v-model="secretPassword"
+          type="password"
+          autocomplete="new-password"
+          :placeholder="hasSavedCredential ? t('profile.savedPasswordPlaceholder') : ''"
+        />
       </label>
 
       <div v-else class="key-fields">
@@ -287,9 +411,21 @@ async function testCurrentConnection() {
         </label>
         <label>
           <span>{{ t("profile.passphrase") }}</span>
-          <input v-model="passphrase" type="password" autocomplete="new-password" />
+          <input
+            v-model="passphrase"
+            type="password"
+            autocomplete="new-password"
+            :placeholder="hasSavedCredential ? t('profile.savedPassphrasePlaceholder') : ''"
+          />
         </label>
       </div>
+
+      <UCheckbox
+        v-model="shouldSaveCredential"
+        class="credential-save-option"
+        :label="saveCredentialLabel"
+        :description="saveCredentialDescription"
+      />
 
       <label>
         <span>{{ t("profile.defaultRemotePath") }}</span>
