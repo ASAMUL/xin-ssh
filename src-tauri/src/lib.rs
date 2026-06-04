@@ -30,6 +30,7 @@ pub fn run() {
             commands::get_device_vault_password,
             commands::get_app_status,
             commands::init_workspace,
+            commands::get_remote_system_info,
             commands::list_remote_directory,
             commands::load_workspace,
             commands::resize_terminal,

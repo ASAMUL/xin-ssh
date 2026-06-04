@@ -68,6 +68,10 @@ export function listRemoteDirectory(request) {
   return invoke("list_remote_directory", { request });
 }
 
+export function getRemoteSystemInfo(request) {
+  return invoke("get_remote_system_info", { request });
+}
+
 export function startUploadTransfer(request) {
   return invoke("start_upload_transfer", { request });
 }

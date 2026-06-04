@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import {
   closeTerminalSession,
+  getRemoteSystemInfo,
   resizeTerminal,
   sendTerminalInput,
   startTerminalSession,
@@ -8,6 +9,7 @@ import {
 
 const INITIAL_TERMINAL_COLUMNS = 120;
 const INITIAL_TERMINAL_ROWS = 32;
+const NETWORK_HISTORY_LIMIT = 28;
 
 export const useSessionStore = defineStore("sessions", {
   state: () => ({
@@ -42,6 +44,11 @@ export const useSessionStore = defineStore("sessions", {
         terminalOutput: "",
         terminalColumns: INITIAL_TERMINAL_COLUMNS,
         terminalRows: INITIAL_TERMINAL_ROWS,
+        systemInfo: null,
+        systemInfoError: null,
+        systemInfoLoading: false,
+        systemInfoUpdatedAt: null,
+        networkHistory: [],
       };
 
       this.sessions.push(session);
@@ -163,8 +170,81 @@ export const useSessionStore = defineStore("sessions", {
         session.error = event.error ?? event.data ?? "Terminal error";
       }
     },
+    async refreshSystemInfo(sessionId = this.activeSessionId) {
+      const session = this.findSession(sessionId);
+      if (!session || session.status !== "connected" || session.systemInfoLoading) return null;
+
+      ensureSystemInfoState(session);
+      session.systemInfoLoading = true;
+      session.systemInfoError = null;
+
+      try {
+        const snapshot = await getRemoteSystemInfo({ sessionId: session.id });
+        const latestSession = this.findSession(session.id);
+        if (!latestSession) return null;
+
+        latestSession.systemInfo = normalizeSystemInfoSnapshot(snapshot);
+        latestSession.systemInfoUpdatedAt = Date.now();
+        appendNetworkSample(latestSession, latestSession.systemInfo);
+        return latestSession.systemInfo;
+      } catch (error) {
+        const latestSession = this.findSession(session.id);
+        if (latestSession) {
+          latestSession.systemInfoError = String(error);
+        }
+        return null;
+      } finally {
+        const latestSession = this.findSession(session.id);
+        if (latestSession) {
+          latestSession.systemInfoLoading = false;
+        }
+      }
+    },
     findSession(sessionId) {
       return this.sessions.find((session) => session.id === sessionId) ?? null;
     },
   },
 });
+
+function normalizeSystemInfoSnapshot(snapshot) {
+  return {
+    ...snapshot,
+    loadAverage: snapshot?.loadAverage || [],
+    networks: snapshot?.networks || [],
+    processes: snapshot?.processes || [],
+    disks: snapshot?.disks || [],
+  };
+}
+
+function appendNetworkSample(session, snapshot) {
+  ensureSystemInfoState(session);
+  const capturedAt = Number(snapshot?.capturedAt) || Date.now();
+  const totalBytes = (snapshot?.networks || []).reduce(
+    (total, network) => total + Number(network.rxBytes || 0) + Number(network.txBytes || 0),
+    0,
+  );
+  const previousSample = session.networkHistory.at(-1);
+  const secondsElapsed = previousSample
+    ? Math.max((capturedAt - previousSample.capturedAt) / 1000, 0.001)
+    : 0;
+  const bytesDelta = previousSample ? Math.max(totalBytes - previousSample.totalBytes, 0) : 0;
+  const bytesPerSecond = secondsElapsed > 0 ? bytesDelta / secondsElapsed : 0;
+
+  session.networkHistory = [
+    ...session.networkHistory,
+    {
+      id: `${capturedAt}-${session.networkHistory.length}`,
+      capturedAt,
+      totalBytes,
+      bytesPerSecond,
+    },
+  ].slice(-NETWORK_HISTORY_LIMIT);
+}
+
+function ensureSystemInfoState(session) {
+  session.systemInfo ??= null;
+  session.systemInfoError ??= null;
+  session.systemInfoLoading ??= false;
+  session.systemInfoUpdatedAt ??= null;
+  session.networkHistory ??= [];
+}

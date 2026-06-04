@@ -22,6 +22,8 @@ pub struct WorkspaceSettings {
     pub locale: String,
     pub terminal_font_family: String,
     pub remember_vault_unlock: bool,
+    #[serde(default = "default_monitor_refresh_seconds")]
+    pub monitor_refresh_seconds: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -132,6 +134,78 @@ pub struct RemoteDirectoryListRequest {
     pub path: String,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSystemInfoRequest {
+    pub session_id: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSystemSnapshot {
+    pub session_id: String,
+    pub captured_at: u64,
+    pub hostname: Option<String>,
+    pub kernel: Option<String>,
+    pub uptime_seconds: Option<u64>,
+    pub load_average: Vec<f64>,
+    pub cpu: RemoteCpuInfo,
+    pub memory: RemoteMemoryInfo,
+    pub swap: RemoteMemoryInfo,
+    pub networks: Vec<RemoteNetworkInfo>,
+    pub processes: Vec<RemoteProcessInfo>,
+    pub disks: Vec<RemoteDiskInfo>,
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCpuInfo {
+    pub usage_percent: Option<f64>,
+    pub core_count: Option<u32>,
+    pub model_name: Option<String>,
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteMemoryInfo {
+    pub total_bytes: Option<u64>,
+    pub used_bytes: Option<u64>,
+    pub available_bytes: Option<u64>,
+    pub usage_percent: Option<f64>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteNetworkInfo {
+    pub name: String,
+    pub rx_bytes: u64,
+    pub tx_bytes: u64,
+    pub rx_packets: u64,
+    pub tx_packets: u64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteProcessInfo {
+    pub pid: u32,
+    pub user: String,
+    pub cpu_percent: f64,
+    pub memory_percent: f64,
+    pub memory_bytes: Option<u64>,
+    pub command: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDiskInfo {
+    pub filesystem: String,
+    pub path: String,
+    pub total_bytes: Option<u64>,
+    pub used_bytes: Option<u64>,
+    pub available_bytes: Option<u64>,
+    pub usage_percent: Option<f64>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteDirectoryListing {
@@ -218,4 +292,8 @@ pub struct WorkspaceSnapshot {
     pub settings: WorkspaceSettings,
     pub groups: Vec<ConnectionGroup>,
     pub profiles: Vec<ConnectionProfile>,
+}
+
+fn default_monitor_refresh_seconds() -> u64 {
+    5
 }
