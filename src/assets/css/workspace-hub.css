@@ -1,10 +1,12 @@
 .connection-hub {
+  width: min(100%, 1480px);
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 18px;
+  gap: 20px;
   flex: 1;
-  padding: 30px clamp(24px, 4vw, 56px);
+  margin: 0 auto;
+  padding: 34px clamp(22px, 4vw, 52px) 42px;
   overflow: hidden;
 }
 
@@ -19,7 +21,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 18px;
+  gap: 20px;
+  min-height: 58px;
 }
 
 .connection-hub-title {
@@ -31,8 +34,8 @@
 
 .connection-hub-title span {
   color: #0f172a;
-  font-size: 22px;
-  font-weight: 830;
+  font-size: 26px;
+  font-weight: 850;
   letter-spacing: 0;
 }
 
@@ -48,29 +51,65 @@
 
 .connection-hub-actions {
   display: grid;
-  grid-template-columns: minmax(190px, 260px) auto;
+  grid-template-columns: minmax(240px, 320px) auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  justify-self: end;
+  padding: 5px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(246, 248, 252, 0.66)),
+    rgba(255, 255, 255, 0.68);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.92) inset,
+    0 12px 30px rgba(15, 23, 42, 0.045);
+  backdrop-filter: blur(22px);
 }
 
 .connection-hub-search {
   width: 100%;
 }
 
+.connection-hub-search :deep(input) {
+  height: 38px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.connection-hub-actions :deep(button) {
+  min-height: 38px;
+  border-radius: 8px;
+  font-weight: 760;
+}
+
 .connection-hub-body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 22px;
   overflow: auto;
-  padding: 2px 2px 18px;
+  padding: 2px 2px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(137, 148, 166, 0.34) transparent;
+}
+
+.connection-hub-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.connection-hub-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(137, 148, 166, 0.32);
+  background-clip: padding-box;
 }
 
 .connection-hub-group {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .connection-hub-group-title {
@@ -79,14 +118,15 @@
   gap: 8px;
   width: max-content;
   max-width: 100%;
-  min-height: 26px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 11px;
   color: #334155;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.72);
   font-size: 12px;
   font-weight: 780;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.86) inset;
 }
 
 .connection-hub-group-title span {
@@ -98,8 +138,8 @@
 
 .connection-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
 }
 
 .connection-card {
@@ -107,15 +147,24 @@
   --status-soft: rgba(148, 163, 184, 0.12);
   position: relative;
   min-width: 0;
-  min-height: 116px;
+  min-height: 124px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 34px;
   align-items: stretch;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 14px 32px rgba(31, 41, 55, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 251, 253, 0.86)),
+    rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.94) inset,
+    0 16px 34px rgba(31, 41, 55, 0.065);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
 }
 
 .connection-card.connected {
@@ -129,8 +178,8 @@
 }
 
 .connection-card.authRequired {
-  --status-color: #5b7cfa;
-  --status-soft: rgba(91, 124, 250, 0.14);
+  --status-color: var(--xin-accent);
+  --status-soft: rgba(47, 109, 246, 0.14);
 }
 
 .connection-card.error {
@@ -139,20 +188,24 @@
 }
 
 .connection-card:hover {
-  border-color: rgba(91, 124, 250, 0.26);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18px 38px rgba(31, 41, 55, 0.12);
+  border-color: rgba(47, 109, 246, 0.26);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(252, 253, 255, 0.92)),
+    rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.98) inset,
+    0 20px 40px rgba(31, 41, 55, 0.1);
   transform: translateY(-1px);
 }
 
 .connection-card-main {
   min-width: 0;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 46px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px 12px;
-  padding: 16px 10px 14px 16px;
+  gap: 10px 13px;
+  padding: 17px 10px 15px 17px;
   color: #0f172a;
   border: 0;
   background: transparent;
@@ -160,18 +213,20 @@
 }
 
 .connection-card-icon {
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   display: grid;
   place-items: center;
   grid-row: 1 / span 2;
   color: #ffffff;
   border-radius: 8px;
   background:
-    linear-gradient(145deg, rgba(58, 113, 235, 0.96), rgba(91, 124, 250, 0.98)),
-    #5b7cfa;
-  box-shadow: 0 12px 24px rgba(63, 99, 242, 0.22);
-  font-size: 21px;
+    linear-gradient(145deg, rgba(88, 132, 255, 0.98), rgba(47, 109, 246, 0.98)),
+    #2f6df6;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.34) inset,
+    0 12px 24px rgba(47, 109, 246, 0.2);
+  font-size: 22px;
 }
 
 .connection-card-copy {
@@ -192,7 +247,7 @@
 
 .connection-card-copy strong {
   color: #0f172a;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 820;
 }
 
@@ -207,7 +262,7 @@
   gap: 7px;
   width: max-content;
   max-width: 100%;
-  height: 24px;
+  height: 26px;
   padding: 0 9px;
   color: #475569;
   border-radius: 8px;
@@ -234,7 +289,7 @@
 .connection-card-edit {
   align-self: start;
   justify-self: end;
-  margin: 8px 8px 0 0;
+  margin: 9px 9px 0 0;
 }
 
 .connection-hub-no-results,
@@ -274,6 +329,7 @@
   .connection-hub-header,
   .connection-hub-actions {
     grid-template-columns: 1fr;
+    justify-self: stretch;
   }
 
   .connection-card-grid {

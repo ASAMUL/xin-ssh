@@ -6,18 +6,18 @@
   --xin-text: #111827;
   --xin-text-muted: #667085;
   --xin-text-soft: #8a94a6;
-  --xin-accent: #5b7cfa;
-  --xin-accent-strong: #3f63f2;
-  --xin-accent-soft: rgba(91, 124, 250, 0.12);
+  --xin-accent: #2f6df6;
+  --xin-accent-strong: #155eef;
+  --xin-accent-soft: rgba(47, 109, 246, 0.12);
   --xin-success: #61bf86;
   --xin-warning: #d7a641;
-  --xin-border: rgba(137, 148, 166, 0.24);
+  --xin-border: rgba(137, 148, 166, 0.22);
   --xin-border-strong: rgba(111, 123, 143, 0.34);
   --xin-surface: rgba(255, 255, 255, 0.82);
   --xin-surface-strong: rgba(255, 255, 255, 0.94);
   --xin-surface-muted: rgba(245, 247, 251, 0.84);
-  --xin-shadow-soft: 0 10px 30px rgba(31, 41, 55, 0.08);
-  --xin-shadow-panel: 0 18px 46px rgba(31, 41, 55, 0.12);
+  --xin-shadow-soft: 0 10px 30px rgba(31, 41, 55, 0.07);
+  --xin-shadow-panel: 0 20px 54px rgba(31, 41, 55, 0.11);
   --xin-radius: 8px;
   color: var(--xin-text);
   background: #f4f7fb;
@@ -45,7 +45,7 @@ body,
 
 body {
   overflow: hidden;
-  background: #f4f7fb;
+  background: #f3f6fa;
 }
 
 button,
@@ -86,20 +86,23 @@ select {
   flex-direction: column;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 246, 251, 0.96) 48%, rgba(235, 241, 248, 0.98)),
-    #f4f7fb;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 253, 0.98) 36%, rgba(238, 243, 249, 0.99) 100%),
+    #f3f6fa;
 }
 
 .window-chrome {
-  height: 50px;
-  min-height: 50px;
+  height: 62px;
+  min-height: 62px;
   display: grid;
-  grid-template-columns: minmax(156px, 220px) minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(190px, 258px) minmax(0, 1fr) auto auto;
   align-items: center;
-  border-bottom: 1px solid rgba(137, 148, 166, 0.18);
-  background: rgba(250, 252, 255, 0.78);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
-  backdrop-filter: blur(24px);
+  padding: 0 10px 0 0;
+  border-bottom: 1px solid rgba(137, 148, 166, 0.16);
+  background: rgba(250, 252, 255, 0.74);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.86) inset,
+    0 10px 28px rgba(15, 23, 42, 0.035);
+  backdrop-filter: blur(28px) saturate(1.25);
   user-select: none;
 }
 
@@ -107,11 +110,11 @@ select {
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 11px;
-  padding: 0 14px 0 18px;
+  gap: 12px;
+  padding: 0 16px 0 20px;
   color: var(--xin-text);
   font-size: 14px;
-  font-weight: 780;
+  font-weight: 820;
 }
 
 .window-brand > span:last-child {
@@ -122,14 +125,16 @@ select {
 }
 
 .app-dot {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   color: #ffffff;
-  border-radius: 7px;
-  background: linear-gradient(145deg, #7fa3ff, #4264f4);
-  box-shadow: 0 9px 20px rgba(63, 99, 242, 0.28);
+  border-radius: 8px;
+  background: linear-gradient(145deg, #83a7ff, #2f6df6);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.34) inset,
+    0 10px 22px rgba(47, 109, 246, 0.26);
 }
 
 .window-drag-space {
@@ -140,12 +145,12 @@ select {
   height: 100%;
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 4px 0 8px;
 }
 
 .window-tools button {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   justify-content: center;
   color: #344054;
   border-radius: 8px;
@@ -158,16 +163,18 @@ select {
 .window-controls {
   height: 100%;
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 2px;
 }
 
 .window-control {
-  width: 48px;
+  width: 42px;
+  height: 38px;
   display: grid;
   place-items: center;
   color: #344054;
   border: 0;
-  border-radius: 0;
+  border-radius: 8px;
   background: transparent;
 }
 
@@ -183,7 +190,7 @@ select {
 .window-controls.mac {
   order: -1;
   gap: 8px;
-  padding-left: 14px;
+  padding: 0 8px 0 18px;
 }
 
 .window-controls.mac .window-control {
@@ -347,8 +354,8 @@ select {
 
 input:focus,
 select:focus {
-  border-color: rgba(91, 124, 250, 0.58);
-  box-shadow: 0 0 0 3px rgba(91, 124, 250, 0.12);
+  border-color: rgba(47, 109, 246, 0.55);
+  box-shadow: 0 0 0 3px rgba(47, 109, 246, 0.12);
 }
 
 .setup-hint,
@@ -392,9 +399,11 @@ select:focus {
   min-width: 0;
   display: flex;
   flex: 1;
-  gap: 10px;
-  padding: 10px;
-  background: linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+  gap: 12px;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 253, 0.94) 0%, rgba(239, 244, 249, 0.98) 100%),
+    #eef3f8;
 }
 
 .workspace-layout.connection-hub-layout {
@@ -694,7 +703,7 @@ select:focus {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   background: transparent;
 }
 
@@ -1007,7 +1016,7 @@ select:focus {
 }
 
 .workspace-session-tab.active {
-  border-color: rgba(91, 124, 250, 0.18);
+  border-color: rgba(47, 109, 246, 0.18);
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 10px 24px rgba(31, 41, 55, 0.08);
 }

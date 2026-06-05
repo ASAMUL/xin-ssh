@@ -42,22 +42,6 @@ const query = computed({
   get: () => fileState.value.query,
   set: (value) => fileExplorerStore.setQuery(props.activeSession?.id, value),
 });
-const pathCrumbs = computed(() => {
-  const parts = currentPath.value.split("/").filter(Boolean);
-  const crumbs = [{ id: "root", label: "/", path: "/" }];
-
-  parts.reduce((path, part) => {
-    const nextPath = `${path === "/" ? "" : path}/${part}`;
-    crumbs.push({
-      id: nextPath,
-      label: part,
-      path: nextPath,
-    });
-    return nextPath;
-  }, "/");
-
-  return crumbs;
-});
 const visibleEntries = computed(() => {
   const keyword = query.value.trim().toLowerCase();
   if (!keyword) return fileState.value.entries;
@@ -182,12 +166,6 @@ function refreshDirectory() {
   if (!props.activeSession || !isConnected.value) return;
 
   fileExplorerStore.refreshDirectory(props.activeSession);
-}
-
-function openPath(path) {
-  if (!props.activeSession || !canNavigate.value) return;
-
-  fileExplorerStore.loadDirectory(props.activeSession, path);
 }
 
 function goBack() {
@@ -468,6 +446,10 @@ function fileTypeLabel(entry) {
       </div>
 
       <div class="file-panel-actions">
+        <label class="file-search">
+          <UIcon name="i-lucide-search" />
+          <input v-model="query" type="search" :placeholder="t('files.search')" />
+        </label>
         <span class="file-count">{{ t("files.itemCount", { count: visibleEntries.length }) }}</span>
         <button type="button" :aria-label="t('files.history')" :title="t('files.history')" :disabled="!hasEntries">
           <UIcon name="i-lucide-history" />
@@ -541,29 +523,9 @@ function fileTypeLabel(entry) {
         <UIcon name="i-lucide-map" />
         <input v-model="pathInput" type="text" :disabled="!isConnected" spellcheck="false" />
       </form>
-
-      <label class="file-search">
-        <UIcon name="i-lucide-search" />
-        <input v-model="query" type="search" :placeholder="t('files.search')" />
-      </label>
     </div>
 
     <div class="file-workbench" :class="{ 'drag-over': isDragOver }" @contextmenu.prevent="openContextMenu($event)">
-      <aside class="remote-tree">
-        <button
-          v-for="crumb in pathCrumbs"
-          :key="crumb.id"
-          type="button"
-          class="remote-tree-root"
-          :class="{ active: crumb.path === currentPath }"
-          :disabled="!canNavigate"
-          @click="openPath(crumb.path)"
-        >
-          <UIcon :name="crumb.path === currentPath ? 'i-lucide-folder-open' : 'i-lucide-folder'" />
-          <span>{{ crumb.label }}</span>
-        </button>
-      </aside>
-
       <section class="file-table-wrap">
         <div class="file-row file-heading">
           <span class="name-column">{{ t("files.name") }}</span>

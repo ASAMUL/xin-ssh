@@ -100,7 +100,7 @@ onMounted(async () => {
     lineHeight: 1.18,
     scrollback: 8000,
     theme: {
-      background: "#0d1c29",
+      background: "#0b1b2e",
       foreground: "#eef6ff",
       cursor: "#30e38c",
       selectionBackground: "#2e5d7a",
@@ -274,8 +274,11 @@ async function savePendingCredential() {
       <header class="terminal-panel-toolbar">
         <div class="terminal-title-block">
           <span class="terminal-live-dot" :class="activeSession?.status"></span>
-          <div>
-            <strong>{{ activeSession?.name }}</strong>
+          <div class="terminal-title-copy">
+            <span class="terminal-name-row">
+              <strong>{{ activeSession?.name }}</strong>
+              <em>SSH</em>
+            </span>
             <small>{{ activeSession?.username }}@{{ activeSession?.host }}:{{ activeSession?.port }}</small>
           </div>
         </div>

@@ -11,13 +11,14 @@ const { t } = useI18n();
 const appStore = useAppStore();
 const sessionStore = useSessionStore();
 const uiStore = useUiStore();
-const appWindow = getCurrentWindow();
+const appWindow = window.__TAURI_INTERNALS__ ? getCurrentWindow() : null;
 const platform = navigator.userAgentData?.platform ?? navigator.platform ?? "";
 
 const isMac = computed(() => platform.toLowerCase().includes("mac"));
 
 async function startWindowDrag(event) {
   if (event.target.closest("button")) return;
+  if (!appWindow) return;
 
   try {
     await appWindow.startDragging();
@@ -27,14 +28,20 @@ async function startWindowDrag(event) {
 }
 
 async function minimizeWindow() {
+  if (!appWindow) return;
+
   await appWindow.minimize();
 }
 
 async function toggleMaximizeWindow() {
+  if (!appWindow) return;
+
   await appWindow.toggleMaximize();
 }
 
 async function closeWindow() {
+  if (!appWindow) return;
+
   await appWindow.close();
 }
 </script>
@@ -66,6 +73,7 @@ async function closeWindow() {
         size="sm"
         icon="i-lucide-settings"
         :aria-label="t('app.settings')"
+        :title="t('app.settings')"
         @click.stop="uiStore.openSettings"
       />
     </div>
