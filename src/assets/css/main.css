@@ -94,7 +94,7 @@ select {
   height: 50px;
   min-height: 50px;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(156px, 220px) minmax(0, 1fr) auto auto;
   align-items: center;
   border-bottom: 1px solid rgba(137, 148, 166, 0.18);
   background: rgba(250, 252, 255, 0.78);
@@ -104,13 +104,21 @@ select {
 }
 
 .window-brand {
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 11px;
-  padding-left: 18px;
+  padding: 0 14px 0 18px;
   color: var(--xin-text);
   font-size: 14px;
   font-weight: 780;
+}
+
+.window-brand > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-dot {
@@ -126,6 +134,25 @@ select {
 
 .window-drag-space {
   height: 100%;
+}
+
+.window-tools {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+}
+
+.window-tools button {
+  width: 34px;
+  height: 34px;
+  justify-content: center;
+  color: #344054;
+  border-radius: 8px;
+}
+
+.window-tools button:hover {
+  background: rgba(137, 148, 166, 0.12);
 }
 
 .window-controls {
@@ -368,6 +395,10 @@ select:focus {
   gap: 10px;
   padding: 10px;
   background: linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+}
+
+.workspace-layout.connection-hub-layout {
+  padding: 0;
 }
 
 .connection-sidebar {

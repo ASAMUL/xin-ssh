@@ -16,9 +16,19 @@ export const useProfileStore = defineStore("profiles", {
         .filter((profile) => !profile.deletedAt)
         .sort((left, right) => left.sortOrder - right.sortOrder),
     profilesByGroup() {
-      return this.activeGroups.map((group) => ({
+      const fallbackGroup = { id: "group-default", name: "Ungrouped", sortOrder: 0 };
+      const groups = this.activeGroups.length > 0 ? this.activeGroups : [fallbackGroup];
+      const profiles = this.activeProfiles;
+      const defaultGroup = groups.find((group) => group.id === "group-default") ?? groups[0] ?? null;
+      const knownGroupIds = new Set(groups.map((group) => group.id));
+
+      return groups.map((group) => ({
         group,
-        profiles: this.activeProfiles.filter((profile) => profile.groupId === group.id),
+        profiles: profiles.filter((profile) => {
+          if (profile.groupId === group.id) return true;
+
+          return group.id === defaultGroup?.id && !knownGroupIds.has(profile.groupId);
+        }),
       }));
     },
   },

@@ -71,6 +71,9 @@ export const useSessionStore = defineStore("sessions", {
         this.activeSessionId = sessionId;
       }
     },
+    showConnectionHub() {
+      this.activeSessionId = null;
+    },
     async closeSession(sessionId) {
       const closingIndex = this.sessions.findIndex((session) => session.id === sessionId);
       if (closingIndex < 0) return;

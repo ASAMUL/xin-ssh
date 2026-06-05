@@ -1,155 +1,229 @@
 <script setup>
+import { useI18n } from "vue-i18n";
+
 defineProps({
   sessions: {
     type: Array,
-    required: true,
+    default: () => [],
   },
   activeSessionId: {
     type: String,
-    required: true,
+    default: null,
   },
 });
 
-const emit = defineEmits(["select"]);
+const emit = defineEmits(["showConnectionHub", "select", "close", "create"]);
+const { t } = useI18n();
 </script>
 
 <template>
-  <header class="session-tabs" aria-label="Open sessions">
+  <nav class="session-tabs" :aria-label="t('workspace.openSessions')">
+    <button
+      type="button"
+      class="home-tab"
+      :class="{ active: !activeSessionId }"
+      @click.stop="emit('showConnectionHub')"
+    >
+      <UIcon name="i-lucide-house" />
+      <span>{{ t("workspace.connectionHub") }}</span>
+    </button>
+
     <div class="tabs-strip">
-      <button
+      <div
         v-for="session in sessions"
         :key="session.id"
-        type="button"
-        class="tab-button"
+        class="session-tab"
         :class="{ active: session.id === activeSessionId }"
-        @click="emit('select', session.id)"
       >
-        <span class="tab-status" :class="session.status"></span>
-        <span class="tab-title">{{ session.name }}</span>
-        <UIcon name="i-lucide-x" class="tab-close" />
-      </button>
-
-      <button type="button" class="new-tab" aria-label="New session">
-        <UIcon name="i-lucide-plus" />
-      </button>
+        <button
+          type="button"
+          class="session-tab-main"
+          :aria-label="session.name"
+          @click.stop="emit('select', session.id)"
+        >
+          <span class="tab-status" :class="session.status"></span>
+          <span class="tab-title">{{ session.name }}</span>
+        </button>
+        <button
+          type="button"
+          class="tab-close"
+          :aria-label="t('terminal.closeSession')"
+          @click.stop="emit('close', session.id)"
+        >
+          <UIcon name="i-lucide-x" />
+        </button>
+      </div>
     </div>
 
-    <div class="window-tools">
-      <button type="button" aria-label="Toggle sidebar">
-        <UIcon name="i-lucide-panel-left" />
-      </button>
-      <button type="button" aria-label="Fullscreen">
-        <UIcon name="i-lucide-scan" />
-      </button>
-      <button type="button" aria-label="More">
-        <UIcon name="i-lucide-more-horizontal" />
-      </button>
-    </div>
-  </header>
+    <UButton
+      class="new-connection-tab"
+      color="neutral"
+      variant="ghost"
+      size="sm"
+      icon="i-lucide-plus"
+      :aria-label="t('sidebar.add')"
+      @click.stop="emit('create')"
+    />
+  </nav>
 </template>
 
 <style scoped>
 .session-tabs {
-  height: 64px;
-  min-height: 64px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding: 0 16px 0 24px;
-  background: rgba(255, 255, 255, 0.76);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  backdrop-filter: blur(18px);
-}
-
-.tabs-strip {
-  height: 100%;
   min-width: 0;
-  display: flex;
-  align-items: flex-end;
+  height: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 4px;
+  padding-top: 8px;
+  overflow: hidden;
 }
 
-.tab-button {
-  height: 52px;
-  min-width: 202px;
-  max-width: 244px;
-  display: grid;
-  grid-template-columns: 10px 1fr 18px;
-  align-items: center;
-  gap: 10px;
-  padding: 0 18px;
-  color: #1e293b;
-  border: 0;
-  border-left: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(226, 232, 240, 0.44);
+.home-tab,
+.session-tab,
+.new-connection-tab {
   border-radius: 8px 8px 0 0;
 }
 
-.tab-button:first-child {
-  border-left: 0;
+.home-tab {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  color: #475569;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  background: rgba(226, 232, 240, 0.5);
+  font-size: 12px;
+  font-weight: 760;
 }
 
-.tab-button.active {
-  height: 58px;
+.home-tab.active {
+  color: #0f172a;
+  border-color: rgba(148, 163, 184, 0.2);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 -1px 0 #ffffff inset;
 }
 
+.tabs-strip {
+  min-width: 0;
+  display: flex;
+  align-items: end;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.session-tab {
+  width: clamp(138px, 16vw, 208px);
+  height: 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  align-items: center;
+  flex: 0 0 auto;
+  color: #334155;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  background: rgba(226, 232, 240, 0.48);
+}
+
+.session-tab.active {
+  height: 40px;
+  color: #0f172a;
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 -1px 0 #ffffff inset;
+}
+
+.session-tab-main {
+  min-width: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px 0 11px;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
 .tab-status {
-  width: 9px;
-  height: 9px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #94a3b8;
 }
 
-.tab-status.online {
-  background: #22c55e;
+.tab-status.authRequired {
+  background: #5b7cfa;
+}
+
+.tab-status.connected {
+  background: var(--xin-success);
+  box-shadow: 0 0 0 4px rgba(97, 191, 134, 0.13);
+}
+
+.tab-status.connecting {
+  background: var(--xin-warning);
+}
+
+.tab-status.error {
+  background: #ef4444;
 }
 
 .tab-title {
+  min-width: 0;
   overflow: hidden;
-  font-size: 14px;
-  font-weight: 760;
-  text-align: left;
+  font-size: 12px;
+  font-weight: 780;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .tab-close {
-  color: #64748b;
-  font-size: 16px;
-}
-
-.new-tab,
-.window-tools button {
-  width: 36px;
-  height: 36px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  color: #334155;
+  color: #64748b;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
 }
 
-.new-tab {
-  margin: 0 10px 10px;
+.tab-close:hover {
+  color: #0f172a;
+  background: rgba(148, 163, 184, 0.14);
 }
 
-.window-tools {
-  height: 52px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.new-connection-tab {
+  width: 36px;
+  height: 34px;
+  justify-content: center;
+  margin-left: 2px;
+  color: #334155;
+  background: rgba(226, 232, 240, 0.5);
 }
 
-.new-tab:hover,
-.window-tools button:hover {
-  background: rgba(148, 163, 184, 0.12);
+.new-connection-tab:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.86);
 }
 
 @media (max-width: 980px) {
-  .tab-button {
-    min-width: 150px;
+  .home-tab span {
+    display: none;
+  }
+
+  .session-tab {
+    width: clamp(118px, 18vw, 160px);
   }
 }
 </style>

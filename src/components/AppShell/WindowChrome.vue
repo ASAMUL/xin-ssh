@@ -2,8 +2,15 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import SessionTabs from "../SessionTabs.vue";
+import { useAppStore } from "../../stores/appStore";
+import { useSessionStore } from "../../stores/sessionStore";
+import { useUiStore } from "../../stores/uiStore";
 
 const { t } = useI18n();
+const appStore = useAppStore();
+const sessionStore = useSessionStore();
+const uiStore = useUiStore();
 const appWindow = getCurrentWindow();
 const platform = navigator.userAgentData?.platform ?? navigator.platform ?? "";
 
@@ -41,7 +48,27 @@ async function closeWindow() {
       <span>{{ t("app.name") }}</span>
     </div>
 
-    <div class="window-drag-space"></div>
+    <SessionTabs
+      v-if="!appStore.isLoading"
+      :sessions="sessionStore.sessions"
+      :active-session-id="sessionStore.activeSessionId"
+      @show-connection-hub="sessionStore.showConnectionHub"
+      @select="sessionStore.selectSession"
+      @close="sessionStore.closeSession"
+      @create="uiStore.openConnectionForm"
+    />
+    <div v-else class="window-drag-space"></div>
+
+    <div v-if="!appStore.isLoading" class="window-tools" @mousedown.stop>
+      <UButton
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        icon="i-lucide-settings"
+        :aria-label="t('app.settings')"
+        @click.stop="uiStore.openSettings"
+      />
+    </div>
 
     <div class="window-controls" :class="{ mac: isMac }" @mousedown.stop>
       <button
