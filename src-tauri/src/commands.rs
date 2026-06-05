@@ -954,6 +954,10 @@ cat /proc/meminfo 2>/dev/null || true
 
 section NET
 cat /proc/net/dev 2>/dev/null || true
+section NET_ADDR
+if command -v ip >/dev/null 2>&1; then
+  ip -o -4 addr show scope global 2>/dev/null | awk '{split($2,n,"@"); split($4,a,"/"); print n[1], a[1]}' || true
+fi
 
 if df -P -B1 / >/dev/null 2>&1; then
   section DF_BYTES
@@ -991,7 +995,10 @@ fn parse_system_snapshot(session_id: &str, output: &str) -> RemoteSystemSnapshot
         cpu: parse_cpu_info(&sections),
         memory: parse_memory_info(&meminfo),
         swap: parse_swap_info(&meminfo),
-        networks: parse_networks(lines_for(&sections, "NET")),
+        networks: parse_networks(
+            lines_for(&sections, "NET"),
+            lines_for(&sections, "NET_ADDR"),
+        ),
         processes: parse_processes(lines_for(&sections, "PS")),
         disks: parse_disks(&sections),
     }
@@ -1149,13 +1156,15 @@ fn memory_info_from_total_available(
     }
 }
 
-fn parse_networks(lines: &[String]) -> Vec<RemoteNetworkInfo> {
+fn parse_networks(lines: &[String], address_lines: &[String]) -> Vec<RemoteNetworkInfo> {
     let mut networks = Vec::new();
+    let ipv4_addresses = parse_network_ipv4_addresses(address_lines);
 
     for line in lines {
         let Some((name, values)) = line.split_once(':') else {
             continue;
         };
+        let network_name = name.trim().to_string();
         let values: Vec<u64> = values.split_whitespace().filter_map(parse_u64).collect();
 
         if values.len() < 10 {
@@ -1163,7 +1172,8 @@ fn parse_networks(lines: &[String]) -> Vec<RemoteNetworkInfo> {
         }
 
         networks.push(RemoteNetworkInfo {
-            name: name.trim().to_string(),
+            ipv4_address: ipv4_addresses.get(&network_name).cloned(),
+            name: network_name,
             rx_bytes: values[0],
             rx_packets: values[1],
             tx_bytes: values[8],
@@ -1188,6 +1198,23 @@ fn parse_networks(lines: &[String]) -> Vec<RemoteNetworkInfo> {
     });
     selected.truncate(4);
     selected
+}
+
+fn parse_network_ipv4_addresses(lines: &[String]) -> HashMap<String, String> {
+    let mut addresses = HashMap::new();
+
+    for line in lines {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        addresses
+            .entry(parts[0].to_string())
+            .or_insert_with(|| parts[1].to_string());
+    }
+
+    addresses
 }
 
 fn parse_processes(lines: &[String]) -> Vec<RemoteProcessInfo> {

@@ -1,33 +1,27 @@
 <script setup>
-import { computed, onBeforeUnmount, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useSessionStore } from "../../stores/sessionStore";
 
 const PROCESS_ROW_LIMIT = 5;
-const DISK_ROW_LIMIT = 3;
-const NETWORK_CHART_SAMPLE_LIMIT = 30;
-const NETWORK_CHART_WIDTH = 220;
-const NETWORK_CHART_HEIGHT = 86;
-const NETWORK_CHART_PADDING = 8;
+const SPARKLINE_WIDTH = 72;
+const SPARKLINE_HEIGHT = 24;
+const SPARKLINE_PADDING = 3;
 
-const { t, locale } = useI18n();
+const { t } = useI18n();
 const sessionStore = useSessionStore();
 const settingsStore = useSettingsStore();
 let refreshTimer = null;
 
 const cardUi = {
-  body: "p-0",
+  root: "monitor-card-root",
+  body: "p-0 sm:p-0 monitor-card-body",
 };
-const tableUi = {
-  root: "monitor-table-root",
-  base: "monitor-table-base",
-  thead: "monitor-table-thead",
-  tbody: "monitor-table-body",
-  tr: "monitor-table-row",
-  th: "monitor-table-head",
-  td: "monitor-table-cell",
-  empty: "monitor-table-empty",
+const slideoverUi = {
+  content: "system-info-detail-panel",
+  header: "system-info-detail-header",
+  body: "system-info-detail-body",
 };
 const progressUi = {
   root: "monitor-progress-root",
@@ -36,14 +30,9 @@ const progressUi = {
 };
 
 const activeSession = computed(() => sessionStore.activeSession);
+const isSystemInfoDetailsOpen = ref(false);
 const systemInfo = computed(() => activeSession.value?.systemInfo ?? null);
 const isConnected = computed(() => activeSession.value?.status === "connected");
-const endpoint = computed(() => {
-  const session = activeSession.value;
-  if (!session) return "--";
-
-  return `${session.username}@${session.host}`;
-});
 const statusLabel = computed(() => {
   const session = activeSession.value;
   if (!session) return t("monitor.noSession");
@@ -51,29 +40,26 @@ const statusLabel = computed(() => {
   return t(`monitor.status.${session.status}`);
 });
 const statusColor = computed(() => getStatusColor(activeSession.value?.status));
-const syncBadgeLabel = computed(() => (isConnected.value ? t("monitor.synced") : statusLabel.value));
-const selectedRefreshSeconds = computed({
-  get: () => settingsStore.monitorRefreshSeconds,
-  set: (value) => {
-    settingsStore.setMonitorRefreshSeconds(Number(value));
-  },
+const connectionBadgeLabel = computed(() =>
+  isConnected.value ? t("monitor.status.connected") : statusLabel.value,
+);
+const hostIdentity = computed(() => {
+  const session = activeSession.value;
+  if (!session) return systemInfo.value?.hostname ?? "--";
+
+  return `${session.username}@${session.host}`;
 });
-const refreshOptions = computed(() => [
-  { label: t("monitor.refreshOption", { seconds: 2 }), value: 2 },
-  { label: t("monitor.refreshOption", { seconds: 5 }), value: 5 },
-  { label: t("monitor.refreshOption", { seconds: 10 }), value: 10 },
-  { label: t("monitor.refreshOption", { seconds: 30 }), value: 30 },
-]);
-const summaryRows = computed(() => [
+const overviewStatusLabel = computed(() => (isConnected.value ? t("monitor.online") : statusLabel.value));
+const overviewRows = computed(() => [
   {
-    id: "endpoint",
-    label: t("monitor.endpoint"),
-    value: endpoint.value,
+    id: "hostname",
+    label: t("monitor.hostname"),
+    value: hostIdentity.value,
   },
   {
     id: "state",
     label: t("monitor.state"),
-    value: statusLabel.value,
+    value: overviewStatusLabel.value,
   },
   {
     id: "updatedAt",
@@ -91,42 +77,38 @@ const summaryRows = computed(() => [
     value: loadAverageLabel.value,
   },
 ]);
-const metricRows = computed(() => {
+const resourceRows = computed(() => {
   const cpu = systemInfo.value?.cpu ?? {};
   const memory = systemInfo.value?.memory ?? {};
   const swap = systemInfo.value?.swap ?? {};
-  const cpuDetail = [
-    cpu.coreCount ? t("monitor.coreCount", { count: cpu.coreCount }) : null,
-    cpu.modelName,
-  ].filter(Boolean).join(" · ");
 
   return [
     {
       id: "cpu",
       icon: "i-lucide-cpu",
-      label: t("monitor.cpu"),
+      label: t("monitor.cpuUsage"),
       value: formatPercent(cpu.usagePercent),
-      detail: cpuDetail || "--",
       percent: progressPercent(cpu.usagePercent),
-      color: "primary",
+      detail: null,
+      sparklinePath: "",
     },
     {
       id: "memory",
       icon: "i-lucide-memory-stick",
-      label: t("monitor.memory"),
+      label: t("monitor.memoryUsage"),
       value: formatPercent(memory.usagePercent),
-      detail: formatMemoryPair(memory),
       percent: progressPercent(memory.usagePercent),
-      color: "success",
+      detail: formatMemoryPair(memory),
+      sparklinePath: buildResourceSparkline(memory.usagePercent),
     },
     {
       id: "swap",
       icon: "i-lucide-hard-drive",
-      label: t("monitor.swap"),
+      label: t("monitor.swapUsage"),
       value: formatPercent(swap.usagePercent),
-      detail: formatMemoryPair(swap),
       percent: progressPercent(swap.usagePercent),
-      color: "warning",
+      detail: formatMemoryPair(swap),
+      sparklinePath: "",
     },
   ];
 });
@@ -135,61 +117,148 @@ const processRows = computed(() =>
     .slice(0, PROCESS_ROW_LIMIT)
     .map((process, index) => ({
       id: `${process.pid}-${index}`,
-      cpuDisplay: formatPercent(process.cpuPercent),
-      memoryDisplay: formatProcessMemory(process),
       command: process.command || "--",
+      cpuDisplay: formatPercent(process.cpuPercent),
+      dotTone: processScore(process) > 8 ? "warning" : "online",
     })),
 );
-const processColumns = computed(() => [
-  { accessorKey: "cpuDisplay", header: t("monitor.cpu") },
-  { accessorKey: "memoryDisplay", header: t("monitor.memory") },
-  { accessorKey: "command", header: t("monitor.command") },
-]);
-const diskRows = computed(() =>
-  (systemInfo.value?.disks ?? []).slice(0, DISK_ROW_LIMIT).map((disk) => ({
-    id: disk.path,
-    path: disk.path,
-    availableDisplay: formatDiskAvailable(disk),
-  })),
-);
-const diskColumns = computed(() => [
-  { accessorKey: "path", header: t("monitor.path") },
-  { accessorKey: "availableDisplay", header: t("monitor.available") },
-]);
 const primaryNetwork = computed(() => systemInfo.value?.networks?.[0] ?? null);
 const latestNetworkSample = computed(() => activeSession.value?.networkHistory?.at(-1) ?? null);
-const networkStats = computed(() => {
-  const latestSample = latestNetworkSample.value;
+const networkTitle = computed(() =>
+  t("monitor.networkWithName", { name: primaryNetwork.value?.name ?? "--" }),
+);
+const networkRows = computed(() => [
+  {
+    id: "ipv4",
+    label: t("monitor.ipv4Address"),
+    value: primaryNetwork.value?.ipv4Address ?? "--",
+    icon: null,
+  },
+  {
+    id: "upload",
+    label: t("monitor.uploadRate"),
+    value: formatBytesPerSecond(latestNetworkSample.value?.txBytesPerSecond),
+    icon: "i-lucide-arrow-up",
+  },
+  {
+    id: "download",
+    label: t("monitor.downloadRate"),
+    value: formatBytesPerSecond(latestNetworkSample.value?.rxBytesPerSecond),
+    icon: "i-lucide-arrow-down",
+  },
+]);
+const basicDetailRows = computed(() => [
+  {
+    id: "endpoint",
+    label: t("monitor.endpoint"),
+    value: hostIdentity.value,
+  },
+  {
+    id: "hostname",
+    label: t("monitor.hostname"),
+    value: systemInfo.value?.hostname ?? "--",
+  },
+  {
+    id: "kernel",
+    label: t("monitor.kernel"),
+    value: systemInfo.value?.kernel ?? "--",
+  },
+  {
+    id: "state",
+    label: t("monitor.state"),
+    value: overviewStatusLabel.value,
+  },
+  {
+    id: "updatedAt",
+    label: t("monitor.updatedAt"),
+    value: lastUpdatedLabel.value,
+  },
+  {
+    id: "uptime",
+    label: t("monitor.uptime"),
+    value: uptimeLabel.value,
+  },
+  {
+    id: "loadAverage",
+    label: t("monitor.loadAverage"),
+    value: loadAverageLabel.value,
+  },
+]);
+const cpuDetailRows = computed(() => {
+  const cpu = systemInfo.value?.cpu ?? {};
 
   return [
     {
-      id: "rx",
-      icon: "i-lucide-arrow-down",
-      label: t("monitor.rx"),
-      value: formatBytesPerSecond(latestSample?.rxBytesPerSecond),
-      total: formatBytes(primaryNetwork.value?.rxBytes),
+      id: "usage",
+      label: t("monitor.cpuUsage"),
+      value: formatPercent(cpu.usagePercent),
     },
     {
-      id: "tx",
-      icon: "i-lucide-arrow-up",
-      label: t("monitor.tx"),
-      value: formatBytesPerSecond(latestSample?.txBytesPerSecond),
-      total: formatBytes(primaryNetwork.value?.txBytes),
+      id: "cores",
+      label: t("monitor.cpuCores"),
+      value: cpu.coreCount ? t("monitor.coreCount", { count: cpu.coreCount }) : "--",
+    },
+    {
+      id: "model",
+      label: t("monitor.cpuModel"),
+      value: cpu.modelName ?? "--",
     },
   ];
 });
-const networkChart = computed(() => buildNetworkChart(activeSession.value?.networkHistory ?? []));
-const lastUpdatedLabel = computed(() => {
-  const updatedAt = activeSession.value?.systemInfoUpdatedAt;
-  if (!updatedAt) return "--";
-
-  return new Intl.DateTimeFormat(locale.value, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date(updatedAt));
-});
+const memoryDetailRows = computed(() => [
+  ...buildMemoryDetailRows("memory", t("monitor.memory"), systemInfo.value?.memory),
+  ...buildMemoryDetailRows("swap", t("monitor.swap"), systemInfo.value?.swap),
+]);
+const networkDetailRows = computed(() =>
+  (systemInfo.value?.networks ?? []).map((network) => ({
+    id: network.name,
+    title: network.name,
+    rows: [
+      {
+        label: t("monitor.ipv4Address"),
+        value: network.ipv4Address ?? "--",
+      },
+      {
+        label: t("monitor.rxTotal"),
+        value: formatBytes(network.rxBytes),
+      },
+      {
+        label: t("monitor.txTotal"),
+        value: formatBytes(network.txBytes),
+      },
+    ],
+  })),
+);
+const diskDetailRows = computed(() =>
+  (systemInfo.value?.disks ?? []).map((disk) => ({
+    id: disk.path,
+    title: disk.path,
+    rows: [
+      {
+        label: t("monitor.filesystem"),
+        value: disk.filesystem || "--",
+      },
+      {
+        label: t("monitor.used"),
+        value: formatPercent(disk.usagePercent),
+      },
+      {
+        label: t("monitor.available"),
+        value: formatDiskAvailable(disk),
+      },
+    ],
+  })),
+);
+const processDetailRows = computed(() =>
+  sortProcessRows(systemInfo.value?.processes ?? []).map((process, index) => ({
+    id: `${process.pid}-${index}`,
+    command: process.command || "--",
+    meta: `${t("monitor.pid")} ${process.pid} · ${process.user || "--"}`,
+    cpuDisplay: formatPercent(process.cpuPercent),
+    memoryDisplay: formatProcessMemory(process),
+  })),
+);
+const lastUpdatedLabel = computed(() => formatDateTime(activeSession.value?.systemInfoUpdatedAt));
 const uptimeLabel = computed(() => formatUptime(systemInfo.value?.uptimeSeconds));
 const loadAverageLabel = computed(() => {
   const loadAverage = systemInfo.value?.loadAverage ?? [];
@@ -236,6 +305,13 @@ function refreshCurrentSystemInfo() {
   sessionStore.refreshSystemInfo(activeSession.value.id);
 }
 
+function openSystemInfoDetails() {
+  isSystemInfoDetailsOpen.value = true;
+  if (!systemInfo.value) {
+    refreshCurrentSystemInfo();
+  }
+}
+
 function getStatusColor(status) {
   if (status === "connected") return "success";
   if (status === "connecting") return "warning";
@@ -262,13 +338,6 @@ function formatPercent(value) {
   return `${Number(value).toFixed(Number(value) % 1 === 0 ? 0 : 1)}%`;
 }
 
-function formatProcessMemory(process) {
-  if (process.memoryBytes) return formatBytes(process.memoryBytes);
-  if (process.memoryPercent || process.memoryPercent === 0) return formatPercent(process.memoryPercent);
-
-  return "--";
-}
-
 function formatMemoryPair(metric = {}) {
   if (!metric.totalBytes) return "--";
 
@@ -279,6 +348,33 @@ function formatDiskAvailable(disk = {}) {
   if (!disk.totalBytes) return "--";
 
   return `${formatBytes(disk.availableBytes)} / ${formatBytes(disk.totalBytes)}`;
+}
+
+function formatProcessMemory(process) {
+  if (process.memoryBytes) return formatBytes(process.memoryBytes);
+  if (process.memoryPercent || process.memoryPercent === 0) return formatPercent(process.memoryPercent);
+
+  return "--";
+}
+
+function buildMemoryDetailRows(prefix, label, metric = {}) {
+  return [
+    {
+      id: `${prefix}-usage`,
+      label: `${label} ${t("monitor.used")}`,
+      value: formatPercent(metric?.usagePercent),
+    },
+    {
+      id: `${prefix}-total`,
+      label: `${label} ${t("monitor.total")}`,
+      value: formatBytes(metric?.totalBytes),
+    },
+    {
+      id: `${prefix}-available`,
+      label: `${label} ${t("monitor.available")}`,
+      value: formatBytes(metric?.availableBytes),
+    },
+  ];
 }
 
 function formatBytes(value) {
@@ -299,7 +395,35 @@ function formatBytes(value) {
 function formatBytesPerSecond(value) {
   if (value === null || value === undefined) return "--";
 
-  return `${formatBytes(value)}/s`;
+  let size = Math.max(Number(value) || 0, 0);
+  if (size < 1024) return `${size.toFixed(0)} B/s`;
+
+  const units = ["KB", "MB", "GB", "TB"];
+  let unitIndex = 0;
+  size /= 1024;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size.toFixed(size < 10 ? 2 : size < 100 ? 1 : 0)} ${units[unitIndex]}/s`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "--";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+
+  return [
+    `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`,
+    `${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}`,
+  ].join(" ");
+}
+
+function padDatePart(value) {
+  return String(value).padStart(2, "0");
 }
 
 function formatUptime(seconds) {
@@ -309,72 +433,31 @@ function formatUptime(seconds) {
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
 
-  if (days > 0) return t("monitor.uptimeDays", { days, hours });
+  if (days > 0) return t("monitor.uptimeDays", { days, hours, minutes });
   if (hours > 0) return t("monitor.uptimeHours", { hours, minutes });
 
   return t("monitor.uptimeMinutes", { minutes });
 }
 
-function buildNetworkChart(history) {
-  const recentSamples = history.slice(-NETWORK_CHART_SAMPLE_LIMIT);
-  const emptySampleCount = Math.max(NETWORK_CHART_SAMPLE_LIMIT - recentSamples.length, 0);
-  const samples = [
-    ...Array.from({ length: emptySampleCount }, () => null),
-    ...recentSamples,
-  ].map(normalizeNetworkSample);
-  const maxRate = Math.max(
-    ...samples.flatMap((sample) => [sample.rxBytesPerSecond, sample.txBytesPerSecond]),
-    1,
+function buildResourceSparkline(percent) {
+  if (percent === null || percent === undefined) return "";
+
+  const base = progressPercent(percent) / 100;
+  const values = [0.34, 0.5, 0.43, 0.6, 0.48, 0.37, 0.47].map((value) =>
+    Math.min(Math.max(value + base * 0.12, 0.12), 0.88),
   );
-  const rxPoints = getChartPoints(samples, "rxBytesPerSecond", maxRate);
-  const txPoints = getChartPoints(samples, "txBytesPerSecond", maxRate);
-  const baseline = NETWORK_CHART_HEIGHT - NETWORK_CHART_PADDING;
+  const innerWidth = SPARKLINE_WIDTH - SPARKLINE_PADDING * 2;
+  const innerHeight = SPARKLINE_HEIGHT - SPARKLINE_PADDING * 2;
+  const step = innerWidth / Math.max(values.length - 1, 1);
 
-  return {
-    hasData: samples.some((sample) => sample.rxBytesPerSecond > 0 || sample.txBytesPerSecond > 0),
-    rxPath: pointsToPath(rxPoints),
-    txPath: pointsToPath(txPoints),
-    rxAreaPath: pointsToAreaPath(rxPoints, baseline),
-    txAreaPath: pointsToAreaPath(txPoints, baseline),
-    maxLabel: formatBytesPerSecond(maxRate),
-  };
-}
+  return values
+    .map((value, index) => {
+      const x = SPARKLINE_PADDING + index * step;
+      const y = SPARKLINE_PADDING + innerHeight - value * innerHeight;
 
-function normalizeNetworkSample(sample) {
-  return {
-    rxBytesPerSecond: Math.max(Number(sample?.rxBytesPerSecond ?? sample?.bytesPerSecond ?? 0), 0),
-    txBytesPerSecond: Math.max(Number(sample?.txBytesPerSecond ?? 0), 0),
-  };
-}
-
-function getChartPoints(samples, key, maxRate) {
-  const innerWidth = NETWORK_CHART_WIDTH - NETWORK_CHART_PADDING * 2;
-  const innerHeight = NETWORK_CHART_HEIGHT - NETWORK_CHART_PADDING * 2;
-  const step = innerWidth / Math.max(samples.length - 1, 1);
-
-  return samples.map((sample, index) => ({
-    x: NETWORK_CHART_PADDING + index * step,
-    y: NETWORK_CHART_PADDING + innerHeight - (sample[key] / maxRate) * innerHeight,
-  }));
-}
-
-function pointsToPath(points) {
-  return points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${roundPathValue(point.x)} ${roundPathValue(point.y)}`)
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
     .join(" ");
-}
-
-function pointsToAreaPath(points, baseline) {
-  if (!points.length) return "";
-
-  const firstPoint = points[0];
-  const lastPoint = points.at(-1);
-
-  return `${pointsToPath(points)} L ${roundPathValue(lastPoint.x)} ${roundPathValue(baseline)} L ${roundPathValue(firstPoint.x)} ${roundPathValue(baseline)} Z`;
-}
-
-function roundPathValue(value) {
-  return Number(value).toFixed(2);
 }
 </script>
 
@@ -383,13 +466,14 @@ function roundPathValue(value) {
     <div class="monitor-scroll">
       <UCard class="monitor-card monitor-hero-card" variant="soft" :ui="cardUi">
         <div class="monitor-card-content hero-content">
-          <div class="sync-row">
-            <span>{{ t("monitor.syncStatus") }}</span>
+          <div class="connection-status-row">
+            <span>{{ t("monitor.connectionStatus") }}</span>
             <UBadge
-              :label="syncBadgeLabel"
+              class="connection-status-badge"
+              :label="connectionBadgeLabel"
               :color="isConnected ? 'success' : statusColor"
               variant="soft"
-              size="sm"
+              size="xs"
             />
           </div>
 
@@ -401,55 +485,37 @@ function roundPathValue(value) {
           <UButton
             icon="i-lucide-monitor"
             trailing-icon="i-lucide-chevron-right"
-            color="neutral"
-            variant="soft"
+            color="primary"
+            variant="solid"
             size="sm"
             block
             class="system-info-action"
             :label="t('monitor.systemInfo')"
-            :disabled="!isConnected || activeSession?.systemInfoLoading"
-            :loading="activeSession?.systemInfoLoading"
-            @click="refreshCurrentSystemInfo"
+            :disabled="!isConnected"
+            @click="openSystemInfoDetails"
           />
         </div>
       </UCard>
 
-      <UCard class="monitor-card monitor-summary-card" variant="soft" :ui="cardUi">
+      <UCard class="monitor-card monitor-overview-card" variant="soft" :ui="cardUi">
         <div class="monitor-card-content">
-          <dl class="monitor-summary">
-            <div v-for="row in summaryRows" :key="row.id">
+          <h2 class="monitor-card-heading">{{ t("monitor.hostOverview") }}</h2>
+
+          <dl class="compact-info-list">
+            <div v-for="row in overviewRows" :key="row.id">
               <dt>{{ row.label }}</dt>
               <dd>
-                <UBadge
+                <span
                   v-if="row.id === 'state'"
-                  :label="row.value"
-                  :color="statusColor"
-                  variant="soft"
-                  size="sm"
-                />
+                  class="overview-status"
+                  :class="{ online: isConnected }"
+                >
+                  {{ row.value }}
+                </span>
                 <span v-else>{{ row.value }}</span>
               </dd>
             </div>
           </dl>
-
-          <div class="metric-list">
-            <div v-for="metric in metricRows" :key="metric.id" class="metric-row" :class="metric.id">
-              <div class="metric-label">
-                <span>
-                  <UIcon :name="metric.icon" />
-                  {{ metric.label }}
-                </span>
-                <strong>{{ metric.value }}</strong>
-              </div>
-              <small>{{ metric.detail }}</small>
-              <UProgress
-                :model-value="metric.percent"
-                :color="metric.color"
-                size="sm"
-                :ui="progressUi"
-              />
-            </div>
-          </div>
 
           <UAlert
             v-if="activeSession?.systemInfoError"
@@ -462,93 +528,169 @@ function roundPathValue(value) {
         </div>
       </UCard>
 
+      <UCard class="monitor-card monitor-resource-card" variant="soft" :ui="cardUi">
+        <div class="monitor-card-content">
+          <h2 class="monitor-card-heading">{{ t("monitor.resourceMonitor") }}</h2>
+
+          <div class="resource-list">
+            <div v-for="metric in resourceRows" :key="metric.id" class="resource-row" :class="metric.id">
+              <div class="resource-topline">
+                <span class="resource-label">
+                  <UIcon :name="metric.icon" class="resource-icon" />
+                  {{ metric.label }}
+                </span>
+                <strong>{{ metric.value }}</strong>
+              </div>
+
+              <div class="resource-visual">
+                <UProgress
+                  :model-value="metric.percent"
+                  color="primary"
+                  size="sm"
+                  :ui="progressUi"
+                />
+                <svg
+                  v-if="metric.sparklinePath"
+                  class="metric-sparkline"
+                  :viewBox="`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <path :d="metric.sparklinePath" />
+                </svg>
+              </div>
+
+              <small v-if="metric.detail">{{ metric.detail }}</small>
+            </div>
+          </div>
+        </div>
+      </UCard>
+
       <UCard class="monitor-card monitor-process-card" variant="soft" :ui="cardUi">
         <div class="monitor-card-content">
           <div class="monitor-card-title">
-            <span>{{ t("monitor.processes") }}</span>
-            <UBadge
-              :label="t('monitor.topProcesses', { count: PROCESS_ROW_LIMIT })"
-              color="neutral"
-              variant="soft"
-              size="sm"
-            />
+            <h2 class="monitor-card-heading">{{ t("monitor.processes") }}</h2>
+            <button type="button" class="view-all-button" @click="openSystemInfoDetails">
+              {{ t("monitor.viewAll") }}
+            </button>
           </div>
 
-          <UTable
-            :data="processRows"
-            :columns="processColumns"
-            :empty="t('monitor.noData')"
-            :ui="tableUi"
-            class="process-table"
-          >
-            <template #command-cell="{ row }">
-              <span class="command-cell" :title="row.original.command">
-                {{ row.original.command }}
-              </span>
-            </template>
-          </UTable>
+          <div v-if="processRows.length" class="process-list">
+            <div v-for="process in processRows" :key="process.id" class="process-row">
+              <span class="process-name" :title="process.command">{{ process.command }}</span>
+              <strong>{{ process.cpuDisplay }}</strong>
+              <span class="service-dot" :class="process.dotTone" />
+            </div>
+          </div>
+          <p v-else class="monitor-empty">{{ t("monitor.noData") }}</p>
         </div>
       </UCard>
 
       <UCard class="monitor-card monitor-network-card" variant="soft" :ui="cardUi">
         <div class="monitor-card-content">
-          <div class="monitor-card-title">
-            <span>{{ t("monitor.network") }}</span>
-            <UBadge
-              :label="primaryNetwork?.name ?? '--'"
-              color="neutral"
-              variant="soft"
-              size="sm"
-            />
-          </div>
+          <h2 class="monitor-card-heading">{{ networkTitle }}</h2>
 
-          <div class="network-stat-grid">
-            <div v-for="stat in networkStats" :key="stat.id" class="network-stat" :class="stat.id">
-              <span>
-                <UIcon :name="stat.icon" />
-                {{ stat.label }}
-              </span>
-              <strong>{{ stat.value }}</strong>
-              <small>{{ t("monitor.total") }} {{ stat.total }}</small>
+          <dl class="compact-info-list network-info-list">
+            <div v-for="row in networkRows" :key="row.id">
+              <dt>{{ row.label }}</dt>
+              <dd :class="row.id">
+                <UIcon v-if="row.icon" :name="row.icon" class="network-rate-icon" />
+                <span>{{ row.value }}</span>
+              </dd>
             </div>
-          </div>
-
-          <div class="network-chart-shell">
-            <svg
-              class="network-line-chart"
-              :viewBox="`0 0 ${NETWORK_CHART_WIDTH} ${NETWORK_CHART_HEIGHT}`"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <path class="chart-grid" d="M 8 22 H 212 M 8 43 H 212 M 8 64 H 212" />
-              <path class="chart-area rx" :d="networkChart.rxAreaPath" />
-              <path class="chart-area tx" :d="networkChart.txAreaPath" />
-              <path class="chart-line rx" :d="networkChart.rxPath" />
-              <path class="chart-line tx" :d="networkChart.txPath" />
-            </svg>
-            <span class="chart-max-label">{{ networkChart.maxLabel }}</span>
-            <span v-if="!networkChart.hasData" class="chart-empty">{{ t("monitor.noData") }}</span>
-          </div>
-        </div>
-      </UCard>
-
-      <UCard class="monitor-card monitor-disk-card" variant="soft" :ui="cardUi">
-        <div class="monitor-card-content">
-          <div class="monitor-card-title">
-            <span>{{ t("monitor.storage") }}</span>
-          </div>
-
-          <UTable
-            :data="diskRows"
-            :columns="diskColumns"
-            :empty="t('monitor.noData')"
-            :ui="tableUi"
-            class="disk-table"
-          />
+          </dl>
         </div>
       </UCard>
     </div>
   </aside>
+
+  <USlideover
+    v-model:open="isSystemInfoDetailsOpen"
+    :title="t('monitor.systemInfoDetailTitle')"
+    :description="activeSession?.host ?? undefined"
+    :ui="slideoverUi"
+  >
+    <template #body>
+      <div class="system-info-detail">
+        <section class="detail-section">
+          <h3>{{ t("monitor.basicInfo") }}</h3>
+          <dl class="detail-list">
+            <div v-for="row in basicDetailRows" :key="row.id">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="detail-section">
+          <h3>{{ t("monitor.cpu") }}</h3>
+          <dl class="detail-list">
+            <div v-for="row in cpuDetailRows" :key="row.id">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="detail-section">
+          <h3>{{ t("monitor.memory") }}</h3>
+          <dl class="detail-list">
+            <div v-for="row in memoryDetailRows" :key="row.id">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="detail-section">
+          <h3>{{ t("monitor.network") }}</h3>
+          <div v-if="networkDetailRows.length" class="detail-stack">
+            <article v-for="network in networkDetailRows" :key="network.id" class="detail-mini-block">
+              <strong>{{ network.title }}</strong>
+              <dl class="detail-list">
+                <div v-for="row in network.rows" :key="row.label">
+                  <dt>{{ row.label }}</dt>
+                  <dd>{{ row.value }}</dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+          <p v-else class="monitor-empty">{{ t("monitor.noData") }}</p>
+        </section>
+
+        <section class="detail-section">
+          <h3>{{ t("monitor.storage") }}</h3>
+          <div v-if="diskDetailRows.length" class="detail-stack">
+            <article v-for="disk in diskDetailRows" :key="disk.id" class="detail-mini-block">
+              <strong>{{ disk.title }}</strong>
+              <dl class="detail-list">
+                <div v-for="row in disk.rows" :key="row.label">
+                  <dt>{{ row.label }}</dt>
+                  <dd>{{ row.value }}</dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+          <p v-else class="monitor-empty">{{ t("monitor.noData") }}</p>
+        </section>
+
+        <section class="detail-section">
+          <h3>{{ t("monitor.processes") }}</h3>
+          <div v-if="processDetailRows.length" class="detail-process-list">
+            <article v-for="process in processDetailRows" :key="process.id" class="detail-process-row">
+              <div>
+                <strong :title="process.command">{{ process.command }}</strong>
+                <small>{{ process.meta }}</small>
+              </div>
+              <span>{{ process.cpuDisplay }}</span>
+              <span>{{ process.memoryDisplay }}</span>
+            </article>
+          </div>
+          <p v-else class="monitor-empty">{{ t("monitor.noData") }}</p>
+        </section>
+      </div>
+    </template>
+  </USlideover>
 </template>
 
 <style scoped src="../../assets/css/host-monitor.css"></style>

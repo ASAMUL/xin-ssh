@@ -204,6 +204,7 @@ pub struct RemoteMemoryInfo {
 #[serde(rename_all = "camelCase")]
 pub struct RemoteNetworkInfo {
     pub name: String,
+    pub ipv4_address: Option<String>,
     pub rx_bytes: u64,
     pub tx_bytes: u64,
     pub rx_packets: u64,
