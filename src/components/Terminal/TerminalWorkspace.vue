@@ -9,14 +9,14 @@ import FileExplorer from "../FileExplorer.vue";
 import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useUiStore } from "../../stores/uiStore";
-import { useVaultStore } from "../../stores/vaultStore";
+import { useCredentialStore } from "../../stores/credentialStore";
 
 const TERMINAL_EVENT_NAME = "terminal-event";
 const { t } = useI18n();
 const profileStore = useProfileStore();
 const sessionStore = useSessionStore();
 const uiStore = useUiStore();
-const vaultStore = useVaultStore();
+const credentialStore = useCredentialStore();
 const terminalMount = ref(null);
 const credentialInput = ref(null);
 const shouldSaveCredential = ref(false);
@@ -252,8 +252,7 @@ async function savePendingCredential() {
 
   const credentialRef = session.credentialRef || crypto.randomUUID();
   try {
-    await vaultStore.ensureUnlocked();
-    await vaultStore.saveCredential(credentialRef, secret);
+    await credentialStore.saveCredential(credentialRef, secret);
     session.credentialRef = credentialRef;
 
     const profile = profileStore.profiles.find((item) => item.id === session.profileId);

@@ -1,15 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export function archiveCredentialStore() {
-  return invoke("archive_credential_store");
-}
-
 export function getAppStatus() {
   return invoke("get_app_status");
-}
-
-export function getDeviceVaultPassword() {
-  return invoke("get_device_vault_password");
 }
 
 export function initWorkspace(workspaceDir) {
@@ -42,6 +34,18 @@ export function deleteGroup(groupId) {
 
 export function saveSettings(settings) {
   return invoke("save_settings", { settings });
+}
+
+export function saveCredential(request) {
+  return invoke("save_credential", { request });
+}
+
+export function readCredential(request) {
+  return invoke("read_credential", { request });
+}
+
+export function removeCredential(request) {
+  return invoke("remove_credential", { request });
 }
 
 export function testConnection(request) {

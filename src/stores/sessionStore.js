@@ -7,11 +7,11 @@ import {
   startTerminalSession,
 } from "../services/workspaceApi";
 import { i18n } from "../i18n";
-import { useVaultStore } from "./vaultStore";
+import { useCredentialStore } from "./credentialStore";
 
 const INITIAL_TERMINAL_COLUMNS = 120;
 const INITIAL_TERMINAL_ROWS = 32;
-const NETWORK_HISTORY_LIMIT = 28;
+const NETWORK_HISTORY_LIMIT = 30;
 
 export const useSessionStore = defineStore("sessions", {
   state: () => ({
@@ -139,9 +139,8 @@ export const useSessionStore = defineStore("sessions", {
       session.savedCredentialAutoStarted = true;
 
       try {
-        const vaultStore = useVaultStore();
-        await vaultStore.ensureUnlocked();
-        const credentials = await readSavedCredentials(vaultStore, session);
+        const credentialStore = useCredentialStore();
+        const credentials = await readSavedCredentials(credentialStore, session);
 
         if (session.authMethod === "password" && !credentials.password) {
           throw new Error(i18n.global.t("terminal.savedCredentialMissing"));
@@ -296,17 +295,17 @@ function shouldAutoConnectWithSavedCredential(session) {
   );
 }
 
-async function readSavedCredentials(vaultStore, session) {
+async function readSavedCredentials(credentialStore, session) {
   if (session.authMethod === "password") {
     return {
-      password: await vaultStore.readCredential(session.credentialRef, "password"),
+      password: await credentialStore.readCredential(session.credentialRef, "password"),
       passphrase: null,
     };
   }
 
   return {
     password: null,
-    passphrase: await vaultStore.readCredential(session.credentialRef, "passphrase"),
+    passphrase: await credentialStore.readCredential(session.credentialRef, "passphrase"),
   };
 }
 
@@ -323,26 +322,40 @@ function normalizeSystemInfoSnapshot(snapshot) {
 function appendNetworkSample(session, snapshot) {
   ensureSystemInfoState(session);
   const capturedAt = Number(snapshot?.capturedAt) || Date.now();
-  const totalBytes = (snapshot?.networks || []).reduce(
-    (total, network) => total + Number(network.rxBytes || 0) + Number(network.txBytes || 0),
-    0,
-  );
+  const rxBytes = sumNetworkBytes(snapshot, "rxBytes");
+  const txBytes = sumNetworkBytes(snapshot, "txBytes");
+  const totalBytes = rxBytes + txBytes;
   const previousSample = session.networkHistory.at(-1);
   const secondsElapsed = previousSample
     ? Math.max((capturedAt - previousSample.capturedAt) / 1000, 0.001)
     : 0;
   const bytesDelta = previousSample ? Math.max(totalBytes - previousSample.totalBytes, 0) : 0;
+  const rxBytesDelta = previousSample ? Math.max(rxBytes - Number(previousSample.rxBytes || 0), 0) : 0;
+  const txBytesDelta = previousSample ? Math.max(txBytes - Number(previousSample.txBytes || 0), 0) : 0;
   const bytesPerSecond = secondsElapsed > 0 ? bytesDelta / secondsElapsed : 0;
+  const rxBytesPerSecond = secondsElapsed > 0 ? rxBytesDelta / secondsElapsed : 0;
+  const txBytesPerSecond = secondsElapsed > 0 ? txBytesDelta / secondsElapsed : 0;
 
   session.networkHistory = [
     ...session.networkHistory,
     {
       id: `${capturedAt}-${session.networkHistory.length}`,
       capturedAt,
+      rxBytes,
+      txBytes,
       totalBytes,
       bytesPerSecond,
+      rxBytesPerSecond,
+      txBytesPerSecond,
     },
   ].slice(-NETWORK_HISTORY_LIMIT);
+}
+
+function sumNetworkBytes(snapshot, field) {
+  return (snapshot?.networks || []).reduce(
+    (total, network) => total + Number(network[field] || 0),
+    0,
+  );
 }
 
 function ensureSystemInfoState(session) {

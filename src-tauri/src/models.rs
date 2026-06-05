@@ -12,7 +12,6 @@ pub struct AppStateFile {
 pub struct AppStatus {
     pub initialized: bool,
     pub workspace_dir: Option<String>,
-    pub vault_path: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -21,7 +20,6 @@ pub struct WorkspaceSettings {
     pub schema_version: u16,
     pub locale: String,
     pub terminal_font_family: String,
-    pub remember_vault_unlock: bool,
     #[serde(default = "default_monitor_refresh_seconds")]
     pub monitor_refresh_seconds: u64,
 }
@@ -125,6 +123,34 @@ pub struct TerminalResizeRequest {
     pub session_id: String,
     pub columns: u32,
     pub rows: u32,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialSecret {
+    pub password: Option<String>,
+    pub passphrase: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveCredentialRequest {
+    pub credential_ref: String,
+    pub secret: CredentialSecret,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadCredentialRequest {
+    pub credential_ref: String,
+    pub kind: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveCredentialRequest {
+    pub credential_ref: String,
+    pub kinds: Vec<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -288,7 +314,6 @@ pub struct TerminalEventPayload {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSnapshot {
     pub workspace_dir: String,
-    pub vault_path: String,
     pub settings: WorkspaceSettings,
     pub groups: Vec<ConnectionGroup>,
     pub profiles: Vec<ConnectionProfile>,

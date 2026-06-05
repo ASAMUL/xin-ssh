@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProfileStore } from "../../stores/profileStore";
 import { useAppStore } from "../../stores/appStore";
-import { useVaultStore } from "../../stores/vaultStore";
+import { useCredentialStore } from "../../stores/credentialStore";
 import { testConnection as testConnectionRequest } from "../../services/workspaceApi";
 
 const props = defineProps({
@@ -18,7 +18,7 @@ const emit = defineEmits(["close"]);
 const { t } = useI18n();
 const profileStore = useProfileStore();
 const appStore = useAppStore();
-const vaultStore = useVaultStore();
+const credentialStore = useCredentialStore();
 
 const error = ref("");
 const secretPassword = ref("");
@@ -184,8 +184,7 @@ async function resolveCredentialRef(currentProfile, profileId) {
   if (!shouldSaveCredential.value) {
     if (currentCredentialRef) {
       await runSaveStep("profile.saveProgress.removeCredential", async () => {
-        await vaultStore.ensureUnlocked();
-        await vaultStore.removeCredential(currentCredentialRef, ["password", "passphrase"]);
+        await credentialStore.removeCredential(currentCredentialRef, ["password", "passphrase"]);
       });
     }
 
@@ -200,9 +199,8 @@ async function resolveCredentialRef(currentProfile, profileId) {
     if (!secretPassword.value) return currentCredentialRef;
 
     const credentialRef = currentCredentialRef || profileId;
-    await runSaveStep("profile.saveProgress.unlockVault", () => vaultStore.ensureUnlocked());
     await runSaveStep("profile.saveProgress.saveCredential", () =>
-      vaultStore.saveCredential(credentialRef, { password: secretPassword.value }),
+      credentialStore.saveCredential(credentialRef, { password: secretPassword.value }),
     );
     return credentialRef;
   }
@@ -210,9 +208,8 @@ async function resolveCredentialRef(currentProfile, profileId) {
   if (!passphrase.value) return currentCredentialRef;
 
   const credentialRef = currentCredentialRef || profileId;
-  await runSaveStep("profile.saveProgress.unlockVault", () => vaultStore.ensureUnlocked());
   await runSaveStep("profile.saveProgress.saveCredential", () =>
-    vaultStore.saveCredential(credentialRef, { passphrase: passphrase.value }),
+    credentialStore.saveCredential(credentialRef, { passphrase: passphrase.value }),
   );
   return credentialRef;
 }

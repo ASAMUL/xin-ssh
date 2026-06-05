@@ -6,6 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305};
 use ring::rand::{SecureRandom, SystemRandom};
 use russh::{
     ChannelMsg,
@@ -27,21 +28,22 @@ use tokio::time::{timeout, Duration, Instant};
 
 use crate::models::{
     AppStateFile, AppStatus, AuthMethod, ConnectionGroup, ConnectionProfile, ConnectionTestRequest,
-    ConnectionTestResult, ProfilesFile, RemoteCpuInfo, RemoteDirectoryListRequest,
+    ConnectionTestResult, ProfilesFile, ReadCredentialRequest, RemoteCpuInfo, RemoteDirectoryListRequest,
     RemoteDirectoryListing, RemoteDiskInfo, RemoteDownloadRequest, RemoteFileEntry,
     RemoteMemoryInfo, RemoteNetworkInfo, RemoteProcessInfo, RemoteSystemInfoRequest,
-    RemoteSystemSnapshot, RemoteTransferEntry, RemoteUploadRequest, TerminalEventPayload,
-    TerminalInputRequest, TerminalResizeRequest, TerminalStartRequest, TransferEventPayload,
-    WorkspaceSettings, WorkspaceSnapshot,
+    RemoteSystemSnapshot, RemoteTransferEntry, RemoteUploadRequest, RemoveCredentialRequest,
+    SaveCredentialRequest, TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest,
+    TerminalStartRequest, TransferEventPayload, WorkspaceSettings, WorkspaceSnapshot,
 };
 
 const APP_STATE_FILE: &str = "app-state.json";
-const DEVICE_VAULT_KEY_FILE: &str = "device-vault-key.json";
+const DEVICE_CREDENTIAL_KEY_FILE: &str = "device-credential-key.json";
+const CREDENTIALS_FILE: &str = "credentials.json";
 const PROFILES_FILE: &str = "profiles.json";
 const SETTINGS_FILE: &str = "settings.json";
-const VAULT_FILE: &str = "vault.xinvault";
 const CURRENT_SCHEMA_VERSION: u16 = 1;
-const DEVICE_VAULT_KEY_BYTES: usize = 32;
+const DEVICE_CREDENTIAL_KEY_BYTES: usize = 32;
+const CREDENTIAL_NONCE_BYTES: usize = 12;
 const TERMINAL_EVENT: &str = "terminal-event";
 const TRANSFER_EVENT: &str = "transfer-event";
 const TRANSFER_BUFFER_SIZE: usize = 256 * 1024;
@@ -173,9 +175,25 @@ impl TerminalRegistry {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeviceVaultKeyFile {
+struct DeviceCredentialKeyFile {
     schema_version: u16,
     key: String,
+}
+
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CredentialsFile {
+    schema_version: u16,
+    credentials: Vec<EncryptedCredentialRecord>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EncryptedCredentialRecord {
+    credential_ref: String,
+    kind: String,
+    nonce: String,
+    ciphertext: String,
 }
 
 #[tauri::command]
@@ -189,7 +207,6 @@ pub fn get_app_status(app: AppHandle) -> Result<AppStatus, String> {
 
     Ok(AppStatus {
         initialized,
-        vault_path: workspace_dir.as_ref().map(|dir| vault_path(Path::new(dir))),
         workspace_dir,
     })
 }
@@ -345,42 +362,62 @@ pub fn save_settings(
 }
 
 #[tauri::command]
-pub fn get_device_vault_password(app: AppHandle) -> Result<String, String> {
-    let path = device_vault_key_path(&app)?;
-    if path.exists() {
-        let key_file: DeviceVaultKeyFile = read_json_file(&path)?;
-        if !key_file.key.trim().is_empty() {
-            return Ok(key_file.key);
-        }
-    }
+pub fn save_credential(app: AppHandle, request: SaveCredentialRequest) -> Result<(), String> {
+    validate_credential_ref(&request.credential_ref)?;
+    let workspace = active_workspace_dir(&app)?;
+    let key = device_credential_key(&app)?;
+    let mut credentials_file = read_credentials_file(&workspace)?;
 
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(error_message)?;
-    }
-
-    let key = generate_device_vault_key()?;
-    write_json_file(
-        &path,
-        &DeviceVaultKeyFile {
-            schema_version: CURRENT_SCHEMA_VERSION,
-            key: key.clone(),
-        },
+    save_secret_if_present(
+        &mut credentials_file,
+        &key,
+        &request.credential_ref,
+        "password",
+        request.secret.password.as_deref(),
+    )?;
+    save_secret_if_present(
+        &mut credentials_file,
+        &key,
+        &request.credential_ref,
+        "passphrase",
+        request.secret.passphrase.as_deref(),
     )?;
 
-    Ok(key)
+    write_credentials_file(&workspace, &credentials_file)
 }
 
 #[tauri::command]
-pub fn archive_credential_store(app: AppHandle) -> Result<Option<String>, String> {
+pub fn read_credential(app: AppHandle, request: ReadCredentialRequest) -> Result<Option<String>, String> {
+    validate_credential_ref(&request.credential_ref)?;
+    validate_credential_kind(&request.kind)?;
+
     let workspace = active_workspace_dir(&app)?;
-    let vault = workspace.join(VAULT_FILE);
-    if !vault.exists() {
+    let credentials_file = read_credentials_file(&workspace)?;
+    let Some(record) = credentials_file
+        .credentials
+        .iter()
+        .find(|record| record.credential_ref == request.credential_ref && record.kind == request.kind)
+    else {
         return Ok(None);
+    };
+
+    let key = device_credential_key(&app)?;
+    decrypt_credential_record(&key, record).map(Some)
+}
+
+#[tauri::command]
+pub fn remove_credential(app: AppHandle, request: RemoveCredentialRequest) -> Result<(), String> {
+    validate_credential_ref(&request.credential_ref)?;
+    for kind in &request.kinds {
+        validate_credential_kind(kind)?;
     }
 
-    let backup = workspace.join(format!("vault-{}.backup.xinvault", now_stamp()));
-    fs::rename(&vault, &backup).map_err(error_message)?;
-    Ok(Some(path_to_string(&backup)))
+    let workspace = active_workspace_dir(&app)?;
+    let mut credentials_file = read_credentials_file(&workspace)?;
+    credentials_file.credentials.retain(|record| {
+        record.credential_ref != request.credential_ref || !request.kinds.contains(&record.kind)
+    });
+    write_credentials_file(&workspace, &credentials_file)
 }
 
 #[tauri::command]
@@ -927,7 +964,10 @@ else
 fi
 
 section PS
-(ps -eo pid=,user=,pcpu=,pmem=,rss=,comm=,args= 2>/dev/null | sort -k3 -nr | head -n 8) || true
+{
+  ps -eo pid=,user=,pcpu=,pmem=,rss=,comm=,args= 2>/dev/null | sort -k3 -nr | head -n 6
+  ps -eo pid=,user=,pcpu=,pmem=,rss=,comm=,args= 2>/dev/null | sort -k4 -nr | head -n 6
+} | awk '!seen[$1]++' | head -n 10 || true
 "#;
 
     format!("sh -lc {}", shell_quote(script))
@@ -2237,7 +2277,6 @@ fn load_workspace_from_dir(workspace: &Path) -> Result<WorkspaceSnapshot, String
 
     Ok(WorkspaceSnapshot {
         workspace_dir: path_to_string(workspace),
-        vault_path: vault_path(workspace),
         settings,
         groups: profiles_file.groups,
         profiles: profiles_file.profiles,
@@ -2302,9 +2341,9 @@ fn app_state_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join(APP_STATE_FILE))
 }
 
-fn device_vault_key_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn device_credential_key_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(error_message)?;
-    Ok(dir.join(DEVICE_VAULT_KEY_FILE))
+    Ok(dir.join(DEVICE_CREDENTIAL_KEY_FILE))
 }
 
 fn default_workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -2326,6 +2365,22 @@ fn read_settings_file(workspace: &Path) -> Result<WorkspaceSettings, String> {
 
 fn write_settings_file(workspace: &Path, settings: &WorkspaceSettings) -> Result<(), String> {
     write_json_file(&workspace.join(SETTINGS_FILE), settings)
+}
+
+fn read_credentials_file(workspace: &Path) -> Result<CredentialsFile, String> {
+    let path = workspace.join(CREDENTIALS_FILE);
+    if !path.exists() {
+        return Ok(CredentialsFile {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            credentials: Vec::new(),
+        });
+    }
+
+    read_json_file(&path)
+}
+
+fn write_credentials_file(workspace: &Path, credentials_file: &CredentialsFile) -> Result<(), String> {
+    write_json_file(&workspace.join(CREDENTIALS_FILE), credentials_file)
 }
 
 fn read_json_file<T>(path: &Path) -> Result<T, String>
@@ -2374,17 +2429,12 @@ fn default_settings() -> WorkspaceSettings {
         schema_version: CURRENT_SCHEMA_VERSION,
         locale: "zh-CN".to_string(),
         terminal_font_family: "Cascadia Code".to_string(),
-        remember_vault_unlock: false,
         monitor_refresh_seconds: 5,
     }
 }
 
 fn default_group_id() -> String {
     "group-default".to_string()
-}
-
-fn vault_path(workspace: &Path) -> String {
-    path_to_string(&workspace.join(VAULT_FILE))
 }
 
 fn path_to_string(path: &Path) -> String {
@@ -2412,13 +2462,38 @@ fn connection_error(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
-fn generate_device_vault_key() -> Result<String, String> {
+fn device_credential_key(app: &AppHandle) -> Result<[u8; DEVICE_CREDENTIAL_KEY_BYTES], String> {
+    let path = device_credential_key_path(app)?;
+    if path.exists() {
+        let key_file: DeviceCredentialKeyFile = read_json_file(&path)?;
+        if !key_file.key.trim().is_empty() {
+            return decode_device_credential_key(&key_file.key);
+        }
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(error_message)?;
+    }
+
+    let key = generate_device_credential_key()?;
+    write_json_file(
+        &path,
+        &DeviceCredentialKeyFile {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            key: hex_encode(&key),
+        },
+    )?;
+
+    Ok(key)
+}
+
+fn generate_device_credential_key() -> Result<[u8; DEVICE_CREDENTIAL_KEY_BYTES], String> {
     let rng = SystemRandom::new();
-    let mut key = [0_u8; DEVICE_VAULT_KEY_BYTES];
+    let mut key = [0_u8; DEVICE_CREDENTIAL_KEY_BYTES];
     rng.fill(&mut key)
         .map_err(|_| "Failed to generate local credential key".to_string())?;
 
-    Ok(hex_encode(&key))
+    Ok(key)
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
@@ -2431,4 +2506,118 @@ fn hex_encode(bytes: &[u8]) -> String {
     }
 
     output
+}
+
+fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
+    let trimmed = value.trim();
+    if trimmed.len() % 2 != 0 {
+        return Err("Invalid hex value length".to_string());
+    }
+
+    (0..trimmed.len())
+        .step_by(2)
+        .map(|index| {
+            u8::from_str_radix(&trimmed[index..index + 2], 16)
+                .map_err(|_| "Invalid hex value".to_string())
+        })
+        .collect()
+}
+
+fn decode_device_credential_key(value: &str) -> Result<[u8; DEVICE_CREDENTIAL_KEY_BYTES], String> {
+    let bytes = hex_decode(value)?;
+    bytes
+        .try_into()
+        .map_err(|_| "Invalid local credential key length".to_string())
+}
+
+fn save_secret_if_present(
+    credentials_file: &mut CredentialsFile,
+    key: &[u8; DEVICE_CREDENTIAL_KEY_BYTES],
+    credential_ref: &str,
+    kind: &str,
+    secret: Option<&str>,
+) -> Result<(), String> {
+    let Some(secret) = secret.filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+
+    validate_credential_kind(kind)?;
+    let record = encrypt_credential_record(key, credential_ref, kind, secret)?;
+    credentials_file
+        .credentials
+        .retain(|existing| existing.credential_ref != credential_ref || existing.kind != kind);
+    credentials_file.credentials.push(record);
+    Ok(())
+}
+
+fn encrypt_credential_record(
+    key: &[u8; DEVICE_CREDENTIAL_KEY_BYTES],
+    credential_ref: &str,
+    kind: &str,
+    secret: &str,
+) -> Result<EncryptedCredentialRecord, String> {
+    let rng = SystemRandom::new();
+    let mut nonce_bytes = [0_u8; CREDENTIAL_NONCE_BYTES];
+    rng.fill(&mut nonce_bytes)
+        .map_err(|_| "Failed to generate credential nonce".to_string())?;
+
+    let cipher_key = credential_cipher_key(key)?;
+    let nonce = Nonce::assume_unique_for_key(nonce_bytes);
+    let mut buffer = secret.as_bytes().to_vec();
+    cipher_key
+        .seal_in_place_append_tag(nonce, credential_aad(credential_ref, kind), &mut buffer)
+        .map_err(|_| "Failed to encrypt credential".to_string())?;
+
+    Ok(EncryptedCredentialRecord {
+        credential_ref: credential_ref.to_string(),
+        kind: kind.to_string(),
+        nonce: hex_encode(&nonce_bytes),
+        ciphertext: hex_encode(&buffer),
+    })
+}
+
+fn decrypt_credential_record(
+    key: &[u8; DEVICE_CREDENTIAL_KEY_BYTES],
+    record: &EncryptedCredentialRecord,
+) -> Result<String, String> {
+    validate_credential_kind(&record.kind)?;
+    let nonce_bytes: [u8; CREDENTIAL_NONCE_BYTES] = hex_decode(&record.nonce)?
+        .try_into()
+        .map_err(|_| "Invalid credential nonce length".to_string())?;
+    let mut buffer = hex_decode(&record.ciphertext)?;
+    let cipher_key = credential_cipher_key(key)?;
+    let plaintext = cipher_key
+        .open_in_place(
+            Nonce::assume_unique_for_key(nonce_bytes),
+            credential_aad(&record.credential_ref, &record.kind),
+            &mut buffer,
+        )
+        .map_err(|_| "Failed to decrypt credential".to_string())?;
+
+    String::from_utf8(plaintext.to_vec()).map_err(error_message)
+}
+
+fn credential_cipher_key(key: &[u8; DEVICE_CREDENTIAL_KEY_BYTES]) -> Result<LessSafeKey, String> {
+    let unbound_key = UnboundKey::new(&CHACHA20_POLY1305, key)
+        .map_err(|_| "Failed to open credential cipher".to_string())?;
+    Ok(LessSafeKey::new(unbound_key))
+}
+
+fn credential_aad(credential_ref: &str, kind: &str) -> Aad<Vec<u8>> {
+    Aad::from(format!("xin-terminal-credential:{credential_ref}:{kind}").into_bytes())
+}
+
+fn validate_credential_ref(credential_ref: &str) -> Result<(), String> {
+    if credential_ref.trim().is_empty() {
+        return Err("Credential reference is required".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_credential_kind(kind: &str) -> Result<(), String> {
+    match kind {
+        "password" | "passphrase" => Ok(()),
+        _ => Err("Unsupported credential kind".to_string()),
+    }
 }
