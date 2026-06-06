@@ -13,16 +13,17 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["clear-finished"]);
+const emit = defineEmits(["clear-finished", "cancel"]);
 const { t } = useI18n();
 
 const hasFinishedTask = computed(() =>
-  props.tasks.some((task) => task.status === "completed" || task.status === "failed"),
+  props.tasks.some((task) => ["completed", "failed", "canceled"].includes(task.status)),
 );
 
 function taskIcon(task) {
   if (task.status === "failed") return "i-lucide-circle-alert";
   if (task.status === "completed") return "i-lucide-circle-check";
+  if (task.status === "canceled") return "i-lucide-circle-minus";
 
   return task.direction === "upload" ? "i-lucide-arrow-up" : "i-lucide-arrow-down";
 }
@@ -51,6 +52,8 @@ function formatBytes(value) {
 function taskMeta(task) {
   if (task.status === "failed") return task.error || t("transfers.failed");
   if (task.status === "completed") return t("transfers.completed");
+  if (task.status === "canceled") return t("transfers.canceled");
+  if (task.status === "canceling") return t("transfers.canceling");
   if (task.status === "queued") return t("transfers.queued");
 
   const speed = task.speedBytesPerSecond ? `${formatBytes(task.speedBytesPerSecond)}/s` : "--";
@@ -97,6 +100,20 @@ function taskMeta(task) {
         </div>
 
         <small>{{ taskProgress(task) }}%</small>
+        <button
+          v-if="['queued', 'running', 'canceling'].includes(task.status)"
+          type="button"
+          class="transfer-cancel"
+          :disabled="task.status === 'canceling'"
+          :aria-label="t('transfers.cancel')"
+          :title="t('transfers.cancel')"
+          @click="emit('cancel', task.id)"
+        >
+          <UIcon
+            :name="task.status === 'canceling' ? 'i-lucide-loader-circle' : 'i-lucide-x'"
+            :class="{ 'spin-icon': task.status === 'canceling' }"
+          />
+        </button>
         <span class="task-progress"><span :style="{ width: `${taskProgress(task)}%` }"></span></span>
       </article>
     </div>
@@ -176,7 +193,7 @@ function taskMeta(task) {
 .transfer-task {
   min-width: 0;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto 26px;
   align-items: center;
   gap: 8px;
   padding: 8px;
@@ -203,6 +220,10 @@ function taskMeta(task) {
 
 .transfer-task.completed .transfer-icon {
   color: #059669;
+}
+
+.transfer-task.canceled .transfer-icon {
+  color: #64748b;
 }
 
 .transfer-copy {
@@ -248,6 +269,31 @@ function taskMeta(task) {
 
 .transfer-task.failed .task-progress span {
   background: #dc2626;
+}
+
+.transfer-task.canceled .task-progress span {
+  background: #94a3b8;
+}
+
+.transfer-cancel {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.transfer-cancel:hover:not(:disabled) {
+  color: #0f172a;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.transfer-cancel:disabled {
+  cursor: progress;
+  opacity: 0.72;
 }
 
 .transfer-progress {

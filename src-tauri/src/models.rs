@@ -166,6 +166,29 @@ pub struct RemoteSystemInfoRequest {
     pub session_id: String,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCreateDirectoryRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteRenameRequest {
+    pub session_id: String,
+    pub from_path: String,
+    pub to_path: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDeleteRequest {
+    pub session_id: String,
+    pub entries: Vec<RemoteTransferEntry>,
+    pub recursive: bool,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSystemSnapshot {
@@ -266,6 +289,7 @@ pub struct RemoteUploadRequest {
     pub session_id: String,
     pub local_paths: Vec<String>,
     pub remote_dir: String,
+    pub conflict_policy: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -275,6 +299,7 @@ pub struct RemoteDownloadRequest {
     pub session_id: String,
     pub remote_entries: Vec<RemoteTransferEntry>,
     pub local_dir: String,
+    pub conflict_policy: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]

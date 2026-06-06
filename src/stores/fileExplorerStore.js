@@ -1,5 +1,10 @@
 import { defineStore } from "pinia";
-import { listRemoteDirectory } from "../services/workspaceApi";
+import {
+  createRemoteDirectory,
+  deleteRemoteEntries,
+  listRemoteDirectory,
+  renameRemotePath,
+} from "../services/workspaceApi";
 import { useSessionStore } from "./sessionStore";
 
 const DEFAULT_REMOTE_PATH = "/";
@@ -140,6 +145,40 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
 
       state.historyIndex += 1;
       return this.loadDirectory(session, state.history[state.historyIndex], { pushHistory: false });
+    },
+    async createDirectory(session, directoryPath) {
+      if (!session || session.status !== "connected") return;
+
+      await createRemoteDirectory({
+        sessionId: session.id,
+        path: directoryPath,
+      });
+      await this.refreshDirectory(session);
+    },
+    async renameEntry(session, fromPath, toPath) {
+      if (!session || session.status !== "connected") return;
+
+      await renameRemotePath({
+        sessionId: session.id,
+        fromPath,
+        toPath,
+      });
+      await this.refreshDirectory(session);
+    },
+    async deleteEntries(session, entries, recursive = false) {
+      if (!session || session.status !== "connected" || !entries?.length) return;
+
+      await deleteRemoteEntries({
+        sessionId: session.id,
+        entries: entries.map((entry) => ({
+          path: entry.path,
+          name: entry.name,
+          isDirectory: entry.isDirectory,
+          size: entry.size,
+        })),
+        recursive,
+      });
+      await this.refreshDirectory(session);
     },
   },
 });

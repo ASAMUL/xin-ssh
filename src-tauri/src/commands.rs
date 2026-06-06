@@ -2,7 +2,10 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -28,12 +31,14 @@ use tokio::time::{timeout, Duration, Instant};
 
 use crate::models::{
     AppStateFile, AppStatus, AuthMethod, ConnectionGroup, ConnectionProfile, ConnectionTestRequest,
-    ConnectionTestResult, ProfilesFile, ReadCredentialRequest, RemoteCpuInfo, RemoteDirectoryListRequest,
+    ConnectionTestResult, ProfilesFile, ReadCredentialRequest, RemoteCpuInfo,
+    RemoteCreateDirectoryRequest, RemoteDeleteRequest, RemoteDirectoryListRequest,
     RemoteDirectoryListing, RemoteDiskInfo, RemoteDownloadRequest, RemoteFileEntry,
-    RemoteMemoryInfo, RemoteNetworkInfo, RemoteProcessInfo, RemoteSystemInfoRequest,
-    RemoteSystemSnapshot, RemoteTransferEntry, RemoteUploadRequest, RemoveCredentialRequest,
-    SaveCredentialRequest, TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest,
-    TerminalStartRequest, TransferEventPayload, WorkspaceSettings, WorkspaceSnapshot,
+    RemoteMemoryInfo, RemoteNetworkInfo, RemoteProcessInfo, RemoteRenameRequest,
+    RemoteSystemInfoRequest, RemoteSystemSnapshot, RemoteTransferEntry, RemoteUploadRequest,
+    RemoveCredentialRequest, SaveCredentialRequest, TerminalEventPayload, TerminalInputRequest,
+    TerminalResizeRequest, TerminalStartRequest, TransferEventPayload, WorkspaceSettings,
+    WorkspaceSnapshot,
 };
 
 const APP_STATE_FILE: &str = "app-state.json";
@@ -48,10 +53,12 @@ const TERMINAL_EVENT: &str = "terminal-event";
 const TRANSFER_EVENT: &str = "transfer-event";
 const TRANSFER_BUFFER_SIZE: usize = 256 * 1024;
 const SYSTEM_INFO_SECTION_MARKER: &str = "__XIN_SYSTEM_INFO__";
+const TRANSFER_CANCELED_ERROR: &str = "Transfer canceled";
 
 #[derive(Clone, Default)]
 pub struct TerminalRegistry {
     sessions: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<TerminalControl>>>>,
+    transfer_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 }
 
 enum TerminalControl {
@@ -64,8 +71,28 @@ enum TerminalControl {
     GetSystemInfo {
         responder: oneshot::Sender<Result<RemoteSystemSnapshot, String>>,
     },
-    StartUpload(RemoteUploadRequest),
-    StartDownload(RemoteDownloadRequest),
+    CreateDirectory {
+        path: String,
+        responder: oneshot::Sender<Result<(), String>>,
+    },
+    RenamePath {
+        from_path: String,
+        to_path: String,
+        responder: oneshot::Sender<Result<(), String>>,
+    },
+    DeletePaths {
+        entries: Vec<RemoteTransferEntry>,
+        recursive: bool,
+        responder: oneshot::Sender<Result<(), String>>,
+    },
+    StartUpload {
+        request: RemoteUploadRequest,
+        cancellation: Arc<AtomicBool>,
+    },
+    StartDownload {
+        request: RemoteDownloadRequest,
+        cancellation: Arc<AtomicBool>,
+    },
     Close,
 }
 
@@ -150,26 +177,154 @@ impl TerminalRegistry {
             .map_err(|_| "System info request was canceled".to_string())?
     }
 
-    fn start_upload(&self, request: RemoteUploadRequest) -> Result<(), String> {
-        let sessions = self.sessions.lock().map_err(error_message)?;
-        let sender = sessions
-            .get(&request.session_id)
+    async fn create_directory(&self, session_id: &str, path: String) -> Result<(), String> {
+        let sender = self
+            .sessions
+            .lock()
+            .map_err(error_message)?
+            .get(session_id)
+            .cloned()
             .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let (responder, receiver) = oneshot::channel();
 
         sender
-            .send(TerminalControl::StartUpload(request))
-            .map_err(|_| "Terminal session is not accepting upload requests".to_string())
+            .send(TerminalControl::CreateDirectory { path, responder })
+            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+
+        receiver
+            .await
+            .map_err(|_| "Create directory request was canceled".to_string())?
+    }
+
+    async fn rename_path(
+        &self,
+        session_id: &str,
+        from_path: String,
+        to_path: String,
+    ) -> Result<(), String> {
+        let sender = self
+            .sessions
+            .lock()
+            .map_err(error_message)?
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::RenamePath {
+                from_path,
+                to_path,
+                responder,
+            })
+            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+
+        receiver
+            .await
+            .map_err(|_| "Rename request was canceled".to_string())?
+    }
+
+    async fn delete_paths(
+        &self,
+        session_id: &str,
+        entries: Vec<RemoteTransferEntry>,
+        recursive: bool,
+    ) -> Result<(), String> {
+        let sender = self
+            .sessions
+            .lock()
+            .map_err(error_message)?
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::DeletePaths {
+                entries,
+                recursive,
+                responder,
+            })
+            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+
+        receiver
+            .await
+            .map_err(|_| "Delete request was canceled".to_string())?
+    }
+
+    fn start_upload(&self, request: RemoteUploadRequest) -> Result<(), String> {
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let sender = self
+            .sessions
+            .lock()
+            .map_err(error_message)?
+            .get(&request.session_id)
+            .cloned()
+            .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let task_id = request.task_id.clone();
+
+        self.transfer_cancellations
+            .lock()
+            .map_err(error_message)?
+            .insert(task_id.clone(), Arc::clone(&cancellation));
+
+        let send_result = sender
+            .send(TerminalControl::StartUpload {
+                request,
+                cancellation,
+            })
+            .map_err(|_| "Terminal session is not accepting upload requests".to_string());
+
+        if send_result.is_err() {
+            self.transfer_cancellations
+                .lock()
+                .map_err(error_message)?
+                .remove(&task_id);
+        }
+
+        send_result
     }
 
     fn start_download(&self, request: RemoteDownloadRequest) -> Result<(), String> {
-        let sessions = self.sessions.lock().map_err(error_message)?;
-        let sender = sessions
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let sender = self
+            .sessions
+            .lock()
+            .map_err(error_message)?
             .get(&request.session_id)
+            .cloned()
             .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let task_id = request.task_id.clone();
 
-        sender
-            .send(TerminalControl::StartDownload(request))
-            .map_err(|_| "Terminal session is not accepting download requests".to_string())
+        self.transfer_cancellations
+            .lock()
+            .map_err(error_message)?
+            .insert(task_id.clone(), Arc::clone(&cancellation));
+
+        let send_result = sender
+            .send(TerminalControl::StartDownload {
+                request,
+                cancellation,
+            })
+            .map_err(|_| "Terminal session is not accepting download requests".to_string());
+
+        if send_result.is_err() {
+            self.transfer_cancellations
+                .lock()
+                .map_err(error_message)?
+                .remove(&task_id);
+        }
+
+        send_result
+    }
+
+    fn cancel_transfer(&self, task_id: &str) -> Result<(), String> {
+        let cancellations = self.transfer_cancellations.lock().map_err(error_message)?;
+        if let Some(cancellation) = cancellations.get(task_id) {
+            cancellation.store(true, Ordering::SeqCst);
+        }
+
+        Ok(())
     }
 }
 
@@ -442,6 +597,7 @@ pub async fn start_terminal_session(
     let session_id = request.session_id.clone();
     let (control_sender, control_receiver) = mpsc::unbounded_channel();
     registry.replace(session_id.clone(), control_sender)?;
+    let transfer_cancellations = Arc::clone(&registry.transfer_cancellations);
 
     emit_terminal_event(
         &app,
@@ -452,7 +608,9 @@ pub async fn start_terminal_session(
     );
 
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = run_terminal_shell(app.clone(), request, control_receiver).await {
+        if let Err(error) =
+            run_terminal_shell(app.clone(), request, control_receiver, transfer_cancellations).await
+        {
             emit_terminal_event(&app, &session_id, "error", None, Some(error));
         }
     });
@@ -527,6 +685,55 @@ pub async fn get_remote_system_info(
 }
 
 #[tauri::command]
+pub async fn create_remote_directory(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteCreateDirectoryRequest,
+) -> Result<(), String> {
+    validate_create_directory_request(&request)?;
+
+    timeout(
+        Duration::from_secs(12),
+        registry.create_directory(&request.session_id, normalize_remote_path(&request.path)),
+    )
+    .await
+    .map_err(|_| "Create directory request timed out after 12 seconds".to_string())?
+}
+
+#[tauri::command]
+pub async fn rename_remote_path(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteRenameRequest,
+) -> Result<(), String> {
+    validate_rename_request(&request)?;
+
+    timeout(
+        Duration::from_secs(12),
+        registry.rename_path(
+            &request.session_id,
+            normalize_remote_path(&request.from_path),
+            normalize_remote_path(&request.to_path),
+        ),
+    )
+    .await
+    .map_err(|_| "Rename request timed out after 12 seconds".to_string())?
+}
+
+#[tauri::command]
+pub async fn delete_remote_entries(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteDeleteRequest,
+) -> Result<(), String> {
+    validate_delete_request(&request)?;
+
+    timeout(
+        Duration::from_secs(30),
+        registry.delete_paths(&request.session_id, request.entries, request.recursive),
+    )
+    .await
+    .map_err(|_| "Delete request timed out after 30 seconds".to_string())?
+}
+
+#[tauri::command]
 pub fn start_upload_transfer(
     registry: State<'_, TerminalRegistry>,
     request: RemoteUploadRequest,
@@ -542,6 +749,18 @@ pub fn start_download_transfer(
 ) -> Result<(), String> {
     validate_download_request(&request)?;
     registry.start_download(request)
+}
+
+#[tauri::command]
+pub fn cancel_transfer(
+    registry: State<'_, TerminalRegistry>,
+    task_id: String,
+) -> Result<(), String> {
+    if task_id.trim().is_empty() {
+        return Err("Task id is required".to_string());
+    }
+
+    registry.cancel_transfer(&task_id)
 }
 
 async fn run_connection_test(
@@ -629,6 +848,7 @@ async fn run_terminal_shell(
     app: AppHandle,
     request: TerminalStartRequest,
     mut control_receiver: mpsc::UnboundedReceiver<TerminalControl>,
+    transfer_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 ) -> Result<(), String> {
     let session_id = request.session_id.clone();
     let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
@@ -728,18 +948,64 @@ async fn run_terminal_shell(
                             let _ = responder.send(result);
                         });
                     }
-                    TerminalControl::StartUpload(request) => {
+                    TerminalControl::CreateDirectory { path, responder } => {
+                        let result = create_directory_on_session(
+                            Arc::clone(&session),
+                            &path,
+                        )
+                        .await;
+                        let _ = responder.send(result);
+                    }
+                    TerminalControl::RenamePath {
+                        from_path,
+                        to_path,
+                        responder,
+                    } => {
+                        let result = rename_path_on_session(
+                            Arc::clone(&session),
+                            &from_path,
+                            &to_path,
+                        )
+                        .await;
+                        let _ = responder.send(result);
+                    }
+                    TerminalControl::DeletePaths {
+                        entries,
+                        recursive,
+                        responder,
+                    } => {
+                        let result = delete_paths_on_session(
+                            Arc::clone(&session),
+                            &entries,
+                            recursive,
+                        )
+                        .await;
+                        let _ = responder.send(result);
+                    }
+                    TerminalControl::StartUpload {
+                        request,
+                        cancellation,
+                    } => {
                         let app = app.clone();
                         let session = Arc::clone(&session);
+                        let task_id = request.task_id.clone();
+                        let transfer_cancellations = Arc::clone(&transfer_cancellations);
                         tauri::async_runtime::spawn(async move {
-                            run_upload_transfer(app, session, request).await;
+                            run_upload_transfer(app, session, request, cancellation).await;
+                            remove_transfer_cancellation(&transfer_cancellations, &task_id);
                         });
                     }
-                    TerminalControl::StartDownload(request) => {
+                    TerminalControl::StartDownload {
+                        request,
+                        cancellation,
+                    } => {
                         let app = app.clone();
                         let session = Arc::clone(&session);
+                        let task_id = request.task_id.clone();
+                        let transfer_cancellations = Arc::clone(&transfer_cancellations);
                         tauri::async_runtime::spawn(async move {
-                            run_download_transfer(app, session, request).await;
+                            run_download_transfer(app, session, request, cancellation).await;
+                            remove_transfer_cancellation(&transfer_cancellations, &task_id);
                         });
                     }
                     TerminalControl::Close => {
@@ -822,6 +1088,157 @@ async fn list_directory_on_session(
         path: listing_path,
         entries,
     })
+}
+
+async fn create_directory_on_session(
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+    path: &str,
+) -> Result<(), String> {
+    let sftp = open_sftp_session(session).await?;
+    let path = normalize_remote_path(path);
+
+    if path == "/" {
+        let _ = sftp.close().await;
+        return Err("Cannot create the root directory".to_string());
+    }
+
+    let result = async {
+        if sftp
+            .try_exists(path.clone())
+            .await
+            .map_err(connection_error)?
+        {
+            return Err(format!("Remote target already exists: {path}"));
+        }
+
+        sftp.create_dir(path).await.map_err(connection_error)
+    }
+    .await;
+
+    let _ = sftp.close().await;
+    result
+}
+
+async fn rename_path_on_session(
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+    from_path: &str,
+    to_path: &str,
+) -> Result<(), String> {
+    let sftp = open_sftp_session(session).await?;
+    let from_path = normalize_remote_path(from_path);
+    let to_path = normalize_remote_path(to_path);
+
+    let result = async {
+        if from_path == "/" {
+            return Err("Cannot rename the root directory".to_string());
+        }
+
+        if from_path == to_path {
+            return Ok(());
+        }
+
+        if sftp
+            .try_exists(to_path.clone())
+            .await
+            .map_err(connection_error)?
+        {
+            return Err(format!("Remote target already exists: {to_path}"));
+        }
+
+        sftp.rename(from_path, to_path)
+            .await
+            .map_err(connection_error)
+    }
+    .await;
+
+    let _ = sftp.close().await;
+    result
+}
+
+async fn delete_paths_on_session(
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+    entries: &[RemoteTransferEntry],
+    recursive: bool,
+) -> Result<(), String> {
+    let sftp = open_sftp_session(session).await?;
+    let mut errors = Vec::new();
+
+    for entry in entries {
+        let path = normalize_remote_path(&entry.path);
+        if let Err(error) = delete_remote_path(&sftp, &path, recursive).await {
+            errors.push(format!("{}: {error}", entry.name));
+        }
+    }
+
+    let _ = sftp.close().await;
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(summarize_transfer_errors(errors))
+    }
+}
+
+async fn delete_remote_path(
+    sftp: &SftpSession,
+    path: &str,
+    recursive: bool,
+) -> Result<(), String> {
+    if path == "/" {
+        return Err("Cannot delete the root directory".to_string());
+    }
+
+    let metadata = sftp
+        .symlink_metadata(path.to_string())
+        .await
+        .map_err(connection_error)?;
+
+    if metadata.file_type().is_dir() {
+        if recursive {
+            delete_remote_directory_recursive(sftp, path).await
+        } else {
+            sftp.remove_dir(path.to_string())
+                .await
+                .map_err(connection_error)
+        }
+    } else {
+        sftp.remove_file(path.to_string())
+            .await
+            .map_err(connection_error)
+    }
+}
+
+async fn delete_remote_directory_recursive(
+    sftp: &SftpSession,
+    root_path: &str,
+) -> Result<(), String> {
+    let mut pending_dirs = vec![normalize_remote_path(root_path)];
+    let mut dirs_to_remove = Vec::new();
+
+    while let Some(current_dir) = pending_dirs.pop() {
+        dirs_to_remove.push(current_dir.clone());
+        let read_dir = sftp
+            .read_dir(current_dir.clone())
+            .await
+            .map_err(connection_error)?;
+
+        for child in read_dir {
+            let child_path = normalize_remote_path(&child.path());
+            if child.metadata().file_type().is_dir() {
+                pending_dirs.push(child_path);
+            } else {
+                sftp.remove_file(child_path)
+                    .await
+                    .map_err(connection_error)?;
+            }
+        }
+    }
+
+    for dir in dirs_to_remove.into_iter().rev() {
+        sftp.remove_dir(dir).await.map_err(connection_error)?;
+    }
+
+    Ok(())
 }
 
 async fn open_sftp_session(
@@ -1386,16 +1803,30 @@ fn remote_file_kind(file_type: FileType) -> &'static str {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TransferConflictPolicy {
+    Fail,
+    Overwrite,
+    Skip,
+    Rename,
+}
+
 async fn run_upload_transfer(
     app: AppHandle,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteUploadRequest,
+    cancellation: Arc<AtomicBool>,
 ) {
-    if let Err(error) = upload_transfer(&app, session, request.clone()).await {
+    if let Err(error) = upload_transfer(&app, session, request.clone(), cancellation).await {
         emit_transfer_event(
             &app,
-            transfer_event(&request.task_id, &request.session_id, "upload", "failed")
-                .with_error(error),
+            transfer_event(
+                &request.task_id,
+                &request.session_id,
+                "upload",
+                transfer_error_kind(&error),
+            )
+            .with_error(error),
         );
     }
 }
@@ -1404,12 +1835,18 @@ async fn run_download_transfer(
     app: AppHandle,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteDownloadRequest,
+    cancellation: Arc<AtomicBool>,
 ) {
-    if let Err(error) = download_transfer(&app, session, request.clone()).await {
+    if let Err(error) = download_transfer(&app, session, request.clone(), cancellation).await {
         emit_transfer_event(
             &app,
-            transfer_event(&request.task_id, &request.session_id, "download", "failed")
-                .with_error(error),
+            transfer_event(
+                &request.task_id,
+                &request.session_id,
+                "download",
+                transfer_error_kind(&error),
+            )
+            .with_error(error),
         );
     }
 }
@@ -1418,9 +1855,10 @@ async fn upload_transfer(
     app: &AppHandle,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteUploadRequest,
+    cancellation: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let sftp = open_sftp_session(session).await?;
-    let result = upload_transfer_with_sftp(app, &sftp, &request).await;
+    let result = upload_transfer_with_sftp(app, &sftp, &request, &cancellation).await;
     let _ = sftp.close().await;
     result
 }
@@ -1429,9 +1867,16 @@ async fn upload_transfer_with_sftp(
     app: &AppHandle,
     sftp: &SftpSession,
     request: &RemoteUploadRequest,
+    cancellation: &Arc<AtomicBool>,
 ) -> Result<(), String> {
-    let plan = plan_local_upload(&request.local_paths, &request.remote_dir).await?;
-    ensure_remote_targets_available(sftp, &plan.root_targets).await?;
+    ensure_transfer_active(cancellation)?;
+    let mut plan = plan_local_upload(&request.local_paths, &request.remote_dir).await?;
+    apply_remote_conflict_policy(
+        sftp,
+        &mut plan,
+        parse_transfer_conflict_policy(&request.conflict_policy)?,
+    )
+    .await?;
 
     let mut progress = TransferProgress::new(
         &request.task_id,
@@ -1444,14 +1889,28 @@ async fn upload_transfer_with_sftp(
     progress.emit(app, "started", None, true);
 
     for directory in &plan.directories {
+        if is_transfer_canceled(cancellation) {
+            progress.cancel(app);
+            return Ok(());
+        }
+
         ensure_remote_directory(sftp, directory).await?;
     }
 
     let mut errors = Vec::new();
     for file in &plan.files {
+        if is_transfer_canceled(cancellation) {
+            progress.cancel(app);
+            return Ok(());
+        }
+
         progress.label = file.label.clone();
-        if let Err(error) = upload_file(sftp, file, app, &mut progress).await {
+        if let Err(error) = upload_file(sftp, file, app, &mut progress, cancellation).await {
             let _ = sftp.remove_file(file.remote_path.clone()).await;
+            if error == TRANSFER_CANCELED_ERROR {
+                progress.cancel(app);
+                return Ok(());
+            }
             errors.push(format!("{}: {error}", file.label));
         }
     }
@@ -1469,9 +1928,10 @@ async fn download_transfer(
     app: &AppHandle,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteDownloadRequest,
+    cancellation: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let sftp = open_sftp_session(session).await?;
-    let result = download_transfer_with_sftp(app, &sftp, &request).await;
+    let result = download_transfer_with_sftp(app, &sftp, &request, &cancellation).await;
     let _ = sftp.close().await;
     result
 }
@@ -1480,9 +1940,14 @@ async fn download_transfer_with_sftp(
     app: &AppHandle,
     sftp: &SftpSession,
     request: &RemoteDownloadRequest,
+    cancellation: &Arc<AtomicBool>,
 ) -> Result<(), String> {
-    let plan = plan_remote_download(sftp, &request.remote_entries, &request.local_dir).await?;
-    ensure_local_targets_available(&plan.root_targets)?;
+    ensure_transfer_active(cancellation)?;
+    let mut plan = plan_remote_download(sftp, &request.remote_entries, &request.local_dir).await?;
+    apply_local_conflict_policy(
+        &mut plan,
+        parse_transfer_conflict_policy(&request.conflict_policy)?,
+    )?;
 
     let mut progress = TransferProgress::new(
         &request.task_id,
@@ -1495,6 +1960,11 @@ async fn download_transfer_with_sftp(
     progress.emit(app, "started", None, true);
 
     for directory in &plan.directories {
+        if is_transfer_canceled(cancellation) {
+            progress.cancel(app);
+            return Ok(());
+        }
+
         async_fs::create_dir_all(directory)
             .await
             .map_err(error_message)?;
@@ -1502,9 +1972,18 @@ async fn download_transfer_with_sftp(
 
     let mut errors = Vec::new();
     for file in &plan.files {
+        if is_transfer_canceled(cancellation) {
+            progress.cancel(app);
+            return Ok(());
+        }
+
         progress.label = file.label.clone();
-        if let Err(error) = download_file(sftp, file, app, &mut progress).await {
+        if let Err(error) = download_file(sftp, file, app, &mut progress, cancellation).await {
             let _ = async_fs::remove_file(&file.local_path).await;
+            if error == TRANSFER_CANCELED_ERROR {
+                progress.cancel(app);
+                return Ok(());
+            }
             errors.push(format!("{}: {error}", file.label));
         }
     }
@@ -1523,6 +2002,7 @@ async fn upload_file(
     file: &UploadFilePlan,
     app: &AppHandle,
     progress: &mut TransferProgress,
+    cancellation: &Arc<AtomicBool>,
 ) -> Result<(), String> {
     let mut local_file = async_fs::File::open(&file.local_path)
         .await
@@ -1537,6 +2017,7 @@ async fn upload_file(
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
 
     loop {
+        ensure_transfer_active(cancellation)?;
         let read = local_file.read(&mut buffer).await.map_err(error_message)?;
         if read == 0 {
             break;
@@ -1562,6 +2043,7 @@ async fn download_file(
     file: &DownloadFilePlan,
     app: &AppHandle,
     progress: &mut TransferProgress,
+    cancellation: &Arc<AtomicBool>,
 ) -> Result<(), String> {
     if let Some(parent) = file.local_path.parent() {
         async_fs::create_dir_all(parent).await.map_err(error_message)?;
@@ -1577,6 +2059,7 @@ async fn download_file(
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
 
     loop {
+        ensure_transfer_active(cancellation)?;
         let read = remote_file.read(&mut buffer).await.map_err(error_message)?;
         if read == 0 {
             break;
@@ -1608,6 +2091,7 @@ struct UploadFilePlan {
     local_path: PathBuf,
     remote_path: String,
     label: String,
+    size: u64,
 }
 
 struct DownloadPlan {
@@ -1621,6 +2105,271 @@ struct DownloadFilePlan {
     remote_path: String,
     local_path: PathBuf,
     label: String,
+    size: u64,
+}
+
+async fn apply_remote_conflict_policy(
+    sftp: &SftpSession,
+    plan: &mut UploadPlan,
+    policy: TransferConflictPolicy,
+) -> Result<(), String> {
+    let conflicts = existing_remote_targets(sftp, &plan.root_targets).await?;
+    if conflicts.is_empty() {
+        return Ok(());
+    }
+
+    match policy {
+        TransferConflictPolicy::Fail => {
+            let first = conflicts
+                .iter()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+            Err(format!("Remote target already exists: {first}"))
+        }
+        TransferConflictPolicy::Overwrite => Ok(()),
+        TransferConflictPolicy::Skip => {
+            filter_upload_plan_roots(plan, &conflicts);
+            Ok(())
+        }
+        TransferConflictPolicy::Rename => rename_upload_plan_roots(sftp, plan, &conflicts).await,
+    }
+}
+
+fn apply_local_conflict_policy(
+    plan: &mut DownloadPlan,
+    policy: TransferConflictPolicy,
+) -> Result<(), String> {
+    let conflicts = existing_local_targets(&plan.root_targets);
+    if conflicts.is_empty() {
+        return Ok(());
+    }
+
+    match policy {
+        TransferConflictPolicy::Fail => {
+            let first = conflicts
+                .iter()
+                .next()
+                .map(|path| path_to_string(path))
+                .unwrap_or_else(|| "unknown".to_string());
+            Err(format!("Local target already exists: {first}"))
+        }
+        TransferConflictPolicy::Overwrite => Ok(()),
+        TransferConflictPolicy::Skip => {
+            filter_download_plan_roots(plan, &conflicts);
+            Ok(())
+        }
+        TransferConflictPolicy::Rename => rename_download_plan_roots(plan, &conflicts),
+    }
+}
+
+async fn existing_remote_targets(
+    sftp: &SftpSession,
+    root_targets: &[String],
+) -> Result<HashSet<String>, String> {
+    let mut conflicts = HashSet::new();
+
+    for target in root_targets {
+        if sftp
+            .try_exists(target.clone())
+            .await
+            .map_err(connection_error)?
+        {
+            conflicts.insert(target.clone());
+        }
+    }
+
+    Ok(conflicts)
+}
+
+fn existing_local_targets(root_targets: &[PathBuf]) -> HashSet<PathBuf> {
+    root_targets
+        .iter()
+        .filter(|target| target.exists())
+        .cloned()
+        .collect()
+}
+
+fn filter_upload_plan_roots(plan: &mut UploadPlan, skipped_roots: &HashSet<String>) {
+    plan.root_targets
+        .retain(|target| !skipped_roots.contains(target));
+    plan.directories
+        .retain(|path| !skipped_roots.iter().any(|root| remote_path_contains(root, path)));
+    plan.files
+        .retain(|file| !skipped_roots.iter().any(|root| remote_path_contains(root, &file.remote_path)));
+    plan.bytes_total = plan.files.iter().map(|file| file.size).sum();
+}
+
+fn filter_download_plan_roots(plan: &mut DownloadPlan, skipped_roots: &HashSet<PathBuf>) {
+    plan.root_targets
+        .retain(|target| !skipped_roots.contains(target));
+    plan.directories
+        .retain(|path| !skipped_roots.iter().any(|root| local_path_contains(root, path)));
+    plan.files
+        .retain(|file| !skipped_roots.iter().any(|root| local_path_contains(root, &file.local_path)));
+    plan.bytes_total = plan.files.iter().map(|file| file.size).sum();
+}
+
+async fn rename_upload_plan_roots(
+    sftp: &SftpSession,
+    plan: &mut UploadPlan,
+    conflicting_roots: &HashSet<String>,
+) -> Result<(), String> {
+    let mut replacements = Vec::new();
+
+    for root in &plan.root_targets {
+        if conflicting_roots.contains(root) {
+            replacements.push((root.clone(), unique_remote_target(sftp, root).await?));
+        }
+    }
+
+    apply_remote_replacements(&mut plan.root_targets[..], &replacements);
+    apply_remote_replacements(&mut plan.directories[..], &replacements);
+    for file in &mut plan.files {
+        file.remote_path = replace_remote_root(&file.remote_path, &replacements);
+    }
+
+    Ok(())
+}
+
+fn rename_download_plan_roots(
+    plan: &mut DownloadPlan,
+    conflicting_roots: &HashSet<PathBuf>,
+) -> Result<(), String> {
+    let mut replacements = Vec::new();
+
+    for root in &plan.root_targets {
+        if conflicting_roots.contains(root) {
+            replacements.push((root.clone(), unique_local_target(root)?));
+        }
+    }
+
+    apply_local_replacements(&mut plan.root_targets[..], &replacements);
+    apply_local_replacements(&mut plan.directories[..], &replacements);
+    for file in &mut plan.files {
+        file.local_path = replace_local_root(&file.local_path, &replacements);
+    }
+
+    Ok(())
+}
+
+async fn unique_remote_target(sftp: &SftpSession, root: &str) -> Result<String, String> {
+    for index in 1..1000 {
+        let candidate = remote_conflict_variant(root, index);
+        if !sftp
+            .try_exists(candidate.clone())
+            .await
+            .map_err(connection_error)?
+        {
+            return Ok(candidate);
+        }
+    }
+
+    Err(format!("Could not create a unique remote name for {root}"))
+}
+
+fn unique_local_target(root: &Path) -> Result<PathBuf, String> {
+    for index in 1..1000 {
+        let candidate = local_conflict_variant(root, index);
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(format!(
+        "Could not create a unique local name for {}",
+        path_to_string(root)
+    ))
+}
+
+fn apply_remote_replacements(paths: &mut [String], replacements: &[(String, String)]) {
+    for path in paths {
+        *path = replace_remote_root(path, replacements);
+    }
+}
+
+fn apply_local_replacements(paths: &mut [PathBuf], replacements: &[(PathBuf, PathBuf)]) {
+    for path in paths {
+        *path = replace_local_root(path, replacements);
+    }
+}
+
+fn replace_remote_root(path: &str, replacements: &[(String, String)]) -> String {
+    replacements
+        .iter()
+        .filter(|(from, _)| remote_path_contains(from, path))
+        .max_by_key(|(from, _)| from.len())
+        .map(|(from, to)| {
+            if path == from {
+                to.clone()
+            } else {
+                format!("{to}/{}", &path[from.len() + 1..])
+            }
+        })
+        .unwrap_or_else(|| path.to_string())
+}
+
+fn replace_local_root(path: &Path, replacements: &[(PathBuf, PathBuf)]) -> PathBuf {
+    replacements
+        .iter()
+        .filter(|(from, _)| local_path_contains(from, path))
+        .max_by_key(|(from, _)| from.to_string_lossy().len())
+        .map(|(from, to)| {
+            if path == from {
+                to.clone()
+            } else {
+                path.strip_prefix(from)
+                    .map(|suffix| to.join(suffix))
+                    .unwrap_or_else(|_| path.to_path_buf())
+            }
+        })
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
+fn remote_path_contains(root: &str, path: &str) -> bool {
+    path == root || path.starts_with(&format!("{root}/"))
+}
+
+fn local_path_contains(root: &Path, path: &Path) -> bool {
+    path == root || path.starts_with(root)
+}
+
+fn remote_conflict_variant(root: &str, index: usize) -> String {
+    let parent = remote_parent_path(root);
+    let name = remote_basename(root);
+    let variant = conflict_name_variant(&name, index);
+
+    join_remote_path(&parent, &variant)
+}
+
+fn local_conflict_variant(root: &Path, index: usize) -> PathBuf {
+    let name = root
+        .file_name()
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_else(|| "remote-item".to_string());
+    let variant = conflict_name_variant(&name, index);
+
+    root.parent()
+        .map(|parent| parent.join(&variant))
+        .unwrap_or_else(|| PathBuf::from(variant))
+}
+
+fn conflict_name_variant(name: &str, index: usize) -> String {
+    let suffix = if index == 1 {
+        " copy".to_string()
+    } else {
+        format!(" copy {index}")
+    };
+
+    let Some(dot_index) = name.rfind('.') else {
+        return format!("{name}{suffix}");
+    };
+
+    if dot_index == 0 {
+        format!("{name}{suffix}")
+    } else {
+        format!("{}{}{}", &name[..dot_index], suffix, &name[dot_index..])
+    }
 }
 
 async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<UploadPlan, String> {
@@ -1660,21 +2409,25 @@ async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<U
                         stack.push((child_path, child_remote_path));
                     } else if child_file_type.is_file() {
                         let child_metadata = child.metadata().await.map_err(error_message)?;
-                        bytes_total += child_metadata.len();
+                        let size = child_metadata.len();
+                        bytes_total += size;
                         files.push(UploadFilePlan {
                             label: child_name,
                             local_path: child_path,
                             remote_path: child_remote_path,
+                            size,
                         });
                     }
                 }
             }
         } else if metadata.is_file() {
-            bytes_total += metadata.len();
+            let size = metadata.len();
+            bytes_total += size;
             files.push(UploadFilePlan {
                 label: name,
                 local_path: root,
                 remote_path,
+                size,
             });
         }
     }
@@ -1749,6 +2502,7 @@ async fn plan_remote_download(
                             label: child.file_name(),
                             remote_path: child_remote_path,
                             local_path: child_local_path,
+                            size,
                         });
                     }
                 }
@@ -1760,6 +2514,7 @@ async fn plan_remote_download(
                 label: entry.name.clone(),
                 remote_path,
                 local_path,
+                size,
             });
         }
     }
@@ -1770,36 +2525,6 @@ async fn plan_remote_download(
         files,
         bytes_total,
     })
-}
-
-async fn ensure_remote_targets_available(
-    sftp: &SftpSession,
-    root_targets: &[String],
-) -> Result<(), String> {
-    for target in root_targets {
-        if sftp
-            .try_exists(target.clone())
-            .await
-            .map_err(connection_error)?
-        {
-            return Err(format!("Remote target already exists: {target}"));
-        }
-    }
-
-    Ok(())
-}
-
-fn ensure_local_targets_available(root_targets: &[PathBuf]) -> Result<(), String> {
-    for target in root_targets {
-        if target.exists() {
-            return Err(format!(
-                "Local target already exists: {}",
-                path_to_string(target)
-            ));
-        }
-    }
-
-    Ok(())
 }
 
 fn ensure_unique_local_download_path(
@@ -1915,6 +2640,25 @@ impl TransferProgress {
                 files_done: self.files_done,
                 files_total: self.files_total,
                 error: Some(error),
+            },
+        );
+    }
+
+    fn cancel(&mut self, app: &AppHandle) {
+        emit_transfer_event(
+            app,
+            TransferEventPayload {
+                task_id: self.task_id.clone(),
+                session_id: self.session_id.clone(),
+                direction: self.direction.clone(),
+                kind: "canceled".to_string(),
+                label: Some(self.label.clone()),
+                current_path: None,
+                bytes_transferred: self.bytes_transferred,
+                bytes_total: self.bytes_total,
+                files_done: self.files_done,
+                files_total: self.files_total,
+                error: Some(TRANSFER_CANCELED_ERROR.to_string()),
             },
         );
     }
@@ -2042,6 +2786,60 @@ fn validate_system_info_request(request: &RemoteSystemInfoRequest) -> Result<(),
     Ok(())
 }
 
+fn validate_create_directory_request(
+    request: &RemoteCreateDirectoryRequest,
+) -> Result<(), String> {
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.path.trim().is_empty() {
+        return Err("Remote folder path is required".to_string());
+    }
+
+    if normalize_remote_path(&request.path) == "/" {
+        return Err("Cannot create the root directory".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_rename_request(request: &RemoteRenameRequest) -> Result<(), String> {
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.from_path.trim().is_empty() || request.to_path.trim().is_empty() {
+        return Err("Remote path is required".to_string());
+    }
+
+    if normalize_remote_path(&request.from_path) == "/" {
+        return Err("Cannot rename the root directory".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_delete_request(request: &RemoteDeleteRequest) -> Result<(), String> {
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.entries.is_empty() {
+        return Err("Choose at least one remote item".to_string());
+    }
+
+    if request
+        .entries
+        .iter()
+        .any(|entry| normalize_remote_path(&entry.path) == "/")
+    {
+        return Err("Cannot delete the root directory".to_string());
+    }
+
+    Ok(())
+}
+
 fn validate_upload_request(request: &RemoteUploadRequest) -> Result<(), String> {
     if request.task_id.trim().is_empty() {
         return Err("Task id is required".to_string());
@@ -2058,6 +2856,8 @@ fn validate_upload_request(request: &RemoteUploadRequest) -> Result<(), String> 
     if request.local_paths.iter().any(|path| path.trim().is_empty()) {
         return Err("Local path is required".to_string());
     }
+
+    parse_transfer_conflict_policy(&request.conflict_policy)?;
 
     Ok(())
 }
@@ -2079,7 +2879,27 @@ fn validate_download_request(request: &RemoteDownloadRequest) -> Result<(), Stri
         return Err("Choose a local destination folder".to_string());
     }
 
+    parse_transfer_conflict_policy(&request.conflict_policy)?;
+
     Ok(())
+}
+
+fn parse_transfer_conflict_policy(
+    policy: &Option<String>,
+) -> Result<TransferConflictPolicy, String> {
+    match policy
+        .as_deref()
+        .unwrap_or("fail")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "" | "fail" | "ask" => Ok(TransferConflictPolicy::Fail),
+        "overwrite" => Ok(TransferConflictPolicy::Overwrite),
+        "skip" => Ok(TransferConflictPolicy::Skip),
+        "rename" => Ok(TransferConflictPolicy::Rename),
+        value => Err(format!("Unsupported conflict policy: {value}")),
+    }
 }
 
 fn normalize_remote_path(path: &str) -> String {
@@ -2127,6 +2947,18 @@ fn remote_basename(path: &str) -> String {
         .next_back()
         .unwrap_or("remote-item")
         .to_string()
+}
+
+fn remote_parent_path(path: &str) -> String {
+    let path = normalize_remote_path(path);
+    let mut parts = path.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>();
+    parts.pop();
+
+    if parts.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", parts.join("/"))
+    }
 }
 
 fn local_file_name(path: &Path) -> Result<String, String> {
@@ -2193,6 +3025,35 @@ fn summarize_transfer_errors(errors: Vec<String>) -> String {
         format!("{total} files failed. First errors: {preview}")
     } else {
         preview
+    }
+}
+
+fn is_transfer_canceled(cancellation: &Arc<AtomicBool>) -> bool {
+    cancellation.load(Ordering::SeqCst)
+}
+
+fn ensure_transfer_active(cancellation: &Arc<AtomicBool>) -> Result<(), String> {
+    if is_transfer_canceled(cancellation) {
+        Err(TRANSFER_CANCELED_ERROR.to_string())
+    } else {
+        Ok(())
+    }
+}
+
+fn transfer_error_kind(error: &str) -> &'static str {
+    if error == TRANSFER_CANCELED_ERROR {
+        "canceled"
+    } else {
+        "failed"
+    }
+}
+
+fn remove_transfer_cancellation(
+    cancellations: &Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    task_id: &str,
+) {
+    if let Ok(mut cancellations) = cancellations.lock() {
+        cancellations.remove(task_id);
     }
 }
 

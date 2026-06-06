@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "vue-i18n";
@@ -18,15 +18,52 @@ const { t, locale } = useI18n();
 const fileExplorerStore = useFileExplorerStore();
 const transferStore = useTransferStore();
 const uiStore = useUiStore();
+const fileExplorerRoot = ref(null);
 const pathInput = ref("/");
+const pathInputControl = ref(null);
+const searchInputControl = ref(null);
 const isDragOver = ref(false);
 const lastSelectedPath = ref("");
-const contextMenu = ref({
-  visible: false,
-  x: 0,
-  y: 0,
+const contextMenuEntry = ref(null);
+const nameDialog = reactive({
+  open: false,
+  mode: "create",
   entry: null,
+  value: "",
+  error: "",
+  isSubmitting: false,
 });
+const deleteDialog = reactive({
+  open: false,
+  entries: [],
+  recursive: false,
+  error: "",
+  isSubmitting: false,
+});
+const conflictDialog = reactive({
+  open: false,
+  taskId: null,
+  error: "",
+  isSubmitting: false,
+});
+const fileSearchInputUi = {
+  root: "file-search",
+  base: "h-8 rounded-lg bg-default ps-8 pe-3 text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] placeholder:text-dimmed",
+  leading: "ps-2.5",
+  leadingIcon: "size-4 text-muted",
+};
+const fileContextMenuUi = {
+  content: "min-w-40 rounded-lg border border-default bg-default shadow-xl backdrop-blur-xl",
+  viewport: "divide-y divide-default",
+  group: "p-1",
+  separator: "my-1 bg-border",
+  item: "min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold leading-none",
+  itemLeadingIcon: "size-4 w-4 shrink-0 text-muted",
+  itemWrapper: "min-w-0 flex-1 justify-center",
+  itemLabel: "truncate leading-4",
+  itemTrailing: "ms-auto h-4 items-center",
+  itemTrailingIcon: "size-4",
+};
 
 let unlistenDragDrop = null;
 
@@ -53,12 +90,111 @@ const selectedEntries = computed(() => {
   return fileState.value.entries.filter((entry) => selectedPaths.has(entry.path));
 });
 const canDownload = computed(() => canTransfer.value && selectedEntries.value.length > 0);
+const canRename = computed(() => canTransfer.value && selectedEntries.value.length === 1);
+const canDelete = computed(() => canTransfer.value && selectedEntries.value.length > 0);
 const contextEntries = computed(() => {
-  const entry = contextMenu.value.entry;
+  const entry = contextMenuEntry.value;
   if (!entry) return selectedEntries.value;
 
   return isSelected(entry) && selectedEntries.value.length ? selectedEntries.value : [entry];
 });
+const contextMenuItems = computed(() => {
+  const entry = contextMenuEntry.value;
+  const entries = contextEntries.value;
+
+  return [
+    [
+      ...(entry?.isDirectory
+        ? [
+            {
+              label: t("files.open"),
+              icon: "i-lucide-folder-open",
+              onSelect: openContextEntry,
+            },
+          ]
+        : []),
+      {
+        label: t("files.download"),
+        icon: "i-lucide-download",
+        disabled: !canTransfer.value || !entries.length,
+        onSelect: downloadContextEntries,
+      },
+      ...(entry
+        ? [
+            {
+              label: t("files.copyPath"),
+              icon: "i-lucide-copy",
+              onSelect: copyContextPath,
+            },
+            {
+              label: t("files.rename"),
+              icon: "i-lucide-pencil",
+              disabled: !canTransfer.value,
+              onSelect: renameContextEntry,
+            },
+          ]
+        : []),
+    ],
+    [
+      {
+        label: t("files.delete"),
+        icon: "i-lucide-trash-2",
+        color: "error",
+        disabled: !canTransfer.value || !entries.length,
+        onSelect: deleteContextEntries,
+      },
+    ],
+    [
+      {
+        label: t("files.uploadFiles"),
+        icon: "i-lucide-upload",
+        disabled: !canTransfer.value,
+        onSelect: chooseUploadFiles,
+      },
+      {
+        label: t("files.uploadFolder"),
+        icon: "i-lucide-folder-up",
+        disabled: !canTransfer.value,
+        onSelect: chooseUploadFolder,
+      },
+      {
+        label: t("files.newFolder"),
+        icon: "i-lucide-folder-plus",
+        disabled: !canTransfer.value,
+        onSelect: openCreateFolderDialog,
+      },
+      {
+        label: t("files.refresh"),
+        icon: "i-lucide-refresh-cw",
+        disabled: !isConnected.value,
+        onSelect: refreshDirectory,
+      },
+    ],
+  ];
+});
+const nameDialogTitle = computed(() =>
+  t(nameDialog.mode === "create" ? "files.createFolderTitle" : "files.renameTitle"),
+);
+const nameDialogDescription = computed(() =>
+  t(nameDialog.mode === "create" ? "files.createFolderDescription" : "files.renameDescription"),
+);
+const nameDialogSubmitLabel = computed(() =>
+  t(nameDialog.mode === "create" ? "files.createFolder" : "files.rename"),
+);
+const deleteDialogTitle = computed(() =>
+  t("files.deleteTitle", { count: deleteDialog.entries.length }),
+);
+const deletePreviewNames = computed(() =>
+  deleteDialog.entries.slice(0, 5).map((entry) => entry.name).join(", "),
+);
+const deleteHasDirectory = computed(() =>
+  deleteDialog.entries.some((entry) => entry.isDirectory),
+);
+const conflictTask = computed(() => transferStore.findTask(conflictDialog.taskId));
+const conflictDialogTitle = computed(() =>
+  t(conflictTask.value?.direction === "download" ? "files.downloadConflictTitle" : "files.uploadConflictTitle"),
+);
+const conflictDialogDescription = computed(() => conflictTask.value?.error || "");
 const emptyState = computed(() => {
   if (!isConnected.value) {
     return {
@@ -143,14 +279,41 @@ watch(
   },
 );
 
+watch(
+  () =>
+    transferStore.tasks
+      .filter(
+        (task) =>
+          task.sessionId === props.activeSession?.id &&
+          task.status === "failed" &&
+          !task.conflictPrompted &&
+          isTransferConflictError(task.error),
+      )
+      .map((task) => `${task.id}:${task.updatedAt}`)
+      .join("|"),
+  () => {
+    if (conflictDialog.open) return;
+
+    const task = transferStore.tasks.find(
+      (task) =>
+        task.sessionId === props.activeSession?.id &&
+        task.status === "failed" &&
+        !task.conflictPrompted &&
+        isTransferConflictError(task.error),
+    );
+
+    if (task) {
+      openTransferConflictDialog(task);
+    }
+  },
+);
+
 onMounted(() => {
-  window.addEventListener("click", closeContextMenu);
   window.addEventListener("keydown", handleWindowKeydown);
   registerDragDrop();
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("click", closeContextMenu);
   window.removeEventListener("keydown", handleWindowKeydown);
   unlistenDragDrop?.();
 });
@@ -166,6 +329,18 @@ function refreshDirectory() {
   if (!props.activeSession || !isConnected.value) return;
 
   fileExplorerStore.refreshDirectory(props.activeSession);
+}
+
+function focusPathInput() {
+  pathInputControl.value?.focus();
+  pathInputControl.value?.select();
+}
+
+function focusSearchInput() {
+  const input = searchInputControl.value?.inputRef;
+
+  input?.focus();
+  input?.select();
 }
 
 function goBack() {
@@ -286,42 +461,197 @@ async function startUploadPaths(paths) {
   await transferStore.uploadPaths(props.activeSession, localPaths, currentPath.value);
 }
 
-function openContextMenu(event, entry = null) {
-  if (!isConnected.value) return;
+function openCreateFolderDialog() {
+  closeContextMenu();
+  if (!canTransfer.value) return;
+
+  nameDialog.open = true;
+  nameDialog.mode = "create";
+  nameDialog.entry = null;
+  nameDialog.value = "";
+  nameDialog.error = "";
+}
+
+function openRenameDialog(entry = selectedEntries.value[0]) {
+  closeContextMenu();
+  if (!canTransfer.value || !entry) return;
+
+  nameDialog.open = true;
+  nameDialog.mode = "rename";
+  nameDialog.entry = entry;
+  nameDialog.value = entry.name;
+  nameDialog.error = "";
+}
+
+function closeNameDialog() {
+  if (nameDialog.isSubmitting) return;
+
+  nameDialog.open = false;
+  nameDialog.entry = null;
+  nameDialog.value = "";
+  nameDialog.error = "";
+}
+
+async function submitNameDialog() {
+  if (!props.activeSession || nameDialog.isSubmitting) return;
+
+  const name = nameDialog.value.trim();
+  if (!name) {
+    nameDialog.error = t("files.nameRequired");
+    return;
+  }
+
+  if (name.includes("/") || name.includes("\\")) {
+    nameDialog.error = t("files.nameCannotContainSlash");
+    return;
+  }
+
+  nameDialog.isSubmitting = true;
+  nameDialog.error = "";
+
+  try {
+    if (nameDialog.mode === "create") {
+      await fileExplorerStore.createDirectory(
+        props.activeSession,
+        joinRemotePath(currentPath.value, name),
+      );
+    } else if (nameDialog.entry) {
+      await fileExplorerStore.renameEntry(
+        props.activeSession,
+        nameDialog.entry.path,
+        joinRemotePath(parentRemotePath(nameDialog.entry.path), name),
+      );
+    }
+
+    nameDialog.open = false;
+    nameDialog.entry = null;
+    nameDialog.value = "";
+    nameDialog.error = "";
+  } catch (error) {
+    nameDialog.error = String(error);
+  } finally {
+    nameDialog.isSubmitting = false;
+  }
+}
+
+function openDeleteDialog(entries = selectedEntries.value) {
+  const deletableEntries = entries.filter(Boolean);
+  closeContextMenu();
+  if (!canTransfer.value || !deletableEntries.length) return;
+
+  deleteDialog.open = true;
+  deleteDialog.entries = deletableEntries;
+  deleteDialog.recursive = false;
+  deleteDialog.error = "";
+}
+
+function closeDeleteDialog() {
+  if (deleteDialog.isSubmitting) return;
+
+  deleteDialog.open = false;
+  deleteDialog.entries = [];
+  deleteDialog.recursive = false;
+  deleteDialog.error = "";
+}
+
+async function submitDeleteDialog() {
+  if (!props.activeSession || deleteDialog.isSubmitting || !deleteDialog.entries.length) return;
+
+  deleteDialog.isSubmitting = true;
+  deleteDialog.error = "";
+
+  try {
+    await fileExplorerStore.deleteEntries(
+      props.activeSession,
+      deleteDialog.entries,
+      deleteDialog.recursive,
+    );
+    deleteDialog.open = false;
+    deleteDialog.entries = [];
+    deleteDialog.recursive = false;
+    deleteDialog.error = "";
+  } catch (error) {
+    deleteDialog.error = String(error);
+  } finally {
+    deleteDialog.isSubmitting = false;
+  }
+}
+
+function openTransferConflictDialog(task) {
+  transferStore.markConflictPrompted(task.id);
+  conflictDialog.open = true;
+  conflictDialog.taskId = task.id;
+  conflictDialog.error = "";
+}
+
+function closeConflictDialog() {
+  if (conflictDialog.isSubmitting) return;
+
+  conflictDialog.open = false;
+  conflictDialog.taskId = null;
+  conflictDialog.error = "";
+}
+
+async function resolveTransferConflict(policy) {
+  const task = conflictTask.value;
+  if (!task || conflictDialog.isSubmitting) return;
+
+  if (policy === "cancel") {
+    transferStore.markTaskCanceled(task.id);
+    closeConflictDialog();
+    return;
+  }
+
+  conflictDialog.isSubmitting = true;
+  conflictDialog.error = "";
+
+  try {
+    await transferStore.retryTaskWithConflictPolicy(task.id, policy);
+    conflictDialog.open = false;
+    conflictDialog.taskId = null;
+    conflictDialog.error = "";
+  } catch (error) {
+    conflictDialog.error = String(error);
+  } finally {
+    conflictDialog.isSubmitting = false;
+  }
+}
+
+function closeContextMenu() {
+  contextMenuEntry.value = null;
+}
+
+function prepareContextMenu(event) {
+  if (!isConnected.value) {
+    closeContextMenu();
+    return;
+  }
+
+  const entry = contextEntryFromEvent(event);
+  contextMenuEntry.value = entry;
 
   if (entry && !isSelected(entry)) {
     selectEntry(entry);
   }
-
-  const { x, y } = clampMenuPosition(event, entry);
-  contextMenu.value = {
-    visible: true,
-    x,
-    y,
-    entry,
-  };
-}
-
-function closeContextMenu() {
-  if (!contextMenu.value.visible) return;
-
-  contextMenu.value = {
-    visible: false,
-    x: 0,
-    y: 0,
-    entry: null,
-  };
 }
 
 function openContextEntry() {
-  const entry = contextMenu.value.entry;
+  const entry = contextMenuEntry.value;
   if (!entry) return;
 
   openEntry(entry);
 }
 
+function renameContextEntry() {
+  openRenameDialog(contextMenuEntry.value);
+}
+
+function deleteContextEntries() {
+  openDeleteDialog(contextEntries.value);
+}
+
 async function copyContextPath() {
-  const path = contextMenu.value.entry?.path;
+  const path = contextMenuEntry.value?.path;
   closeContextMenu();
   if (!path) return;
 
@@ -334,8 +664,61 @@ async function copyContextPath() {
 
 function handleWindowKeydown(event) {
   if (event.key === "Escape") {
-    closeContextMenu();
+    if (nameDialog.open) closeNameDialog();
+    else if (deleteDialog.open) closeDeleteDialog();
+    else if (conflictDialog.open) closeConflictDialog();
+    else fileExplorerStore.clearSelection(props.activeSession?.id);
+
     isDragOver.value = false;
+    return;
+  }
+
+  if (!shouldHandleFileShortcut(event)) return;
+
+  const key = event.key.toLowerCase();
+  const isCommand = event.ctrlKey || event.metaKey;
+
+  if (isCommand && key === "l") {
+    event.preventDefault();
+    focusPathInput();
+    return;
+  }
+
+  if (isCommand && key === "f") {
+    event.preventDefault();
+    focusSearchInput();
+    return;
+  }
+
+  if (isCommand && key === "r") {
+    event.preventDefault();
+    refreshDirectory();
+    return;
+  }
+
+  if (isCommand && key === "u") {
+    event.preventDefault();
+    chooseUploadFiles();
+    return;
+  }
+
+  if (isCommand && key === ",") {
+    event.preventDefault();
+    uiStore.openSettings();
+    return;
+  }
+
+  if (isEditableElement(event.target)) return;
+
+  if (event.key === "F2" && canRename.value) {
+    event.preventDefault();
+    openRenameDialog();
+    return;
+  }
+
+  if (event.key === "Delete" && canDelete.value) {
+    event.preventDefault();
+    openDeleteDialog();
   }
 }
 
@@ -385,16 +768,61 @@ function normalizeDialogSelection(selection) {
   return values.map((value) => String(value || "").trim()).filter(Boolean);
 }
 
-function clampMenuPosition(event, entry) {
-  const menuWidth = 218;
-  const menuHeight = entry ? 260 : 188;
-  const maxX = Math.max(8, window.innerWidth - menuWidth - 8);
-  const maxY = Math.max(8, window.innerHeight - menuHeight - 8);
+function shouldHandleFileShortcut() {
+  const activeElement = document.activeElement;
+  if (!activeElement || activeElement === document.body) return true;
 
-  return {
-    x: Math.min(Math.max(event.clientX, 8), maxX),
-    y: Math.min(Math.max(event.clientY, 8), maxY),
-  };
+  return Boolean(fileExplorerRoot.value?.contains(activeElement));
+}
+
+function isEditableElement(target) {
+  const element = target instanceof HTMLElement ? target : null;
+  if (!element) return false;
+
+  return Boolean(element.closest("input, textarea, select, [contenteditable='true']"));
+}
+
+function isTransferConflictError(error) {
+  const message = String(error || "");
+  return (
+    message.includes("Remote target already exists") ||
+    message.includes("Local target already exists") ||
+    message.includes("Duplicate download target")
+  );
+}
+
+function joinRemotePath(base, child) {
+  const cleanBase = normalizeRemotePath(base);
+  const cleanChild = String(child || "").replace(/[\\/]/g, "_");
+
+  return cleanBase === "/" ? `/${cleanChild}` : `${cleanBase}/${cleanChild}`;
+}
+
+function normalizeRemotePath(path = "/") {
+  const parts = String(path || "/")
+    .trim()
+    .replaceAll("\\", "/")
+    .split("/")
+    .filter((part) => part && part !== ".");
+
+  return parts.length ? `/${parts.join("/")}` : "/";
+}
+
+function parentRemotePath(path) {
+  const parts = normalizeRemotePath(path).split("/").filter(Boolean);
+  parts.pop();
+
+  return parts.length ? `/${parts.join("/")}` : "/";
+}
+
+function contextEntryFromEvent(event) {
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  const row = target?.closest("[data-file-path]");
+  const filePath = row?.dataset.filePath;
+
+  if (!filePath) return null;
+
+  return visibleEntries.value.find((entry) => entry.path === filePath) ?? null;
 }
 
 function formatSize(entry) {
@@ -432,7 +860,7 @@ function fileTypeLabel(entry) {
 </script>
 
 <template>
-  <section class="file-explorer" aria-label="Remote file explorer">
+  <section ref="fileExplorerRoot" class="file-explorer" aria-label="Remote file explorer">
     <header class="file-panel-tabs">
       <div class="file-tab-group">
         <button type="button" class="file-panel-tab active">
@@ -446,10 +874,17 @@ function fileTypeLabel(entry) {
       </div>
 
       <div class="file-panel-actions">
-        <label class="file-search">
-          <UIcon name="i-lucide-search" />
-          <input v-model="query" type="search" :placeholder="t('files.search')" />
-        </label>
+        <UInput
+          ref="searchInputControl"
+          v-model="query"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          type="search"
+          icon="i-lucide-search"
+          :placeholder="t('files.search')"
+          :ui="fileSearchInputUi"
+        />
         <span class="file-count">{{ t("files.itemCount", { count: visibleEntries.length }) }}</span>
         <button type="button" :aria-label="t('files.history')" :title="t('files.history')" :disabled="!hasEntries">
           <UIcon name="i-lucide-history" />
@@ -474,6 +909,24 @@ function fileTypeLabel(entry) {
         </button>
         <button
           type="button"
+          :aria-label="t('files.rename')"
+          :title="t('files.rename')"
+          :disabled="!canRename"
+          @click="openRenameDialog()"
+        >
+          <UIcon name="i-lucide-pencil" />
+        </button>
+        <button
+          type="button"
+          :aria-label="t('files.delete')"
+          :title="t('files.delete')"
+          :disabled="!canDelete"
+          @click="openDeleteDialog()"
+        >
+          <UIcon name="i-lucide-trash-2" />
+        </button>
+        <button
+          type="button"
           :aria-label="t('files.uploadFiles')"
           :title="t('files.uploadFiles')"
           :disabled="!canTransfer"
@@ -490,7 +943,13 @@ function fileTypeLabel(entry) {
         >
           <UIcon name="i-lucide-folder-up" />
         </button>
-        <button type="button" :aria-label="t('files.newFolder')" :title="t('files.newFolder')" disabled>
+        <button
+          type="button"
+          :aria-label="t('files.newFolder')"
+          :title="t('files.newFolder')"
+          :disabled="!canTransfer"
+          @click="openCreateFolderDialog"
+        >
           <UIcon name="i-lucide-folder-plus" />
         </button>
       </div>
@@ -521,109 +980,193 @@ function fileTypeLabel(entry) {
 
       <form class="path-bar" aria-label="Current remote path" @submit.prevent="submitPath">
         <UIcon name="i-lucide-map" />
-        <input v-model="pathInput" type="text" :disabled="!isConnected" spellcheck="false" />
+        <input ref="pathInputControl" v-model="pathInput" type="text" :disabled="!isConnected" spellcheck="false" />
       </form>
     </div>
 
-    <div class="file-workbench" :class="{ 'drag-over': isDragOver }" @contextmenu.prevent="openContextMenu($event)">
-      <section class="file-table-wrap">
-        <div class="file-row file-heading">
-          <span class="name-column">{{ t("files.name") }}</span>
-          <span>{{ t("files.size") }}</span>
-          <span>{{ t("files.type") }}</span>
-          <span>{{ t("files.modified") }}</span>
-          <span>{{ t("files.permissions") }}</span>
-        </div>
+    <UContextMenu :items="contextMenuItems" size="xs" :ui="fileContextMenuUi">
+      <div class="file-workbench" :class="{ 'drag-over': isDragOver }" @contextmenu="prepareContextMenu">
+        <section class="file-table-wrap">
+          <div class="file-row file-heading">
+            <span class="name-column">{{ t("files.name") }}</span>
+            <span>{{ t("files.size") }}</span>
+            <span>{{ t("files.type") }}</span>
+            <span>{{ t("files.modified") }}</span>
+            <span>{{ t("files.permissions") }}</span>
+          </div>
 
-        <div v-if="!visibleEntries.length" class="file-empty-state" :class="{ error: emptyState.isError }">
-          <UIcon :name="emptyState.icon" :class="{ 'spin-icon': emptyState.spinning }" />
-          <strong>{{ emptyState.title }}</strong>
-          <span>{{ emptyState.description }}</span>
-          <button v-if="emptyState.isError" type="button" class="retry-button" @click="refreshDirectory">
-            <UIcon name="i-lucide-refresh-cw" />
-            <span>{{ t("files.retry") }}</span>
-          </button>
-        </div>
+          <div v-if="!visibleEntries.length" class="file-empty-state" :class="{ error: emptyState.isError }">
+            <UIcon :name="emptyState.icon" :class="{ 'spin-icon': emptyState.spinning }" />
+            <strong>{{ emptyState.title }}</strong>
+            <span>{{ emptyState.description }}</span>
+            <button v-if="emptyState.isError" type="button" class="retry-button" @click="refreshDirectory">
+              <UIcon name="i-lucide-refresh-cw" />
+              <span>{{ t("files.retry") }}</span>
+            </button>
+          </div>
 
-        <button
-          v-for="fileEntry in visibleEntries"
-          :key="fileEntry.id"
-          type="button"
-          class="file-row file-entry"
-          :class="{ selected: isSelected(fileEntry), directory: fileEntry.isDirectory }"
-          @click="selectEntry(fileEntry, $event)"
-          @dblclick="openEntry(fileEntry)"
-          @contextmenu.stop.prevent="openContextMenu($event, fileEntry)"
-          @keydown.enter.prevent="openEntry(fileEntry)"
-        >
-          <span class="name-column">
-            <span class="file-icon" :class="{ directory: fileEntry.isDirectory, symlink: fileEntry.isSymlink }">
-              <UIcon :name="fileEntry.icon" />
+          <button
+            v-for="fileEntry in visibleEntries"
+            :key="fileEntry.id"
+            type="button"
+            class="file-row file-entry"
+            :class="{ selected: isSelected(fileEntry), directory: fileEntry.isDirectory }"
+            :data-file-path="fileEntry.path"
+            @click="selectEntry(fileEntry, $event)"
+            @dblclick="openEntry(fileEntry)"
+            @keydown.enter.prevent="openEntry(fileEntry)"
+          >
+            <span class="name-column">
+              <span class="file-icon" :class="{ directory: fileEntry.isDirectory, symlink: fileEntry.isSymlink }">
+                <UIcon :name="fileEntry.icon" />
+              </span>
+              <span class="file-name">{{ fileEntry.name }}</span>
             </span>
-            <span class="file-name">{{ fileEntry.name }}</span>
-          </span>
-          <span>{{ formatSize(fileEntry) }}</span>
-          <span>{{ fileTypeLabel(fileEntry) }}</span>
-          <span>{{ formatModified(fileEntry) }}</span>
-          <span>{{ fileEntry.permissions || "--" }}</span>
-        </button>
-      </section>
+            <span>{{ formatSize(fileEntry) }}</span>
+            <span>{{ fileTypeLabel(fileEntry) }}</span>
+            <span>{{ formatModified(fileEntry) }}</span>
+            <span>{{ fileEntry.permissions || "--" }}</span>
+          </button>
+        </section>
 
-      <div v-if="isDragOver" class="file-drop-overlay">
-        <UIcon name="i-lucide-cloud-upload" />
-        <strong>{{ t("files.dropUploadTitle") }}</strong>
-        <span>{{ t("files.dropUploadDescription", { path: currentPath }) }}</span>
+        <div v-if="isDragOver" class="file-drop-overlay">
+          <UIcon name="i-lucide-cloud-upload" />
+          <strong>{{ t("files.dropUploadTitle") }}</strong>
+          <span>{{ t("files.dropUploadDescription", { path: currentPath }) }}</span>
+        </div>
       </div>
-    </div>
+    </UContextMenu>
 
-    <div
-      v-if="contextMenu.visible"
-      class="file-context-menu"
-      :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
-      @click.stop
-      @contextmenu.prevent
+    <UModal
+      v-model:open="nameDialog.open"
+      :title="nameDialogTitle"
+      :description="nameDialogDescription"
+      :ui="{ footer: 'justify-end' }"
     >
-      <button
-        v-if="contextMenu.entry?.isDirectory"
-        type="button"
-        class="context-item"
-        @click="openContextEntry"
-      >
-        <UIcon name="i-lucide-folder-open" />
-        <span>{{ t("files.open") }}</span>
-      </button>
-      <button
-        type="button"
-        class="context-item"
-        :disabled="!contextEntries.length"
-        @click="downloadContextEntries"
-      >
-        <UIcon name="i-lucide-download" />
-        <span>{{ t("files.download") }}</span>
-      </button>
-      <button
-        v-if="contextMenu.entry"
-        type="button"
-        class="context-item"
-        @click="copyContextPath"
-      >
-        <UIcon name="i-lucide-copy" />
-        <span>{{ t("files.copyPath") }}</span>
-      </button>
-      <span class="context-divider"></span>
-      <button type="button" class="context-item" :disabled="!canTransfer" @click="chooseUploadFiles">
-        <UIcon name="i-lucide-upload" />
-        <span>{{ t("files.uploadFiles") }}</span>
-      </button>
-      <button type="button" class="context-item" :disabled="!canTransfer" @click="chooseUploadFolder">
-        <UIcon name="i-lucide-folder-up" />
-        <span>{{ t("files.uploadFolder") }}</span>
-      </button>
-      <button type="button" class="context-item" :disabled="!isConnected" @click="refreshDirectory">
-        <UIcon name="i-lucide-refresh-cw" />
-        <span>{{ t("files.refresh") }}</span>
-      </button>
-    </div>
+      <template #body>
+        <form class="file-dialog-form" @submit.prevent="submitNameDialog">
+          <UInput
+            v-model="nameDialog.value"
+            color="neutral"
+            variant="outline"
+            :placeholder="t('files.namePlaceholder')"
+            autofocus
+          />
+          <UAlert
+            v-if="nameDialog.error"
+            color="error"
+            variant="soft"
+            icon="i-lucide-circle-alert"
+            :title="nameDialog.error"
+          />
+        </form>
+      </template>
+      <template #footer>
+        <UButton color="neutral" variant="outline" :label="t('common.cancel')" @click="closeNameDialog" />
+        <UButton
+          color="primary"
+          icon="i-lucide-check"
+          :loading="nameDialog.isSubmitting"
+          :label="nameDialogSubmitLabel"
+          @click="submitNameDialog"
+        />
+      </template>
+    </UModal>
+
+    <UModal
+      v-model:open="deleteDialog.open"
+      :title="deleteDialogTitle"
+      :description="t('files.deleteDescription')"
+      :ui="{ footer: 'justify-end' }"
+    >
+      <template #body>
+        <div class="file-dialog-form">
+          <div class="delete-preview">
+            <UIcon name="i-lucide-trash-2" />
+            <span>{{ deletePreviewNames }}</span>
+          </div>
+          <UCheckbox
+            v-if="deleteHasDirectory"
+            v-model="deleteDialog.recursive"
+            :label="t('files.recursiveDelete')"
+            :description="t('files.recursiveDeleteDescription')"
+          />
+          <UAlert
+            v-if="deleteDialog.error"
+            color="error"
+            variant="soft"
+            icon="i-lucide-circle-alert"
+            :title="deleteDialog.error"
+          />
+        </div>
+      </template>
+      <template #footer>
+        <UButton color="neutral" variant="outline" :label="t('common.cancel')" @click="closeDeleteDialog" />
+        <UButton
+          color="error"
+          icon="i-lucide-trash-2"
+          :loading="deleteDialog.isSubmitting"
+          :label="t('files.delete')"
+          @click="submitDeleteDialog"
+        />
+      </template>
+    </UModal>
+
+    <UModal
+      v-model:open="conflictDialog.open"
+      :title="conflictDialogTitle"
+      :description="conflictDialogDescription"
+      :ui="{ footer: 'justify-end' }"
+    >
+      <template #body>
+        <div class="file-dialog-form">
+          <UAlert
+            color="warning"
+            variant="soft"
+            icon="i-lucide-copy-x"
+            :title="t('files.conflictSummary')"
+            :description="t('files.conflictDescription')"
+          />
+          <UAlert
+            v-if="conflictDialog.error"
+            color="error"
+            variant="soft"
+            icon="i-lucide-circle-alert"
+            :title="conflictDialog.error"
+          />
+        </div>
+      </template>
+      <template #footer>
+        <UButton
+          color="neutral"
+          variant="outline"
+          :disabled="conflictDialog.isSubmitting"
+          :label="t('files.cancelTask')"
+          @click="resolveTransferConflict('cancel')"
+        />
+        <UButton
+          color="neutral"
+          variant="soft"
+          :disabled="conflictDialog.isSubmitting"
+          :label="t('files.skipConflicts')"
+          @click="resolveTransferConflict('skip')"
+        />
+        <UButton
+          color="neutral"
+          variant="soft"
+          :disabled="conflictDialog.isSubmitting"
+          :label="t('files.renameConflicts')"
+          @click="resolveTransferConflict('rename')"
+        />
+        <UButton
+          color="primary"
+          icon="i-lucide-copy-check"
+          :loading="conflictDialog.isSubmitting"
+          :label="t('files.overwriteConflicts')"
+          @click="resolveTransferConflict('overwrite')"
+        />
+      </template>
+    </UModal>
   </section>
 </template>
 

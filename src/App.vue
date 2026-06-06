@@ -41,6 +41,7 @@ onMounted(() => {
           :summary="transferStore.summary"
           :tasks="transferStore.visibleTasks"
           @clear-finished="transferStore.clearFinished"
+          @cancel="transferStore.cancelTask"
         />
 
         <div v-if="visibleError" class="error-banner">

@@ -68,6 +68,18 @@ export function closeTerminalSession(sessionId) {
   return invoke("close_terminal_session", { sessionId });
 }
 
+export function createRemoteDirectory(request) {
+  return invoke("create_remote_directory", { request });
+}
+
+export function renameRemotePath(request) {
+  return invoke("rename_remote_path", { request });
+}
+
+export function deleteRemoteEntries(request) {
+  return invoke("delete_remote_entries", { request });
+}
+
 export function listRemoteDirectory(request) {
   return invoke("list_remote_directory", { request });
 }
@@ -82,4 +94,8 @@ export function startUploadTransfer(request) {
 
 export function startDownloadTransfer(request) {
   return invoke("start_download_transfer", { request });
+}
+
+export function cancelTransfer(taskId) {
+  return invoke("cancel_transfer", { taskId });
 }

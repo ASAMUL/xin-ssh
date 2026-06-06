@@ -1,10 +1,15 @@
 import { defineStore } from "pinia";
 import { listen } from "@tauri-apps/api/event";
 import { i18n } from "../i18n";
-import { startDownloadTransfer, startUploadTransfer } from "../services/workspaceApi";
+import {
+  cancelTransfer,
+  startDownloadTransfer,
+  startUploadTransfer,
+} from "../services/workspaceApi";
 
 const TRANSFER_EVENT_NAME = "transfer-event";
-const FINISHED_STATUSES = new Set(["completed", "failed"]);
+const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
+const ACTIVE_STATUSES = new Set(["queued", "running", "canceling"]);
 
 export const useTransferStore = defineStore("transfers", {
   state: () => ({
@@ -44,8 +49,8 @@ export const useTransferStore = defineStore("transfers", {
       this.unlistenTransfer?.();
       this.unlistenTransfer = null;
     },
-    async uploadPaths(session, localPaths, remoteDir) {
-      const taskId = crypto.randomUUID();
+    async uploadPaths(session, localPaths, remoteDir, options = {}) {
+      const taskId = options.taskId || crypto.randomUUID();
       const label = transferLabel(localPaths, "transfers.uploadFallback", "transfers.localItems");
       this.upsertTask({
         id: taskId,
@@ -59,6 +64,10 @@ export const useTransferStore = defineStore("transfers", {
         filesDone: 0,
         filesTotal: 0,
         speedBytesPerSecond: 0,
+        localPaths,
+        remoteDir,
+        conflictPolicy: options.conflictPolicy ?? null,
+        conflictPrompted: Boolean(options.conflictPolicy),
       });
 
       try {
@@ -67,15 +76,17 @@ export const useTransferStore = defineStore("transfers", {
           sessionId: session.id,
           localPaths,
           remoteDir,
+          conflictPolicy: options.conflictPolicy ?? null,
         });
       } catch (error) {
         this.failTask(taskId, String(error));
+        throw error;
       }
 
       return taskId;
     },
-    async downloadEntries(session, entries, localDir) {
-      const taskId = crypto.randomUUID();
+    async downloadEntries(session, entries, localDir, options = {}) {
+      const taskId = options.taskId || crypto.randomUUID();
       const label = transferLabel(
         entries.map((entry) => entry.name),
         "transfers.downloadFallback",
@@ -93,6 +104,10 @@ export const useTransferStore = defineStore("transfers", {
         filesDone: 0,
         filesTotal: 0,
         speedBytesPerSecond: 0,
+        remoteEntries: entries,
+        localDir,
+        conflictPolicy: options.conflictPolicy ?? null,
+        conflictPrompted: Boolean(options.conflictPolicy),
       });
 
       try {
@@ -106,12 +121,77 @@ export const useTransferStore = defineStore("transfers", {
             isDirectory: entry.isDirectory,
             size: entry.size,
           })),
+          conflictPolicy: options.conflictPolicy ?? null,
         });
       } catch (error) {
         this.failTask(taskId, String(error));
+        throw error;
       }
 
       return taskId;
+    },
+    retryTaskWithConflictPolicy(taskId, conflictPolicy) {
+      const task = this.findTask(taskId);
+      if (!task || !conflictPolicy || conflictPolicy === "cancel") return null;
+
+      if (task.direction === "upload") {
+        return this.uploadPaths(
+          { id: task.sessionId },
+          task.localPaths || [],
+          task.remoteDir,
+          {
+            taskId: task.id,
+            conflictPolicy,
+          },
+        );
+      }
+
+      return this.downloadEntries(
+        { id: task.sessionId },
+        task.remoteEntries || [],
+        task.localDir,
+        {
+          taskId: task.id,
+          conflictPolicy,
+        },
+      );
+    },
+    async cancelTask(taskId) {
+      const task = this.findTask(taskId);
+      if (!task || FINISHED_STATUSES.has(task.status)) return;
+
+      this.upsertTask({
+        ...task,
+        status: "canceling",
+        error: null,
+        updatedAt: Date.now(),
+      });
+
+      try {
+        await cancelTransfer(taskId);
+      } catch (error) {
+        this.failTask(taskId, String(error));
+      }
+    },
+    markTaskCanceled(taskId) {
+      const task = this.findTask(taskId);
+      if (!task) return;
+
+      this.upsertTask({
+        ...task,
+        status: "canceled",
+        error: null,
+        updatedAt: Date.now(),
+      });
+    },
+    markConflictPrompted(taskId) {
+      const task = this.findTask(taskId);
+      if (!task) return;
+
+      this.upsertTask({
+        ...task,
+        conflictPrompted: true,
+      });
     },
     handleTransferEvent(event) {
       const now = Date.now();
@@ -178,6 +258,9 @@ export const useTransferStore = defineStore("transfers", {
     clearFinished() {
       this.tasks = this.tasks.filter((task) => !FINISHED_STATUSES.has(task.status));
     },
+    canCancelTask(task) {
+      return ACTIVE_STATUSES.has(task?.status);
+    },
     findTask(taskId) {
       return this.tasks.find((task) => task.id === taskId) ?? null;
     },
@@ -187,6 +270,7 @@ export const useTransferStore = defineStore("transfers", {
 function eventStatus(kind) {
   if (kind === "completed") return "completed";
   if (kind === "failed") return "failed";
+  if (kind === "canceled") return "canceled";
 
   return "running";
 }
