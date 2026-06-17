@@ -99,35 +99,39 @@ onMounted(async () => {
     fontSize: 14,
     lineHeight: 1.18,
     scrollback: 8000,
+
     theme: {
-      background: "#0b1b2e",
-      foreground: "#eef6ff",
-      cursor: "#30e38c",
-      selectionBackground: "#2e5d7a",
-      black: "#0b1723",
-      blue: "#4aa3ff",
-      cyan: "#33d1c5",
-      green: "#35d486",
-      magenta: "#c084fc",
-      red: "#f87171",
-      white: "#e5eef8",
-      yellow: "#facc15",
-      brightBlack: "#64748b",
-      brightBlue: "#7cc6ff",
-      brightCyan: "#67e8f9",
-      brightGreen: "#86efac",
-      brightMagenta: "#d8b4fe",
-      brightRed: "#fca5a5",
-      brightWhite: "#ffffff",
-      brightYellow: "#fde68a",
+      background: '#1e1e2e', // 深邃紫灰背景
+      foreground: '#cdd6f4', // 亮白文字
+      cursor: '#f38ba8',     // 骚粉色光标
+      cursorAccent: '#1e1e2e',
+      selectionBackground: '#585b70',
+      black: '#45475a',
+      red: '#f38ba8',
+      green: '#a6e3a1',
+      yellow: '#f9e2af',
+      blue: '#89b4fa',
+      magenta: '#f5c2e7',
+      cyan: '#94e2d5',
+      white: '#bac2de',
+      brightBlack: '#585b70',
+      brightRed: '#f38ba8',
+      brightGreen: '#a6e3a1',
+      brightYellow: '#f9e2af',
+      brightBlue: '#89b4fa',
+      brightMagenta: '#f5c2e7',
+      brightCyan: '#94e2d5',
+      brightWhite: '#a6adc8'
     },
+    cursorBlink: true, // 光标闪烁
+    cursorStyle: 'bar' // 光标样式：block, underline, bar
   });
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
   terminal.open(terminalMount.value);
 
   disposeDataListener = terminal.onData((data) => {
-    sessionStore.sendActiveTerminalInput(data).catch(() => {});
+    sessionStore.sendActiveTerminalInput(data).catch(() => { });
   });
   disposeResizeListener = terminal.onResize(({ cols, rows }) => {
     sessionStore.resizeActiveTerminal(cols, rows);
@@ -210,10 +214,10 @@ function startTerminal() {
 
   pendingCredentialSave.value = shouldSaveCredential.value && session
     ? {
-        sessionId: session.id,
-        password: isPasswordAuth.value ? password : "",
-        passphrase: isPrivateKeyAuth.value ? passphrase : "",
-      }
+      sessionId: session.id,
+      password: isPasswordAuth.value ? password : "",
+      passphrase: isPrivateKeyAuth.value ? passphrase : "",
+    }
     : null;
 
   sessionStore.startActiveTerminal({
@@ -305,12 +309,8 @@ async function savePendingCredential() {
 
           <label v-if="isPasswordAuth">
             <span>{{ t("profile.password") }}</span>
-            <input
-              ref="credentialInput"
-              v-model="credentials.password"
-              type="password"
-              autocomplete="current-password"
-            />
+            <input ref="credentialInput" v-model="credentials.password" type="password"
+              autocomplete="current-password" />
           </label>
 
           <label v-if="isPrivateKeyAuth">
@@ -320,28 +320,18 @@ async function savePendingCredential() {
 
           <label v-if="isPrivateKeyAuth">
             <span>{{ t("profile.passphrase") }}</span>
-            <input
-              ref="credentialInput"
-              v-model="credentials.passphrase"
-              type="password"
-              autocomplete="current-password"
-            />
+            <input ref="credentialInput" v-model="credentials.passphrase" type="password"
+              autocomplete="current-password" />
           </label>
 
-          <UCheckbox
-            v-model="shouldSaveCredential"
-            class="terminal-save-credential"
-            :label="saveCredentialLabel"
-            :description="t('terminal.saveCredentialDescription')"
-          />
+          <UCheckbox v-model="shouldSaveCredential" class="terminal-save-credential" :label="saveCredentialLabel"
+            :description="t('terminal.saveCredentialDescription')" />
 
           <p v-if="activeSession?.error" class="terminal-auth-error">{{ activeSession.error }}</p>
 
           <button type="submit" class="primary-action" :disabled="activeSession?.status === 'connecting'">
-            <UIcon
-              :name="activeSession?.status === 'connecting' ? 'i-lucide-loader-circle' : 'i-lucide-plug-zap'"
-              :class="{ 'spin-icon': activeSession?.status === 'connecting' }"
-            />
+            <UIcon :name="activeSession?.status === 'connecting' ? 'i-lucide-loader-circle' : 'i-lucide-plug-zap'"
+              :class="{ 'spin-icon': activeSession?.status === 'connecting' }" />
             <span>{{ t("terminal.connectReal") }}</span>
           </button>
         </form>
