@@ -109,6 +109,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
         state.entries = [];
         state.error = String(error);
         state.hasLoaded = false;
+        useSessionStore().handleConnectionOperationError(session.id, error);
       } finally {
         if (state.requestToken === requestToken) {
           state.isLoading = false;

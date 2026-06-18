@@ -98,6 +98,7 @@ pub struct ConnectionTestResult {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalStartRequest {
     pub session_id: String,
+    pub attempt_id: Option<String>,
     pub host: String,
     pub port: u16,
     pub username: String,
@@ -331,9 +332,11 @@ pub struct TransferEventPayload {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalEventPayload {
     pub session_id: String,
+    pub attempt_id: Option<String>,
     pub kind: String,
     pub data: Option<String>,
     pub error: Option<String>,
+    pub reason: Option<String>,
 }
 
 #[derive(Clone, Serialize)]

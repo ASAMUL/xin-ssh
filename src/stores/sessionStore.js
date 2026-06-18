@@ -12,6 +12,9 @@ import { useCredentialStore } from "./credentialStore";
 const INITIAL_TERMINAL_COLUMNS = 120;
 const INITIAL_TERMINAL_ROWS = 32;
 const NETWORK_HISTORY_LIMIT = 30;
+const MAX_AUTO_RECONNECT_ATTEMPTS = 1;
+const STABLE_CONNECTION_RESET_MS = 30_000;
+const TERMINAL_CLOSE_REASON_CLIENT = "client";
 
 export const useSessionStore = defineStore("sessions", {
   state: () => ({
@@ -48,6 +51,10 @@ export const useSessionStore = defineStore("sessions", {
         status: "authRequired",
         error: null,
         savedCredentialAutoStarted: false,
+        currentAttemptId: null,
+        autoReconnectAttempts: 0,
+        connectedAt: null,
+        lastDisconnectReason: null,
         createdAt: Date.now(),
         terminalOutput: "",
         terminalColumns: INITIAL_TERMINAL_COLUMNS,
@@ -98,19 +105,29 @@ export const useSessionStore = defineStore("sessions", {
       session.error = null;
     },
     async startActiveTerminal(credentials = {}) {
-      await this.startTerminalForSession(this.activeSessionId, credentials);
+      await this.startTerminalForSession(this.activeSessionId, credentials, {
+        resetReconnectAttempts: true,
+      });
     },
     async startTerminalForSession(sessionId, credentials = {}, options = {}) {
       const session = this.findSession(sessionId);
       if (!session || session.status === "connecting") return;
 
+      const attemptId = createTerminalAttemptId(session.id);
       session.status = "connecting";
       session.error = null;
       session.terminalOutput = "";
+      session.currentAttemptId = attemptId;
+      session.connectedAt = null;
+      session.lastDisconnectReason = null;
+      if (options.resetReconnectAttempts !== false) {
+        session.autoReconnectAttempts = 0;
+      }
 
       try {
         await startTerminalSession({
           sessionId: session.id,
+          attemptId,
           host: session.host,
           port: session.port,
           username: session.username,
@@ -124,22 +141,34 @@ export const useSessionStore = defineStore("sessions", {
         });
       } catch (error) {
         const latestSession = this.findSession(session.id);
-        if (latestSession) {
+        if (latestSession && latestSession.currentAttemptId === attemptId) {
           latestSession.status = options.fallbackStatus ?? "authRequired";
           latestSession.error = String(error);
+          latestSession.lastDisconnectReason = "error";
         }
       }
     },
-    async startSessionWithSavedCredential(sessionId = this.activeSessionId) {
+    async startSessionWithSavedCredential(sessionId = this.activeSessionId, options = {}) {
       const session = this.findSession(sessionId);
-      if (!session?.credentialRef || session.status === "connected" || session.status === "connecting") {
+      if (
+        !session?.credentialRef ||
+        session.status === "connecting" ||
+        (session.status === "connected" && !options.force)
+      ) {
         return false;
       }
 
+      const attemptId = createTerminalAttemptId(session.id);
       session.status = "connecting";
       session.error = null;
       session.terminalOutput = "";
       session.savedCredentialAutoStarted = true;
+      session.currentAttemptId = attemptId;
+      session.connectedAt = null;
+      session.lastDisconnectReason = null;
+      if (options.resetReconnectAttempts !== false) {
+        session.autoReconnectAttempts = 0;
+      }
 
       try {
         const credentialStore = useCredentialStore();
@@ -151,6 +180,7 @@ export const useSessionStore = defineStore("sessions", {
 
         await startTerminalSession({
           sessionId: session.id,
+          attemptId,
           host: session.host,
           port: session.port,
           username: session.username,
@@ -165,23 +195,31 @@ export const useSessionStore = defineStore("sessions", {
         return true;
       } catch (error) {
         const latestSession = this.findSession(session.id);
-        if (latestSession) {
-          latestSession.status = "authRequired";
+        if (latestSession && latestSession.currentAttemptId === attemptId) {
+          latestSession.status = options.fallbackStatus ?? "authRequired";
           latestSession.error = String(error);
+          latestSession.lastDisconnectReason = "error";
         }
         return false;
       }
     },
     reconnectActiveTerminal() {
-      const session = this.activeSession;
+      return this.reconnectSession(this.activeSessionId);
+    },
+    reconnectSession(sessionId = this.activeSessionId) {
+      const session = this.findSession(sessionId);
       if (!session) return;
 
+      session.autoReconnectAttempts = 0;
       if (session.credentialRef) {
-        this.startSessionWithSavedCredential(session.id);
-        return;
+        return this.startSessionWithSavedCredential(session.id, {
+          force: true,
+          resetReconnectAttempts: true,
+        });
       }
 
       this.requestCredentials(session.id);
+      return false;
     },
     async sendActiveTerminalInput(data) {
       const session = this.activeSession;
@@ -215,6 +253,7 @@ export const useSessionStore = defineStore("sessions", {
     handleTerminalEvent(event) {
       const session = this.findSession(event.sessionId);
       if (!session) return;
+      if (isStaleTerminalEvent(session, event)) return;
 
       if (event.kind === "output") {
         session.terminalOutput += event.data ?? "";
@@ -224,24 +263,68 @@ export const useSessionStore = defineStore("sessions", {
       if (event.kind === "connected") {
         session.status = "connected";
         session.error = null;
+        session.connectedAt = Date.now();
+        session.lastDisconnectReason = null;
         return;
       }
 
       if (event.kind === "connecting") {
         session.status = "connecting";
         session.error = null;
+        session.lastDisconnectReason = null;
         return;
       }
 
       if (event.kind === "closed") {
+        const reason = event.reason ?? "remote";
         session.status = "closed";
+        session.lastDisconnectReason = reason;
+        this.maybeAutoReconnect(session, reason);
         return;
       }
 
       if (event.kind === "error") {
+        const wasConnected = session.status === "connected";
         session.status = "error";
         session.error = event.error ?? event.data ?? "Terminal error";
+        session.lastDisconnectReason = event.reason ?? "error";
+        if (wasConnected) {
+          this.maybeAutoReconnect(session, session.lastDisconnectReason);
+        }
       }
+    },
+    handleConnectionOperationError(sessionId, error) {
+      const message = String(error);
+      if (!isConnectionLostError(message)) return false;
+
+      const session = this.findSession(sessionId);
+      if (!session) return false;
+
+      session.status = "closed";
+      session.error = message;
+      session.lastDisconnectReason = "remote";
+      return this.maybeAutoReconnect(session, "remote");
+    },
+    maybeAutoReconnect(session, reason = "remote") {
+      if (!session || reason === TERMINAL_CLOSE_REASON_CLIENT || !session.credentialRef) {
+        return false;
+      }
+
+      if (session.connectedAt && Date.now() - session.connectedAt >= STABLE_CONNECTION_RESET_MS) {
+        session.autoReconnectAttempts = 0;
+      }
+
+      if (session.autoReconnectAttempts >= MAX_AUTO_RECONNECT_ATTEMPTS) {
+        return false;
+      }
+
+      session.autoReconnectAttempts += 1;
+      this.startSessionWithSavedCredential(session.id, {
+        force: true,
+        fallbackStatus: "error",
+        resetReconnectAttempts: false,
+      });
+      return true;
     },
     async refreshSystemInfo(sessionId = this.activeSessionId) {
       const session = this.findSession(sessionId);
@@ -263,7 +346,9 @@ export const useSessionStore = defineStore("sessions", {
       } catch (error) {
         const latestSession = this.findSession(session.id);
         if (latestSession) {
-          latestSession.systemInfoError = String(error);
+          const message = String(error);
+          latestSession.systemInfoError = message;
+          this.handleConnectionOperationError(latestSession.id, message);
         }
         return null;
       } finally {
@@ -296,6 +381,35 @@ function shouldAutoConnectWithSavedCredential(session) {
     !session.savedCredentialAutoStarted &&
     ["authRequired", "closed", "error"].includes(session.status)
   );
+}
+
+function createTerminalAttemptId(sessionId) {
+  return `${sessionId}-${Date.now()}-${crypto.randomUUID()}`;
+}
+
+function isStaleTerminalEvent(session, event) {
+  return Boolean(
+    event.attemptId &&
+      session.currentAttemptId &&
+      event.attemptId !== session.currentAttemptId,
+  );
+}
+
+function isConnectionLostError(error) {
+  const message = String(error || "").toLowerCase();
+  return [
+    "terminal session is not running",
+    "terminal session is not accepting",
+    "request was canceled",
+    "connection closed",
+    "connection reset",
+    "connection aborted",
+    "broken pipe",
+    "lost connection",
+    "disconnected",
+    "disconnect",
+    "eof",
+  ].some((signature) => message.includes(signature));
 }
 
 async function readSavedCredentials(credentialStore, session) {

@@ -6,6 +6,7 @@ import { useI18n } from "vue-i18n";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
 import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
+import { useSessionStore } from "../stores/sessionStore";
 
 const props = defineProps({
   activeSession: {
@@ -18,6 +19,7 @@ const { t, locale } = useI18n();
 const fileExplorerStore = useFileExplorerStore();
 const transferStore = useTransferStore();
 const uiStore = useUiStore();
+const sessionStore = useSessionStore();
 const fileExplorerRoot = ref(null);
 const pathInput = ref("/");
 const pathInputControl = ref(null);
@@ -70,8 +72,10 @@ let unlistenDragDrop = null;
 const fileState = computed(() => fileExplorerStore.getSessionState(props.activeSession?.id));
 const currentPath = computed(() => fileState.value.currentPath || props.activeSession?.remotePath || "/");
 const isConnected = computed(() => props.activeSession?.status === "connected");
+const isConnecting = computed(() => props.activeSession?.status === "connecting");
 const canNavigate = computed(() => isConnected.value && !fileState.value.isLoading);
 const canTransfer = computed(() => Boolean(props.activeSession) && isConnected.value);
+const canRefresh = computed(() => Boolean(props.activeSession) && !isConnecting.value && !fileState.value.isLoading);
 const canGoBack = computed(() => fileState.value.historyIndex > 0);
 const canGoForward = computed(() => fileState.value.historyIndex < fileState.value.history.length - 1);
 const hasEntries = computed(() => fileState.value.entries.length > 0);
@@ -166,7 +170,7 @@ const contextMenuItems = computed(() => {
       {
         label: t("files.refresh"),
         icon: "i-lucide-refresh-cw",
-        disabled: !isConnected.value,
+        disabled: !canRefresh.value,
         onSelect: refreshDirectory,
       },
     ],
@@ -198,9 +202,12 @@ const conflictDialogDescription = computed(() => conflictTask.value?.error || ""
 const emptyState = computed(() => {
   if (!isConnected.value) {
     return {
-      icon: "i-lucide-unplug",
+      icon: isConnecting.value ? "i-lucide-loader-circle" : "i-lucide-unplug",
       title: t("files.waitingTitle"),
-      description: t("files.waitingDescription"),
+      description: isConnecting.value
+        ? t("files.reconnectingDescription")
+        : t("files.waitingDescription"),
+      spinning: isConnecting.value,
     };
   }
 
@@ -326,7 +333,12 @@ function submitPath() {
 
 function refreshDirectory() {
   closeContextMenu();
-  if (!props.activeSession || !isConnected.value) return;
+  if (!props.activeSession || !canRefresh.value) return;
+
+  if (!isConnected.value) {
+    sessionStore.reconnectSession(props.activeSession.id);
+    return;
+  }
 
   fileExplorerStore.refreshDirectory(props.activeSession);
 }
@@ -893,10 +905,10 @@ function fileTypeLabel(entry) {
           type="button"
           :aria-label="t('files.refresh')"
           :title="t('files.refresh')"
-          :disabled="!isConnected"
+          :disabled="!canRefresh"
           @click="refreshDirectory"
         >
-          <UIcon name="i-lucide-refresh-cw" :class="{ 'spin-icon': fileState.isLoading }" />
+          <UIcon name="i-lucide-refresh-cw" :class="{ 'spin-icon': fileState.isLoading || isConnecting }" />
         </button>
         <button
           type="button"

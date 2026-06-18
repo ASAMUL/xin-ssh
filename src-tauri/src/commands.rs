@@ -54,6 +54,10 @@ const TRANSFER_EVENT: &str = "transfer-event";
 const TRANSFER_BUFFER_SIZE: usize = 256 * 1024;
 const SYSTEM_INFO_SECTION_MARKER: &str = "__XIN_SYSTEM_INFO__";
 const TRANSFER_CANCELED_ERROR: &str = "Transfer canceled";
+const SSH_KEEPALIVE_INTERVAL_SECS: u64 = 30;
+const TERMINAL_CLOSE_REASON_CLIENT: &str = "client";
+const TERMINAL_CLOSE_REASON_REMOTE: &str = "remote";
+const TERMINAL_CLOSE_REASON_ERROR: &str = "error";
 
 #[derive(Clone, Default)]
 pub struct TerminalRegistry {
@@ -599,10 +603,14 @@ pub async fn start_terminal_session(
     registry.replace(session_id.clone(), control_sender)?;
     let transfer_cancellations = Arc::clone(&registry.transfer_cancellations);
 
+    let attempt_id = request.attempt_id.clone();
+
     emit_terminal_event(
         &app,
         &request.session_id,
+        attempt_id.as_deref(),
         "connecting",
+        None,
         None,
         None,
     );
@@ -611,7 +619,15 @@ pub async fn start_terminal_session(
         if let Err(error) =
             run_terminal_shell(app.clone(), request, control_receiver, transfer_cancellations).await
         {
-            emit_terminal_event(&app, &session_id, "error", None, Some(error));
+            emit_terminal_event(
+                &app,
+                &session_id,
+                attempt_id.as_deref(),
+                "error",
+                None,
+                Some(error),
+                Some(TERMINAL_CLOSE_REASON_ERROR),
+            );
         }
     });
 
@@ -851,12 +867,15 @@ async fn run_terminal_shell(
     transfer_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 ) -> Result<(), String> {
     let session_id = request.session_id.clone();
+    let attempt_id = request.attempt_id.clone();
+    let mut close_reason = TERMINAL_CLOSE_REASON_REMOTE;
     let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
     let handler = ConnectionTestClient {
         server_key: Arc::clone(&server_key),
     };
     let config = Arc::new(client::Config {
         inactivity_timeout: None,
+        keepalive_interval: Some(Duration::from_secs(SSH_KEEPALIVE_INTERVAL_SECS)),
         ..Default::default()
     });
     let host = request.host.trim().to_string();
@@ -901,7 +920,15 @@ async fn run_terminal_shell(
         .await
         .map_err(connection_error)?;
 
-    emit_terminal_event(&app, &session_id, "connected", None, None);
+    emit_terminal_event(
+        &app,
+        &session_id,
+        attempt_id.as_deref(),
+        "connected",
+        None,
+        None,
+        None,
+    );
 
     let initial_path = request.default_remote_path.trim();
     if !initial_path.is_empty() && initial_path != "/" {
@@ -1009,6 +1036,7 @@ async fn run_terminal_shell(
                         });
                     }
                     TerminalControl::Close => {
+                        close_reason = TERMINAL_CLOSE_REASON_CLIENT;
                         let _ = channel.close().await;
                         break;
                     }
@@ -1024,20 +1052,25 @@ async fn run_terminal_shell(
                         emit_terminal_event(
                             &app,
                             &session_id,
+                            attempt_id.as_deref(),
                             "output",
                             Some(String::from_utf8_lossy(&data).to_string()),
+                            None,
                             None,
                         );
                     }
                     ChannelMsg::Eof | ChannelMsg::Close => {
+                        close_reason = TERMINAL_CLOSE_REASON_REMOTE;
                         break;
                     }
                     ChannelMsg::ExitStatus { exit_status } => {
                         emit_terminal_event(
                             &app,
                             &session_id,
+                            attempt_id.as_deref(),
                             "output",
                             Some(format!("\r\n[exit status: {exit_status}]\r\n")),
+                            None,
                             None,
                         );
                     }
@@ -1052,7 +1085,15 @@ async fn run_terminal_shell(
         .await
         .disconnect(Disconnect::ByApplication, "terminal closed", "en")
         .await;
-    emit_terminal_event(&app, &session_id, "closed", None, None);
+    emit_terminal_event(
+        &app,
+        &session_id,
+        attempt_id.as_deref(),
+        "closed",
+        None,
+        None,
+        Some(close_reason),
+    );
     Ok(())
 }
 
@@ -3105,17 +3146,21 @@ impl TransferEventPayload {
 fn emit_terminal_event(
     app: &AppHandle,
     session_id: &str,
+    attempt_id: Option<&str>,
     kind: &str,
     data: Option<String>,
     error: Option<String>,
+    reason: Option<&str>,
 ) {
     let _ = app.emit(
         TERMINAL_EVENT,
         TerminalEventPayload {
             session_id: session_id.to_string(),
+            attempt_id: attempt_id.map(str::to_string),
             kind: kind.to_string(),
             data,
             error,
+            reason: reason.map(str::to_string),
         },
     );
 }
