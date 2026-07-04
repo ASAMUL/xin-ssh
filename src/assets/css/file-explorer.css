@@ -238,6 +238,18 @@
   font-size: 12px;
 }
 
+.file-virtual-body {
+  position: relative;
+  min-width: 760px;
+}
+
+.file-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
 .file-heading {
   position: sticky;
   z-index: 2;

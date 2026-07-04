@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useVirtualizer } from "@tanstack/vue-virtual";
 import { useI18n } from "vue-i18n";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
 import { useTransferStore } from "../stores/transferStore";
@@ -21,6 +22,7 @@ const transferStore = useTransferStore();
 const uiStore = useUiStore();
 const sessionStore = useSessionStore();
 const fileExplorerRoot = ref(null);
+const fileTableWrap = ref(null);
 const pathInput = ref("/");
 const pathInputControl = ref(null);
 const searchInputControl = ref(null);
@@ -89,6 +91,23 @@ const visibleEntries = computed(() => {
 
   return fileState.value.entries.filter((entry) => entry.name.toLowerCase().includes(keyword));
 });
+// 行高需与 file-explorer.css 中 .file-row 的 min-height 保持一致
+const FILE_ROW_HEIGHT = 32;
+const rowVirtualizer = useVirtualizer(
+  computed(() => ({
+    count: visibleEntries.value.length,
+    getScrollElement: () => fileTableWrap.value,
+    estimateSize: () => FILE_ROW_HEIGHT,
+    overscan: 12,
+  })),
+);
+const virtualEntryRows = computed(() =>
+  rowVirtualizer.value
+    .getVirtualItems()
+    .map((virtualRow) => ({ virtualRow, entry: visibleEntries.value[virtualRow.index] }))
+    .filter((row) => row.entry),
+);
+const totalListHeight = computed(() => rowVirtualizer.value.getTotalSize());
 const selectedEntries = computed(() => {
   const selectedPaths = new Set(fileState.value.selectedPaths);
   return fileState.value.entries.filter((entry) => selectedPaths.has(entry.path));
@@ -264,6 +283,7 @@ watch(
   currentPath,
   (path) => {
     pathInput.value = path;
+    rowVirtualizer.value.scrollToOffset(0);
   },
   { immediate: true },
 );
@@ -998,7 +1018,7 @@ function fileTypeLabel(entry) {
 
     <UContextMenu :items="contextMenuItems" size="xs" :ui="fileContextMenuUi">
       <div class="file-workbench" :class="{ 'drag-over': isDragOver }" @contextmenu="prepareContextMenu">
-        <section class="file-table-wrap">
+        <section ref="fileTableWrap" class="file-table-wrap">
           <div class="file-row file-heading">
             <span class="name-column">{{ t("files.name") }}</span>
             <span>{{ t("files.size") }}</span>
@@ -1017,28 +1037,35 @@ function fileTypeLabel(entry) {
             </button>
           </div>
 
-          <button
-            v-for="fileEntry in visibleEntries"
-            :key="fileEntry.id"
-            type="button"
-            class="file-row file-entry"
-            :class="{ selected: isSelected(fileEntry), directory: fileEntry.isDirectory }"
-            :data-file-path="fileEntry.path"
-            @click="selectEntry(fileEntry, $event)"
-            @dblclick="openEntry(fileEntry)"
-            @keydown.enter.prevent="openEntry(fileEntry)"
+          <div
+            v-if="visibleEntries.length"
+            class="file-virtual-body"
+            :style="{ height: `${totalListHeight}px` }"
           >
-            <span class="name-column">
-              <span class="file-icon" :class="{ directory: fileEntry.isDirectory, symlink: fileEntry.isSymlink }">
-                <UIcon :name="fileEntry.icon" />
+            <button
+              v-for="{ virtualRow, entry: fileEntry } in virtualEntryRows"
+              :key="fileEntry.id"
+              type="button"
+              class="file-row file-entry file-virtual-row"
+              :class="{ selected: isSelected(fileEntry), directory: fileEntry.isDirectory }"
+              :style="{ height: `${virtualRow.size}px`, transform: `translateY(${virtualRow.start}px)` }"
+              :data-file-path="fileEntry.path"
+              @click="selectEntry(fileEntry, $event)"
+              @dblclick="openEntry(fileEntry)"
+              @keydown.enter.prevent="openEntry(fileEntry)"
+            >
+              <span class="name-column">
+                <span class="file-icon" :class="{ directory: fileEntry.isDirectory, symlink: fileEntry.isSymlink }">
+                  <UIcon :name="fileEntry.icon" />
+                </span>
+                <span class="file-name">{{ fileEntry.name }}</span>
               </span>
-              <span class="file-name">{{ fileEntry.name }}</span>
-            </span>
-            <span>{{ formatSize(fileEntry) }}</span>
-            <span>{{ fileTypeLabel(fileEntry) }}</span>
-            <span>{{ formatModified(fileEntry) }}</span>
-            <span>{{ fileEntry.permissions || "--" }}</span>
-          </button>
+              <span>{{ formatSize(fileEntry) }}</span>
+              <span>{{ fileTypeLabel(fileEntry) }}</span>
+              <span>{{ formatModified(fileEntry) }}</span>
+              <span>{{ fileEntry.permissions || "--" }}</span>
+            </button>
+          </div>
         </section>
 
         <div v-if="isDragOver" class="file-drop-overlay">
