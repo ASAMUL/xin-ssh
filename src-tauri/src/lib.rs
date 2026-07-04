@@ -1,38 +1,43 @@
-mod commands;
+mod credentials;
 mod models;
+mod sftp;
+mod ssh;
+mod system_info;
+mod util;
+mod workspace;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(commands::TerminalRegistry::default())
+        .manage(ssh::registry::TerminalRegistry::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            commands::cancel_transfer,
-            commands::change_workspace_dir,
-            commands::close_terminal_session,
-            commands::create_remote_directory,
-            commands::delete_group,
-            commands::delete_profile,
-            commands::delete_remote_entries,
-            commands::get_app_status,
-            commands::init_workspace,
-            commands::get_remote_system_info,
-            commands::list_remote_directory,
-            commands::load_workspace,
-            commands::read_credential,
-            commands::remove_credential,
-            commands::rename_remote_path,
-            commands::resize_terminal,
-            commands::save_credential,
-            commands::save_group,
-            commands::save_profile,
-            commands::save_settings,
-            commands::send_terminal_input,
-            commands::start_download_transfer,
-            commands::start_terminal_session,
-            commands::start_upload_transfer,
-            commands::test_connection,
+            sftp::transfer::cancel_transfer,
+            workspace::change_workspace_dir,
+            ssh::shell::close_terminal_session,
+            sftp::ops::create_remote_directory,
+            workspace::delete_group,
+            workspace::delete_profile,
+            sftp::ops::delete_remote_entries,
+            workspace::get_app_status,
+            workspace::init_workspace,
+            system_info::get_remote_system_info,
+            sftp::ops::list_remote_directory,
+            workspace::load_workspace,
+            credentials::read_credential,
+            credentials::remove_credential,
+            sftp::ops::rename_remote_path,
+            ssh::shell::resize_terminal,
+            credentials::save_credential,
+            workspace::save_group,
+            workspace::save_profile,
+            workspace::save_settings,
+            ssh::shell::send_terminal_input,
+            sftp::transfer::start_download_transfer,
+            ssh::shell::start_terminal_session,
+            sftp::transfer::start_upload_transfer,
+            ssh::test::test_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
