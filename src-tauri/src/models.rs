@@ -156,8 +156,9 @@ pub struct RemoveCredentialRequest {
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RemoteDirectoryListRequest {
+pub struct RemoteDirectoryStreamRequest {
     pub session_id: String,
+    pub request_id: String,
     pub path: String,
 }
 
@@ -259,10 +260,14 @@ pub struct RemoteDiskInfo {
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RemoteDirectoryListing {
+pub struct DirectoryEventPayload {
     pub session_id: String,
+    pub request_id: String,
+    pub kind: String,
     pub path: String,
     pub entries: Vec<RemoteFileEntry>,
+    pub total: Option<u64>,
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Serialize)]

@@ -23,7 +23,7 @@ pub fn run() {
             workspace::get_app_status,
             workspace::init_workspace,
             system_info::get_remote_system_info,
-            sftp::ops::list_remote_directory,
+            sftp::ops::stream_remote_directory,
             workspace::load_workspace,
             credentials::read_credential,
             credentials::remove_credential,

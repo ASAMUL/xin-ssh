@@ -5,11 +5,13 @@ import TransferToast from "./components/TransferToast.vue";
 import WindowChrome from "./components/AppShell/WindowChrome.vue";
 import WorkspaceShell from "./components/AppShell/WorkspaceShell.vue";
 import { useAppStore } from "./stores/appStore";
+import { useFileExplorerStore } from "./stores/fileExplorerStore";
 import { useTransferStore } from "./stores/transferStore";
 import { useUiStore } from "./stores/uiStore";
 
 const { t } = useI18n();
 const appStore = useAppStore();
+const fileExplorerStore = useFileExplorerStore();
 const transferStore = useTransferStore();
 const uiStore = useUiStore();
 
@@ -18,6 +20,7 @@ const visibleError = computed(() => appStore.error || uiStore.error);
 onMounted(() => {
   appStore.bootstrap();
   transferStore.startListening();
+  fileExplorerStore.startListening();
 });
 </script>
 

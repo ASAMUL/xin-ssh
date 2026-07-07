@@ -80,8 +80,8 @@ export function deleteRemoteEntries(request) {
   return invoke("delete_remote_entries", { request });
 }
 
-export function listRemoteDirectory(request) {
-  return invoke("list_remote_directory", { request });
+export function streamRemoteDirectory(request) {
+  return invoke("stream_remote_directory", { request });
 }
 
 export function getRemoteSystemInfo(request) {

@@ -1,18 +1,21 @@
 import { defineStore } from "pinia";
+import { listen } from "@tauri-apps/api/event";
 import {
   createRemoteDirectory,
   deleteRemoteEntries,
-  listRemoteDirectory,
   renameRemotePath,
+  streamRemoteDirectory,
 } from "../services/workspaceApi";
 import { useSessionStore } from "./sessionStore";
 
+const DIRECTORY_EVENT_NAME = "directory-event";
 const DEFAULT_REMOTE_PATH = "/";
 const EMPTY_FILE_STATE = createFileState(DEFAULT_REMOTE_PATH);
 
 export const useFileExplorerStore = defineStore("fileExplorer", {
   state: () => ({
     sessionStates: {},
+    unlistenDirectory: null,
   }),
   getters: {
     getSessionState: (state) => (sessionId) => {
@@ -22,6 +25,17 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
     },
   },
   actions: {
+    async startListening() {
+      if (this.unlistenDirectory) return;
+
+      try {
+        this.unlistenDirectory = await listen(DIRECTORY_EVENT_NAME, (event) => {
+          this.handleDirectoryEvent(event.payload);
+        });
+      } catch (error) {
+        console.warn("[Xin Terminal] directory event listener unavailable", error);
+      }
+    },
     ensureSessionState(session) {
       if (!session) return EMPTY_FILE_STATE;
 
@@ -78,42 +92,73 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       }
 
       const targetPath = normalizeRemotePath(path || state.currentPath || session.remotePath);
-      const requestToken = `${Date.now()}-${Math.random()}`;
-      state.requestToken = requestToken;
+      const requestId = crypto.randomUUID();
+      state.requestToken = requestId;
       state.requestedPath = targetPath;
+      state.pushHistoryOnLoad = options.pushHistory !== false;
       state.isLoading = true;
       state.error = null;
+      state.entries = [];
+      state.selectedPaths = [];
 
       try {
-        const listing = await listRemoteDirectory({
+        await streamRemoteDirectory({
           sessionId: session.id,
+          requestId,
           path: targetPath,
         });
-
-        if (state.requestToken !== requestToken) return;
-
-        const listedPath = normalizeRemotePath(listing.path || targetPath);
-        state.currentPath = listedPath;
-        state.entries = (listing.entries || []).map(normalizeRemoteEntry);
-        state.selectedPaths = [];
-        state.hasLoaded = true;
-
-        if (options.pushHistory !== false) {
-          pushHistory(state, listedPath);
-        }
-
-        useSessionStore().updateSessionRemotePath(session.id, listedPath);
       } catch (error) {
-        if (state.requestToken !== requestToken) return;
+        if (state.requestToken !== requestId) return;
 
+        state.isLoading = false;
         state.entries = [];
         state.error = String(error);
         state.hasLoaded = false;
         useSessionStore().handleConnectionOperationError(session.id, error);
-      } finally {
-        if (state.requestToken === requestToken) {
-          state.isLoading = false;
+      }
+    },
+    handleDirectoryEvent(event) {
+      const state = this.sessionStates[event.sessionId];
+      if (!state || state.requestToken !== event.requestId) return;
+
+      if (event.kind === "started") {
+        const listedPath = normalizeRemotePath(event.path);
+        state.currentPath = listedPath;
+        state.entries = [];
+        state.selectedPaths = [];
+
+        if (state.pushHistoryOnLoad) {
+          pushHistory(state, listedPath);
         }
+
+        useSessionStore().updateSessionRemotePath(event.sessionId, listedPath);
+        return;
+      }
+
+      if (event.kind === "chunk") {
+        state.entries.push(...(event.entries || []).map(normalizeRemoteEntry));
+        return;
+      }
+
+      if (event.kind === "completed") {
+        state.entries = sortRemoteEntries([...state.entries]);
+        state.isLoading = false;
+        state.hasLoaded = true;
+        state.error = null;
+        return;
+      }
+
+      if (event.kind === "canceled") {
+        state.isLoading = false;
+        return;
+      }
+
+      if (event.kind === "failed") {
+        state.entries = [];
+        state.error = event.error || "Directory listing failed";
+        state.isLoading = false;
+        state.hasLoaded = false;
+        useSessionStore().handleConnectionOperationError(event.sessionId, state.error);
       }
     },
     refreshDirectory(session) {
@@ -199,6 +244,7 @@ function createFileState(path) {
     history: [currentPath],
     historyIndex: 0,
     requestToken: null,
+    pushHistoryOnLoad: true,
   };
 }
 
@@ -208,6 +254,16 @@ function normalizeRemoteEntry(entry) {
     path: normalizeRemotePath(entry.path),
     icon: fileIcon(entry),
   };
+}
+
+function sortRemoteEntries(entries) {
+  return entries.sort((left, right) => {
+    if (left.isDirectory !== right.isDirectory) {
+      return left.isDirectory ? -1 : 1;
+    }
+
+    return left.name.toLowerCase().localeCompare(right.name.toLowerCase());
+  });
 }
 
 function fileIcon(entry) {

@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use russh::client;
 use russh_sftp::{
-    client::{fs::DirEntry, SftpSession},
-    protocol::FileType,
+    client::{RawSftpSession, SftpSession},
+    protocol::{File, FileType},
 };
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -37,24 +37,65 @@ pub(crate) async fn open_sftp_session(
         .map_err(connection_error)
 }
 
-pub(crate) fn remote_file_entry(entry: DirEntry) -> RemoteFileEntry {
-    let metadata = entry.metadata();
-    let file_type = entry.file_type();
-    let name = entry.file_name();
-    let path = normalize_remote_path(&entry.path());
-    let permissions_mode = metadata.permissions.map(|mode| mode & 0o777);
+pub(crate) async fn open_raw_sftp_session(
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+) -> Result<RawSftpSession, String> {
+    let channel = {
+        let session_handle = session.lock().await;
+        session_handle
+            .channel_open_session()
+            .await
+            .map_err(connection_error)?
+    };
+
+    channel
+        .request_subsystem(true, "sftp")
+        .await
+        .map_err(connection_error)?;
+
+    let raw = RawSftpSession::new(channel.into_stream());
+    raw.init().await.map_err(connection_error)?;
+
+    Ok(raw)
+}
+
+pub(crate) async fn ensure_sftp_session<'a>(
+    cached: &'a mut Option<SftpSession>,
+    session: &Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+) -> Result<&'a SftpSession, String> {
+    Ok(match cached {
+        Some(sftp) => sftp,
+        None => {
+            let sftp = open_sftp_session(Arc::clone(session)).await?;
+            cached.insert(sftp)
+        }
+    })
+}
+
+pub(crate) fn remote_file_entry(parent_path: &str, file: &File) -> RemoteFileEntry {
+    let attrs = &file.attrs;
+    let file_type = attrs.file_type();
+    let name = file.filename.clone();
+    let path = normalize_remote_path(&format!("{parent_path}/{name}"));
+    let permissions_mode = attrs.permissions.map(|mode| mode & 0o777);
 
     RemoteFileEntry {
         id: path.clone(),
         name: name.clone(),
         path,
         kind: remote_file_kind(file_type).to_string(),
-        size: metadata.size,
-        modified_at: metadata.mtime.map(u64::from),
+        size: attrs.size,
+        modified_at: attrs.mtime.map(u64::from),
         permissions: permissions_mode.map(format_permissions),
         permissions_mode,
-        owner: metadata.user.or_else(|| metadata.uid.map(|uid| uid.to_string())),
-        group: metadata.group.or_else(|| metadata.gid.map(|gid| gid.to_string())),
+        owner: attrs
+            .user
+            .clone()
+            .or_else(|| attrs.uid.map(|uid| uid.to_string())),
+        group: attrs
+            .group
+            .clone()
+            .or_else(|| attrs.gid.map(|gid| gid.to_string())),
         is_hidden: name.starts_with('.'),
         is_directory: file_type.is_dir(),
         is_symlink: file_type.is_symlink(),

@@ -9,8 +9,7 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 
 use crate::models::{
-    RemoteDirectoryListing, RemoteDownloadRequest, RemoteSystemSnapshot, RemoteTransferEntry,
-    RemoteUploadRequest,
+    RemoteDownloadRequest, RemoteSystemSnapshot, RemoteTransferEntry, RemoteUploadRequest,
 };
 use crate::util::error_message;
 
@@ -18,14 +17,16 @@ use crate::util::error_message;
 pub struct TerminalRegistry {
     sessions: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<TerminalControl>>>>,
     pub(crate) transfer_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    directory_streams: Arc<Mutex<HashMap<String, (String, Arc<AtomicBool>)>>>,
 }
 
 pub(crate) enum TerminalControl {
     Input(Vec<u8>),
     Resize { columns: u32, rows: u32 },
-    ListDirectory {
+    StreamDirectory {
+        request_id: String,
         path: String,
-        responder: oneshot::Sender<Result<RemoteDirectoryListing, String>>,
+        cancellation: Arc<AtomicBool>,
     },
     GetSystemInfo {
         responder: oneshot::Sender<Result<RemoteSystemSnapshot, String>>,
@@ -61,6 +62,8 @@ impl TerminalRegistry {
         session_id: String,
         sender: mpsc::UnboundedSender<TerminalControl>,
     ) -> Result<(), String> {
+        self.cancel_directory_stream(&session_id);
+
         let mut sessions = self.sessions.lock().map_err(error_message)?;
         if let Some(existing) = sessions.insert(session_id, sender) {
             let _ = existing.send(TerminalControl::Close);
@@ -81,6 +84,8 @@ impl TerminalRegistry {
     }
 
     pub(crate) fn close(&self, session_id: &str) -> Result<(), String> {
+        self.cancel_directory_stream(session_id);
+
         let sender = self
             .sessions
             .lock()
@@ -94,11 +99,12 @@ impl TerminalRegistry {
         Ok(())
     }
 
-    pub(crate) async fn list_directory(
+    pub(crate) fn stream_directory(
         &self,
         session_id: &str,
+        request_id: String,
         path: String,
-    ) -> Result<RemoteDirectoryListing, String> {
+    ) -> Result<(), String> {
         let sender = self
             .sessions
             .lock()
@@ -106,15 +112,54 @@ impl TerminalRegistry {
             .get(session_id)
             .cloned()
             .ok_or_else(|| "Terminal session is not running".to_string())?;
-        let (responder, receiver) = oneshot::channel();
+        let cancellation = Arc::new(AtomicBool::new(false));
 
-        sender
-            .send(TerminalControl::ListDirectory { path, responder })
-            .map_err(|_| "Terminal session is not accepting SFTP requests".to_string())?;
+        if let Some((_, previous)) = self
+            .directory_streams
+            .lock()
+            .map_err(error_message)?
+            .insert(
+                session_id.to_string(),
+                (request_id.clone(), Arc::clone(&cancellation)),
+            )
+        {
+            previous.store(true, Ordering::SeqCst);
+        }
 
-        receiver
-            .await
-            .map_err(|_| "SFTP request was canceled".to_string())?
+        let send_result = sender
+            .send(TerminalControl::StreamDirectory {
+                request_id: request_id.clone(),
+                path,
+                cancellation,
+            })
+            .map_err(|_| "Terminal session is not accepting SFTP requests".to_string());
+
+        if send_result.is_err() {
+            self.finish_directory_stream(session_id, &request_id);
+        }
+
+        send_result
+    }
+
+    pub(crate) fn cancel_directory_stream(&self, session_id: &str) {
+        if let Ok(mut streams) = self.directory_streams.lock() {
+            if let Some((_, cancellation)) = streams.remove(session_id) {
+                cancellation.store(true, Ordering::SeqCst);
+            }
+        }
+    }
+
+    pub(crate) fn finish_directory_stream(&self, session_id: &str, request_id: &str) {
+        if let Ok(mut streams) = self.directory_streams.lock() {
+            let is_active_request = streams
+                .get(session_id)
+                .map(|(active_request, _)| active_request == request_id)
+                .unwrap_or(false);
+
+            if is_active_request {
+                streams.remove(session_id);
+            }
+        }
     }
 
     pub(crate) async fn get_system_info(&self, session_id: &str) -> Result<RemoteSystemSnapshot, String> {
