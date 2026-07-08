@@ -7,6 +7,7 @@ use std::{
     },
 };
 
+use futures::stream::{self, StreamExt};
 use russh::client;
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use tauri::{AppHandle, Emitter, State};
@@ -32,6 +33,7 @@ use crate::util::{connection_error, error_message, path_to_string, summarize_tra
 const TRANSFER_EVENT: &str = "transfer-event";
 const TRANSFER_BUFFER_SIZE: usize = 256 * 1024;
 const TRANSFER_CANCELED_ERROR: &str = "Transfer canceled";
+const TRANSFER_CONCURRENCY: usize = 4;
 
 #[tauri::command]
 pub fn start_upload_transfer(
@@ -138,50 +140,48 @@ async fn upload_transfer_with_sftp(
     )
     .await?;
 
-    let mut progress = TransferProgress::new(
+    let progress = Mutex::new(TransferProgress::new(
         &request.task_id,
         &request.session_id,
         "upload",
         plan.bytes_total,
         plan.files.len() as u64,
         transfer_label_from_local_paths(&request.local_paths),
-    );
-    progress.emit(app, "started", None, true);
+    ));
+    with_progress(&progress, |p| p.emit(app, "started", None, true))?;
 
     for directory in &plan.directories {
         if is_transfer_canceled(cancellation) {
-            progress.cancel(app);
+            with_progress(&progress, |p| p.cancel(app))?;
             return Ok(());
         }
 
         ensure_remote_directory(sftp, directory).await?;
     }
 
-    let mut errors = Vec::new();
-    for file in &plan.files {
-        if is_transfer_canceled(cancellation) {
-            progress.cancel(app);
-            return Ok(());
-        }
-
-        progress.label = file.label.clone();
-        if let Err(error) = upload_file(sftp, file, app, &mut progress, cancellation).await {
-            let _ = sftp.remove_file(file.remote_path.clone()).await;
-            if error == TRANSFER_CANCELED_ERROR {
-                progress.cancel(app);
-                return Ok(());
+    let progress = &progress;
+    let files = std::mem::take(&mut plan.files);
+    let file_results: Vec<Result<(), (String, String)>> = stream::iter(files)
+        .map(|file| async move {
+            let result = async {
+                ensure_transfer_active(cancellation)?;
+                with_progress(progress, |p| p.label = file.label.clone())?;
+                upload_file(sftp, &file, app, progress, cancellation).await
             }
-            errors.push(format!("{}: {error}", file.label));
-        }
-    }
+            .await;
 
-    if !errors.is_empty() {
-        progress.fail(app, summarize_transfer_errors(errors));
-        return Ok(());
-    }
+            if let Err(error) = result {
+                let _ = sftp.remove_file(file.remote_path.clone()).await;
+                return Err((file.label.clone(), error));
+            }
 
-    progress.emit(app, "completed", None, true);
-    Ok(())
+            Ok(())
+        })
+        .buffer_unordered(TRANSFER_CONCURRENCY)
+        .collect()
+        .await;
+
+    finish_transfer(app, progress, cancellation, file_results)
 }
 
 async fn download_transfer(
@@ -209,19 +209,19 @@ async fn download_transfer_with_sftp(
         parse_transfer_conflict_policy(&request.conflict_policy)?,
     )?;
 
-    let mut progress = TransferProgress::new(
+    let progress = Mutex::new(TransferProgress::new(
         &request.task_id,
         &request.session_id,
         "download",
         plan.bytes_total,
         plan.files.len() as u64,
         transfer_label_from_remote_entries(&request.remote_entries),
-    );
-    progress.emit(app, "started", None, true);
+    ));
+    with_progress(&progress, |p| p.emit(app, "started", None, true))?;
 
     for directory in &plan.directories {
         if is_transfer_canceled(cancellation) {
-            progress.cancel(app);
+            with_progress(&progress, |p| p.cancel(app))?;
             return Ok(());
         }
 
@@ -230,38 +230,36 @@ async fn download_transfer_with_sftp(
             .map_err(error_message)?;
     }
 
-    let mut errors = Vec::new();
-    for file in &plan.files {
-        if is_transfer_canceled(cancellation) {
-            progress.cancel(app);
-            return Ok(());
-        }
-
-        progress.label = file.label.clone();
-        if let Err(error) = download_file(sftp, file, app, &mut progress, cancellation).await {
-            let _ = async_fs::remove_file(&file.local_path).await;
-            if error == TRANSFER_CANCELED_ERROR {
-                progress.cancel(app);
-                return Ok(());
+    let progress = &progress;
+    let files = std::mem::take(&mut plan.files);
+    let file_results: Vec<Result<(), (String, String)>> = stream::iter(files)
+        .map(|file| async move {
+            let result = async {
+                ensure_transfer_active(cancellation)?;
+                with_progress(progress, |p| p.label = file.label.clone())?;
+                download_file(sftp, &file, app, progress, cancellation).await
             }
-            errors.push(format!("{}: {error}", file.label));
-        }
-    }
+            .await;
 
-    if !errors.is_empty() {
-        progress.fail(app, summarize_transfer_errors(errors));
-        return Ok(());
-    }
+            if let Err(error) = result {
+                let _ = async_fs::remove_file(&file.local_path).await;
+                return Err((file.label.clone(), error));
+            }
 
-    progress.emit(app, "completed", None, true);
-    Ok(())
+            Ok(())
+        })
+        .buffer_unordered(TRANSFER_CONCURRENCY)
+        .collect()
+        .await;
+
+    finish_transfer(app, progress, cancellation, file_results)
 }
 
 async fn upload_file(
     sftp: &SftpSession,
     file: &UploadFilePlan,
     app: &AppHandle,
-    progress: &mut TransferProgress,
+    progress: &Mutex<TransferProgress>,
     cancellation: &Arc<AtomicBool>,
 ) -> Result<(), String> {
     let mut local_file = async_fs::File::open(&file.local_path)
@@ -287,14 +285,18 @@ async fn upload_file(
             .write_all(&buffer[..read])
             .await
             .map_err(error_message)?;
-        progress.bytes_transferred += read as u64;
-        progress.emit(app, "progress", Some(file.remote_path.clone()), false);
+        with_progress(progress, |p| {
+            p.bytes_transferred += read as u64;
+            p.emit(app, "progress", Some(file.remote_path.clone()), false);
+        })?;
     }
 
     remote_file.flush().await.map_err(error_message)?;
     remote_file.shutdown().await.map_err(error_message)?;
-    progress.files_done += 1;
-    progress.emit(app, "progress", Some(file.remote_path.clone()), true);
+    with_progress(progress, |p| {
+        p.files_done += 1;
+        p.emit(app, "progress", Some(file.remote_path.clone()), true);
+    })?;
     Ok(())
 }
 
@@ -302,7 +304,7 @@ async fn download_file(
     sftp: &SftpSession,
     file: &DownloadFilePlan,
     app: &AppHandle,
-    progress: &mut TransferProgress,
+    progress: &Mutex<TransferProgress>,
     cancellation: &Arc<AtomicBool>,
 ) -> Result<(), String> {
     if let Some(parent) = file.local_path.parent() {
@@ -329,15 +331,61 @@ async fn download_file(
             .write_all(&buffer[..read])
             .await
             .map_err(error_message)?;
-        progress.bytes_transferred += read as u64;
-        progress.emit(app, "progress", Some(file.remote_path.clone()), false);
+        with_progress(progress, |p| {
+            p.bytes_transferred += read as u64;
+            p.emit(app, "progress", Some(file.remote_path.clone()), false);
+        })?;
     }
 
     local_file.flush().await.map_err(error_message)?;
     remote_file.shutdown().await.map_err(error_message)?;
-    progress.files_done += 1;
-    progress.emit(app, "progress", Some(file.remote_path.clone()), true);
+    with_progress(progress, |p| {
+        p.files_done += 1;
+        p.emit(app, "progress", Some(file.remote_path.clone()), true);
+    })?;
     Ok(())
+}
+
+fn finish_transfer(
+    app: &AppHandle,
+    progress: &Mutex<TransferProgress>,
+    cancellation: &Arc<AtomicBool>,
+    file_results: Vec<Result<(), (String, String)>>,
+) -> Result<(), String> {
+    let mut canceled = false;
+    let mut errors = Vec::new();
+
+    for file_result in file_results {
+        if let Err((label, error)) = file_result {
+            if error == TRANSFER_CANCELED_ERROR {
+                canceled = true;
+            } else {
+                errors.push(format!("{label}: {error}"));
+            }
+        }
+    }
+
+    if canceled || is_transfer_canceled(cancellation) {
+        with_progress(progress, |p| p.cancel(app))?;
+        return Ok(());
+    }
+
+    if !errors.is_empty() {
+        let summary = summarize_transfer_errors(errors);
+        with_progress(progress, |p| p.fail(app, summary))?;
+        return Ok(());
+    }
+
+    with_progress(progress, |p| p.emit(app, "completed", None, true))?;
+    Ok(())
+}
+
+fn with_progress<T>(
+    progress: &Mutex<TransferProgress>,
+    action: impl FnOnce(&mut TransferProgress) -> T,
+) -> Result<T, String> {
+    let mut guard = progress.lock().map_err(error_message)?;
+    Ok(action(&mut guard))
 }
 
 struct UploadPlan {

@@ -6307,6 +6307,7 @@ dependencies = [
 name = "xterminal"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "ring",
  "russh",
  "russh-sftp",
