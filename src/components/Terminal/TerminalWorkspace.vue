@@ -1,6 +1,5 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import { listen } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -20,7 +19,6 @@ import {
   resolveTerminalFontStack,
 } from "../../config/terminalThemes";
 
-const TERMINAL_EVENT_NAME = "terminal-event";
 const { t } = useI18n();
 const profileStore = useProfileStore();
 const sessionStore = useSessionStore();
@@ -38,11 +36,8 @@ const credentials = reactive({
 let terminal = null;
 let fitAddon = null;
 let resizeObserver = null;
-let unlistenTerminal = null;
 let disposeDataListener = null;
 let disposeResizeListener = null;
-let lastWrittenSessionId = null;
-let lastWrittenLength = 0;
 
 const activeSession = computed(() => sessionStore.activeSession);
 const isAppearanceOpen = ref(false);
@@ -81,7 +76,6 @@ const themeStyleVars = computed(() => {
 const isPasswordAuth = computed(() => activeSession.value?.authMethod === "password");
 const isPrivateKeyAuth = computed(() => activeSession.value?.authMethod === "privateKey");
 const needsCredentials = computed(() => activeSession.value?.status === "authRequired");
-const terminalText = computed(() => activeSession.value?.terminalOutput || "");
 const terminalStatusText = computed(() => {
   const session = activeSession.value;
   if (!session) return "";
@@ -93,23 +87,21 @@ const saveCredentialLabel = computed(() =>
 );
 
 watch(
-  () => activeSession.value?.id,
-  async () => {
-    credentials.password = "";
-    credentials.passphrase = "";
-    shouldSaveCredential.value = Boolean(activeSession.value?.credentialRef);
-    pendingCredentialSave.value = null;
+  // 会话切换或 terminalRevision 变化（连接重开 / 清屏）都需要全量重建终端内容
+  () => [activeSession.value?.id, activeSession.value?.terminalRevision],
+  async ([sessionId], previous = []) => {
+    const [previousSessionId] = previous;
+    if (sessionId !== previousSessionId) {
+      credentials.password = "";
+      credentials.passphrase = "";
+      shouldSaveCredential.value = Boolean(activeSession.value?.credentialRef);
+      pendingCredentialSave.value = null;
+    }
+
     await nextTick();
-    syncTerminalBuffer(true);
+    resyncTerminal();
     fitTerminal();
     focusActiveInput();
-  },
-);
-
-watch(
-  () => terminalText.value.length,
-  () => {
-    syncTerminalBuffer(false);
   },
 );
 
@@ -184,12 +176,8 @@ onMounted(async () => {
   });
   resizeObserver.observe(terminalMount.value);
 
-  unlistenTerminal = await listen(TERMINAL_EVENT_NAME, (event) => {
-    sessionStore.handleTerminalEvent(event.payload);
-  });
-
   await nextTick();
-  syncTerminalBuffer(true);
+  resyncTerminal();
   fitTerminal();
   focusActiveInput();
   // webfont metrics may land after the terminal measured itself
@@ -197,7 +185,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  unlistenTerminal?.();
+  sessionStore.detachTerminalSink();
   resizeObserver?.disconnect();
   disposeDataListener?.dispose();
   disposeResizeListener?.dispose();
@@ -229,26 +217,25 @@ function fitTerminal() {
   fitAddon.fit();
 }
 
-function syncTerminalBuffer(forceReset) {
-  if (!terminal || !activeSession.value) return;
+// 会话切换 / 清屏 / 重连时全量重建：回放有界缓冲快照，然后注册直写通道，
+// 后续输出事件由 sessionStore 直接写入 xterm，不经过响应式状态
+function resyncTerminal() {
+  if (!terminal) return;
 
-  const sessionId = activeSession.value.id;
-  const output = terminalText.value;
-  const sessionChanged = lastWrittenSessionId !== sessionId;
-  const outputCleared = output.length < lastWrittenLength;
+  sessionStore.detachTerminalSink();
+  terminal.reset();
 
-  if (forceReset || sessionChanged || outputCleared) {
-    terminal.reset();
-    terminal.write(output);
-    lastWrittenSessionId = sessionId;
-    lastWrittenLength = output.length;
-    return;
+  const session = activeSession.value;
+  if (!session) return;
+
+  const snapshot = sessionStore.getTerminalSnapshot(session.id);
+  if (snapshot) {
+    terminal.write(snapshot);
   }
 
-  if (output.length > lastWrittenLength) {
-    terminal.write(output.slice(lastWrittenLength));
-    lastWrittenLength = output.length;
-  }
+  sessionStore.attachTerminalSink(session.id, (data) => {
+    terminal?.write(data);
+  });
 }
 
 function startTerminal() {
@@ -277,6 +264,10 @@ function reconnectTerminal() {
   shouldSaveCredential.value = Boolean(activeSession.value?.credentialRef);
   pendingCredentialSave.value = null;
   sessionStore.reconnectActiveTerminal();
+}
+
+async function trustCurrentHostKey() {
+  await sessionStore.trustHostKeyAndReconnect();
 }
 
 function selectTheme(themeId) {
@@ -432,6 +423,31 @@ async function savePendingCredential() {
         <div v-else-if="activeSession?.status === 'connecting'" class="terminal-connecting">
           <UIcon name="i-lucide-loader-circle" class="spin-icon" />
           <span>{{ t("terminal.connecting") }}</span>
+        </div>
+
+        <div
+          v-else-if="activeSession?.status === 'error' && activeSession?.hostKeyChange"
+          class="terminal-hostkey-panel"
+        >
+          <div class="hostkey-head">
+            <UIcon name="i-lucide-shield-alert" />
+            <strong>{{ t("terminal.hostKeyChangedTitle") }}</strong>
+          </div>
+          <p>{{ t("terminal.hostKeyChangedDescription") }}</p>
+          <div class="hostkey-fingerprints">
+            <div>
+              <span>{{ t("terminal.hostKeyExpected") }}</span>
+              <code>{{ activeSession.hostKeyChange.expectedFingerprint }}</code>
+            </div>
+            <div>
+              <span>{{ t("terminal.hostKeyActual") }}</span>
+              <code>{{ activeSession.hostKeyChange.actualFingerprint }}</code>
+            </div>
+          </div>
+          <button type="button" class="primary-action" @click="trustCurrentHostKey">
+            <UIcon name="i-lucide-shield-check" />
+            <span>{{ t("terminal.trustHostKey") }}</span>
+          </button>
         </div>
 
         <div v-else-if="activeSession?.status === 'error'" class="terminal-connecting error">

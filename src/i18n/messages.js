@@ -144,6 +144,12 @@ export const messages = {
       saveCredentialDescription: "下次打开此连接时自动连接。",
       saveCredentialFailed: "保存凭据失败",
       savedCredentialMissing: "已保存的凭据不可用，请重新输入。",
+      hostKeyChangedTitle: "服务器指纹已变化",
+      hostKeyChangedDescription:
+        "该服务器的主机密钥与上次连接时不一致。如果服务器近期重装或更换过密钥，属于正常情况；否则可能存在中间人风险，请谨慎确认。",
+      hostKeyExpected: "已记录指纹",
+      hostKeyActual: "本次指纹",
+      trustHostKey: "信任新指纹并重连",
     },
     files: {
       fileTab: "文件",
@@ -428,6 +434,12 @@ export const messages = {
       saveCredentialDescription: "Open this connection automatically next time.",
       saveCredentialFailed: "Could not save credentials",
       savedCredentialMissing: "Saved credentials are unavailable. Enter them again.",
+      hostKeyChangedTitle: "Server fingerprint changed",
+      hostKeyChangedDescription:
+        "The server's host key differs from the one recorded on the last connection. This is expected if the server was recently reinstalled or rotated its keys; otherwise it could indicate a man-in-the-middle attack.",
+      hostKeyExpected: "Recorded fingerprint",
+      hostKeyActual: "Current fingerprint",
+      trustHostKey: "Trust new fingerprint and reconnect",
     },
     files: {
       fileTab: "Files",

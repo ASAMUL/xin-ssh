@@ -6,10 +6,14 @@ import {
   renameRemotePath,
   streamRemoteDirectory,
 } from "../services/workspaceApi";
+import {
+  DEFAULT_REMOTE_PATH,
+  normalizeRemotePath,
+  parentRemotePath,
+} from "../utils/remotePath";
 import { useSessionStore } from "./sessionStore";
 
 const DIRECTORY_EVENT_NAME = "directory-event";
-const DEFAULT_REMOTE_PATH = "/";
 const EMPTY_FILE_STATE = createFileState(DEFAULT_REMOTE_PATH);
 
 export const useFileExplorerStore = defineStore("fileExplorer", {
@@ -279,30 +283,4 @@ function pushHistory(state, path) {
   state.history = state.history.slice(0, state.historyIndex + 1);
   state.history.push(path);
   state.historyIndex = state.history.length - 1;
-}
-
-function normalizeRemotePath(path = DEFAULT_REMOTE_PATH) {
-  const cleanPath = String(path || DEFAULT_REMOTE_PATH).trim().replaceAll("\\", "/");
-  const parts = [];
-
-  for (const part of cleanPath.split("/")) {
-    if (!part || part === ".") continue;
-    if (part === "..") {
-      parts.pop();
-      continue;
-    }
-    parts.push(part);
-  }
-
-  return parts.length ? `/${parts.join("/")}` : DEFAULT_REMOTE_PATH;
-}
-
-function parentRemotePath(path) {
-  const currentPath = normalizeRemotePath(path);
-  if (currentPath === DEFAULT_REMOTE_PATH) return currentPath;
-
-  const parts = currentPath.split("/").filter(Boolean);
-  parts.pop();
-
-  return parts.length ? `/${parts.join("/")}` : DEFAULT_REMOTE_PATH;
 }

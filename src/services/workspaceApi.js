@@ -68,6 +68,10 @@ export function closeTerminalSession(sessionId) {
   return invoke("close_terminal_session", { sessionId });
 }
 
+export function trustHostKey(request) {
+  return invoke("trust_host_key", { request });
+}
+
 export function createRemoteDirectory(request) {
   return invoke("create_remote_directory", { request });
 }

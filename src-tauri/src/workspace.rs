@@ -17,7 +17,7 @@ const SETTINGS_FILE: &str = "settings.json";
 pub(crate) const CURRENT_SCHEMA_VERSION: u16 = 1;
 
 #[tauri::command]
-pub fn get_app_status(app: AppHandle) -> Result<AppStatus, String> {
+pub async fn get_app_status(app: AppHandle) -> Result<AppStatus, String> {
     let state = read_app_state(&app)?;
     let workspace_dir = state.and_then(|state_file| state_file.workspace_dir);
     let initialized = workspace_dir
@@ -32,7 +32,7 @@ pub fn get_app_status(app: AppHandle) -> Result<AppStatus, String> {
 }
 
 #[tauri::command]
-pub fn init_workspace(
+pub async fn init_workspace(
     app: AppHandle,
     workspace_dir: Option<String>,
 ) -> Result<WorkspaceSnapshot, String> {
@@ -47,7 +47,7 @@ pub fn init_workspace(
 }
 
 #[tauri::command]
-pub fn load_workspace(app: AppHandle) -> Result<Option<WorkspaceSnapshot>, String> {
+pub async fn load_workspace(app: AppHandle) -> Result<Option<WorkspaceSnapshot>, String> {
     let Some(state) = read_app_state(&app)? else {
         return Ok(None);
     };
@@ -65,7 +65,7 @@ pub fn load_workspace(app: AppHandle) -> Result<Option<WorkspaceSnapshot>, Strin
 }
 
 #[tauri::command]
-pub fn change_workspace_dir(
+pub async fn change_workspace_dir(
     app: AppHandle,
     workspace_dir: String,
 ) -> Result<WorkspaceSnapshot, String> {
@@ -82,7 +82,7 @@ pub fn change_workspace_dir(
 }
 
 #[tauri::command]
-pub fn save_profile(
+pub async fn save_profile(
     app: AppHandle,
     profile: ConnectionProfile,
 ) -> Result<WorkspaceSnapshot, String> {
@@ -106,7 +106,7 @@ pub fn save_profile(
 }
 
 #[tauri::command]
-pub fn delete_profile(app: AppHandle, profile_id: String) -> Result<WorkspaceSnapshot, String> {
+pub async fn delete_profile(app: AppHandle, profile_id: String) -> Result<WorkspaceSnapshot, String> {
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let deleted_at = now_stamp();
@@ -124,7 +124,7 @@ pub fn delete_profile(app: AppHandle, profile_id: String) -> Result<WorkspaceSna
 }
 
 #[tauri::command]
-pub fn save_group(app: AppHandle, group: ConnectionGroup) -> Result<WorkspaceSnapshot, String> {
+pub async fn save_group(app: AppHandle, group: ConnectionGroup) -> Result<WorkspaceSnapshot, String> {
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut next_group = group;
@@ -145,7 +145,7 @@ pub fn save_group(app: AppHandle, group: ConnectionGroup) -> Result<WorkspaceSna
 }
 
 #[tauri::command]
-pub fn delete_group(app: AppHandle, group_id: String) -> Result<WorkspaceSnapshot, String> {
+pub async fn delete_group(app: AppHandle, group_id: String) -> Result<WorkspaceSnapshot, String> {
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let deleted_at = now_stamp();
@@ -172,7 +172,7 @@ pub fn delete_group(app: AppHandle, group_id: String) -> Result<WorkspaceSnapsho
 }
 
 #[tauri::command]
-pub fn save_settings(
+pub async fn save_settings(
     app: AppHandle,
     settings: WorkspaceSettings,
 ) -> Result<WorkspaceSnapshot, String> {

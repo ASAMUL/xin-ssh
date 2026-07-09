@@ -28,3 +28,10 @@ russh = { version = "0.61.1", default-features = false, features = ["ring", "fla
 russh-sftp = "2.3.0"
 tokio = { version = "1.52.3", features = ["fs", "io-util", "macros", "sync", "time"] }
 ring = "0.17.14"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

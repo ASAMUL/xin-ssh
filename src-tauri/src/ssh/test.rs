@@ -29,6 +29,8 @@ async fn run_connection_test(
     let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
     let handler = ConnectionTestClient {
         server_key: Arc::clone(&server_key),
+        // 连接测试只上报指纹信息，不做 TOFU 拦截
+        expected_fingerprint: None,
     };
     let config = Arc::new(client::Config {
         inactivity_timeout: Some(Duration::from_secs(12)),

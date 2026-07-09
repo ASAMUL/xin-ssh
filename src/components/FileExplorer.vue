@@ -8,6 +8,7 @@ import { useFileExplorerStore } from "../stores/fileExplorerStore";
 import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
 import { useSessionStore } from "../stores/sessionStore";
+import { joinRemotePath, parentRemotePath } from "../utils/remotePath";
 
 const props = defineProps({
   activeSession: {
@@ -108,10 +109,10 @@ const virtualEntryRows = computed(() =>
     .filter((row) => row.entry),
 );
 const totalListHeight = computed(() => rowVirtualizer.value.getTotalSize());
-const selectedEntries = computed(() => {
-  const selectedPaths = new Set(fileState.value.selectedPaths);
-  return fileState.value.entries.filter((entry) => selectedPaths.has(entry.path));
-});
+const selectedPathSet = computed(() => new Set(fileState.value.selectedPaths));
+const selectedEntries = computed(() =>
+  fileState.value.entries.filter((entry) => selectedPathSet.value.has(entry.path)),
+);
 const canDownload = computed(() => canTransfer.value && selectedEntries.value.length > 0);
 const canRename = computed(() => canTransfer.value && selectedEntries.value.length === 1);
 const canDelete = computed(() => canTransfer.value && selectedEntries.value.length > 0);
@@ -420,7 +421,7 @@ function openEntry(entry) {
 }
 
 function isSelected(entry) {
-  return fileState.value.selectedPaths.includes(entry.path);
+  return selectedPathSet.value.has(entry.path);
 }
 
 async function chooseUploadFiles() {
@@ -823,30 +824,6 @@ function isTransferConflictError(error) {
   );
 }
 
-function joinRemotePath(base, child) {
-  const cleanBase = normalizeRemotePath(base);
-  const cleanChild = String(child || "").replace(/[\\/]/g, "_");
-
-  return cleanBase === "/" ? `/${cleanChild}` : `${cleanBase}/${cleanChild}`;
-}
-
-function normalizeRemotePath(path = "/") {
-  const parts = String(path || "/")
-    .trim()
-    .replaceAll("\\", "/")
-    .split("/")
-    .filter((part) => part && part !== ".");
-
-  return parts.length ? `/${parts.join("/")}` : "/";
-}
-
-function parentRemotePath(path) {
-  const parts = normalizeRemotePath(path).split("/").filter(Boolean);
-  parts.pop();
-
-  return parts.length ? `/${parts.join("/")}` : "/";
-}
-
 function contextEntryFromEvent(event) {
   const target = event.target instanceof HTMLElement ? event.target : null;
   const row = target?.closest("[data-file-path]");
@@ -874,16 +851,22 @@ function formatSize(entry) {
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
+// 虚拟滚动时每帧都要格式化可见行时间，缓存格式化器避免反复创建 Intl.DateTimeFormat
+const modifiedFormatter = computed(
+  () =>
+    new Intl.DateTimeFormat(locale.value, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+);
+
 function formatModified(entry) {
   if (!entry.modifiedAt) return "--";
 
-  return new Date(entry.modifiedAt * 1000).toLocaleString(locale.value, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return modifiedFormatter.value.format(new Date(entry.modifiedAt * 1000));
 }
 
 function fileTypeLabel(entry) {

@@ -42,7 +42,7 @@ struct EncryptedCredentialRecord {
 }
 
 #[tauri::command]
-pub fn save_credential(app: AppHandle, request: SaveCredentialRequest) -> Result<(), String> {
+pub async fn save_credential(app: AppHandle, request: SaveCredentialRequest) -> Result<(), String> {
     validate_credential_ref(&request.credential_ref)?;
     let workspace = active_workspace_dir(&app)?;
     let key = device_credential_key(&app)?;
@@ -67,7 +67,7 @@ pub fn save_credential(app: AppHandle, request: SaveCredentialRequest) -> Result
 }
 
 #[tauri::command]
-pub fn read_credential(app: AppHandle, request: ReadCredentialRequest) -> Result<Option<String>, String> {
+pub async fn read_credential(app: AppHandle, request: ReadCredentialRequest) -> Result<Option<String>, String> {
     validate_credential_ref(&request.credential_ref)?;
     validate_credential_kind(&request.kind)?;
 
@@ -86,7 +86,7 @@ pub fn read_credential(app: AppHandle, request: ReadCredentialRequest) -> Result
 }
 
 #[tauri::command]
-pub fn remove_credential(app: AppHandle, request: RemoveCredentialRequest) -> Result<(), String> {
+pub async fn remove_credential(app: AppHandle, request: RemoveCredentialRequest) -> Result<(), String> {
     validate_credential_ref(&request.credential_ref)?;
     for kind in &request.kinds {
         validate_credential_kind(kind)?;

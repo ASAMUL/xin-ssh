@@ -1,31 +1,66 @@
 import { defineStore } from "pinia";
+import { listen } from "@tauri-apps/api/event";
 import {
   closeTerminalSession,
   getRemoteSystemInfo,
   resizeTerminal,
   sendTerminalInput,
   startTerminalSession,
+  trustHostKey,
 } from "../services/workspaceApi";
 import { i18n } from "../i18n";
 import { useCredentialStore } from "./credentialStore";
 
+const TERMINAL_EVENT_NAME = "terminal-event";
 const INITIAL_TERMINAL_COLUMNS = 120;
 const INITIAL_TERMINAL_ROWS = 32;
 const NETWORK_HISTORY_LIMIT = 30;
 const MAX_AUTO_RECONNECT_ATTEMPTS = 1;
 const STABLE_CONNECTION_RESET_MS = 30_000;
 const TERMINAL_CLOSE_REASON_CLIENT = "client";
+const HOST_KEY_CHANGED_PREFIX = "HOST_KEY_CHANGED|";
+// 回放缓冲上限（字符数），与 xterm scrollback 8000 行同一量级；超限裁剪到低水位，避免频繁触发
+const TERMINAL_BUFFER_MAX_CHARS = 2_000_000;
+const TERMINAL_BUFFER_TRIM_TO_CHARS = 1_500_000;
+
+// 终端输出回放缓冲：大字符串不进 Pinia 响应式状态，按会话隔离，只用于切换 tab 时回放
+const terminalBuffers = new Map();
+// 活跃终端的直写通道：输出事件直接写入 xterm，绕过响应式系统
+let terminalSink = null;
 
 export const useSessionStore = defineStore("sessions", {
   state: () => ({
     sessions: [],
     activeSessionId: null,
+    unlistenTerminal: null,
   }),
   getters: {
     activeSession: (state) =>
       state.sessions.find((session) => session.id === state.activeSessionId) ?? null,
   },
   actions: {
+    async startListening() {
+      if (this.unlistenTerminal) return;
+
+      try {
+        this.unlistenTerminal = await listen(TERMINAL_EVENT_NAME, (event) => {
+          this.handleTerminalEvent(event.payload);
+        });
+      } catch (error) {
+        console.warn("[Xin Terminal] terminal event listener unavailable", error);
+      }
+    },
+    // 活跃终端注册直写函数后，输出事件直接写入 xterm；切换/卸载时解除
+    attachTerminalSink(sessionId, write) {
+      terminalSink =
+        sessionId && typeof write === "function" ? { sessionId, write } : null;
+    },
+    detachTerminalSink() {
+      terminalSink = null;
+    },
+    getTerminalSnapshot(sessionId) {
+      return readTerminalBuffer(sessionId);
+    },
     openProfileSession(profile) {
       const existingSession = this.sessions.find((session) => session.profileId === profile.id);
       if (existingSession) {
@@ -50,13 +85,14 @@ export const useSessionStore = defineStore("sessions", {
         remotePath: profile.defaultRemotePath || "/",
         status: "authRequired",
         error: null,
+        hostKeyChange: null,
         savedCredentialAutoStarted: false,
         currentAttemptId: null,
         autoReconnectAttempts: 0,
         connectedAt: null,
         lastDisconnectReason: null,
         createdAt: Date.now(),
-        terminalOutput: "",
+        terminalRevision: 0,
         terminalColumns: INITIAL_TERMINAL_COLUMNS,
         terminalRows: INITIAL_TERMINAL_ROWS,
         systemInfo: null,
@@ -86,6 +122,10 @@ export const useSessionStore = defineStore("sessions", {
       if (closingIndex < 0) return;
 
       await closeTerminalSession(sessionId).catch(() => {});
+      clearTerminalBuffer(sessionId);
+      if (terminalSink?.sessionId === sessionId) {
+        terminalSink = null;
+      }
       this.sessions.splice(closingIndex, 1);
       if (this.activeSessionId !== sessionId) return;
 
@@ -93,9 +133,11 @@ export const useSessionStore = defineStore("sessions", {
       this.activeSessionId = nextSession?.id ?? null;
     },
     clearActiveTerminal() {
-      if (!this.activeSession) return;
+      const session = this.activeSession;
+      if (!session) return;
 
-      this.activeSession.terminalOutput = "";
+      clearTerminalBuffer(session.id);
+      session.terminalRevision += 1;
     },
     requestCredentials(sessionId = this.activeSessionId) {
       const session = this.findSession(sessionId);
@@ -116,7 +158,8 @@ export const useSessionStore = defineStore("sessions", {
       const attemptId = createTerminalAttemptId(session.id);
       session.status = "connecting";
       session.error = null;
-      session.terminalOutput = "";
+      session.hostKeyChange = null;
+      resetTerminalBuffer(session);
       session.currentAttemptId = attemptId;
       session.connectedAt = null;
       session.lastDisconnectReason = null;
@@ -161,7 +204,8 @@ export const useSessionStore = defineStore("sessions", {
       const attemptId = createTerminalAttemptId(session.id);
       session.status = "connecting";
       session.error = null;
-      session.terminalOutput = "";
+      session.hostKeyChange = null;
+      resetTerminalBuffer(session);
       session.savedCredentialAutoStarted = true;
       session.currentAttemptId = attemptId;
       session.connectedAt = null;
@@ -256,13 +300,20 @@ export const useSessionStore = defineStore("sessions", {
       if (isStaleTerminalEvent(session, event)) return;
 
       if (event.kind === "output") {
-        session.terminalOutput += event.data ?? "";
+        const data = event.data ?? "";
+        if (!data) return;
+
+        appendTerminalChunk(session.id, data);
+        if (terminalSink?.sessionId === session.id) {
+          terminalSink.write(data);
+        }
         return;
       }
 
       if (event.kind === "connected") {
         session.status = "connected";
         session.error = null;
+        session.hostKeyChange = null;
         session.connectedAt = Date.now();
         session.lastDisconnectReason = null;
         return;
@@ -285,13 +336,38 @@ export const useSessionStore = defineStore("sessions", {
 
       if (event.kind === "error") {
         const wasConnected = session.status === "connected";
+        const rawError = event.error ?? event.data ?? "Terminal error";
         session.status = "error";
-        session.error = event.error ?? event.data ?? "Terminal error";
+        session.hostKeyChange = parseHostKeyChange(rawError);
+        session.error = session.hostKeyChange
+          ? i18n.global.t("terminal.hostKeyChangedTitle")
+          : rawError;
         session.lastDisconnectReason = event.reason ?? "error";
         if (wasConnected) {
           this.maybeAutoReconnect(session, session.lastDisconnectReason);
         }
       }
+    },
+    async trustHostKeyAndReconnect(sessionId = this.activeSessionId) {
+      const session = this.findSession(sessionId);
+      const hostKeyChange = session?.hostKeyChange;
+      if (!session || !hostKeyChange) return false;
+
+      try {
+        await trustHostKey({
+          host: session.host,
+          port: session.port,
+          fingerprint: hostKeyChange.actualFingerprint,
+          algorithm: null,
+        });
+      } catch (error) {
+        session.error = String(error);
+        return false;
+      }
+
+      session.hostKeyChange = null;
+      session.error = null;
+      return this.reconnectSession(session.id);
     },
     handleConnectionOperationError(sessionId, error) {
       const message = String(error);
@@ -363,6 +439,69 @@ export const useSessionStore = defineStore("sessions", {
     },
   },
 });
+
+function terminalBufferFor(sessionId) {
+  let buffer = terminalBuffers.get(sessionId);
+  if (!buffer) {
+    buffer = { chunks: [], totalLength: 0 };
+    terminalBuffers.set(sessionId, buffer);
+  }
+
+  return buffer;
+}
+
+function appendTerminalChunk(sessionId, data) {
+  const buffer = terminalBufferFor(sessionId);
+  buffer.chunks.push(data);
+  buffer.totalLength += data.length;
+
+  if (buffer.totalLength <= TERMINAL_BUFFER_MAX_CHARS) return;
+
+  while (
+    buffer.chunks.length > 1 &&
+    buffer.totalLength - buffer.chunks[0].length >= TERMINAL_BUFFER_TRIM_TO_CHARS
+  ) {
+    buffer.totalLength -= buffer.chunks[0].length;
+    buffer.chunks.shift();
+  }
+
+  // 裁剪后对齐到下一行行首，避免回放时首行落在残缺的转义序列中间
+  const firstChunk = buffer.chunks[0];
+  const newlineIndex = firstChunk.indexOf("\n");
+  if (newlineIndex >= 0 && newlineIndex + 1 < firstChunk.length) {
+    const alignedChunk = firstChunk.slice(newlineIndex + 1);
+    buffer.totalLength -= firstChunk.length - alignedChunk.length;
+    buffer.chunks[0] = alignedChunk;
+  }
+}
+
+function readTerminalBuffer(sessionId) {
+  const buffer = terminalBuffers.get(sessionId);
+  if (!buffer || !buffer.chunks.length) return "";
+
+  return buffer.chunks.join("");
+}
+
+function clearTerminalBuffer(sessionId) {
+  terminalBuffers.delete(sessionId);
+}
+
+function resetTerminalBuffer(session) {
+  clearTerminalBuffer(session.id);
+  session.terminalRevision += 1;
+}
+
+function parseHostKeyChange(error) {
+  const message = String(error || "");
+  if (!message.startsWith(HOST_KEY_CHANGED_PREFIX)) return null;
+
+  const [expectedFingerprint, actualFingerprint] = message
+    .slice(HOST_KEY_CHANGED_PREFIX.length)
+    .split("|");
+  if (!expectedFingerprint || !actualFingerprint) return null;
+
+  return { expectedFingerprint, actualFingerprint };
+}
 
 function syncSessionFromProfile(session, profile) {
   session.name = profile.name;

@@ -16,6 +16,8 @@ pub(crate) struct ServerKeySnapshot {
 
 pub(crate) struct ConnectionTestClient {
     pub(crate) server_key: Arc<Mutex<ServerKeySnapshot>>,
+    // Some(fingerprint) 时启用 TOFU 校验：指纹不一致直接拒绝连接（None = 首次连接，记录后信任）
+    pub(crate) expected_fingerprint: Option<String>,
 }
 
 impl client::Handler for ConnectionTestClient {
@@ -25,13 +27,17 @@ impl client::Handler for ConnectionTestClient {
         &mut self,
         server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
+        let fingerprint = server_public_key
+            .fingerprint(ssh_key::HashAlg::Sha256)
+            .to_string();
+
         if let Ok(mut snapshot) = self.server_key.lock() {
-            snapshot.fingerprint = Some(
-                server_public_key
-                    .fingerprint(ssh_key::HashAlg::Sha256)
-                    .to_string(),
-            );
+            snapshot.fingerprint = Some(fingerprint.clone());
             snapshot.algorithm = Some(server_public_key.algorithm().to_string());
+        }
+
+        if let Some(expected) = &self.expected_fingerprint {
+            return Ok(&fingerprint == expected);
         }
 
         Ok(true)

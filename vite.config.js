@@ -18,6 +18,22 @@ export default defineConfig(async () => ({
   }),
   ],
 
+  // 把体积大的三方库拆出主 chunk，避免 ~1MB 单文件（xterm / UI 库 / 其余依赖各一份）
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("@xterm")) return "xterm";
+          if (id.includes("@nuxt/ui") || id.includes("reka-ui") || id.includes("tailwind")) {
+            return "ui";
+          }
+          return "vendor";
+        },
+      },
+    },
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

@@ -4,7 +4,7 @@ use russh::{client, ChannelMsg, Disconnect};
 use russh_sftp::client::SftpSession;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{mpsc, Mutex as AsyncMutex};
-use tokio::time::Duration;
+use tokio::time::{Duration, Instant};
 
 use crate::models::{
     AuthMethod, TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest,
@@ -19,6 +19,7 @@ use crate::sftp::transfer::{
     remove_transfer_cancellation, run_download_transfer, run_upload_transfer,
 };
 use crate::ssh::client::{authenticate_session, ConnectionTestClient, ServerKeySnapshot};
+use crate::ssh::known_hosts;
 use crate::ssh::registry::{TerminalControl, TerminalRegistry};
 use crate::system_info::collect_system_info_on_session;
 use crate::util::{connection_error, shell_quote};
@@ -28,6 +29,9 @@ const SSH_KEEPALIVE_INTERVAL_SECS: u64 = 30;
 const TERMINAL_CLOSE_REASON_CLIENT: &str = "client";
 const TERMINAL_CLOSE_REASON_REMOTE: &str = "remote";
 const TERMINAL_CLOSE_REASON_ERROR: &str = "error";
+// 输出合批：攒到阈值立即发，否则最多等一个 flush 间隔，避免大流量输出打爆 IPC
+const TERMINAL_FLUSH_INTERVAL_MS: u64 = 8;
+const TERMINAL_FLUSH_THRESHOLD_BYTES: usize = 128 * 1024;
 
 #[tauri::command]
 pub async fn start_terminal_session(
@@ -115,21 +119,54 @@ async fn run_terminal_shell(
     let session_id = request.session_id.clone();
     let attempt_id = request.attempt_id.clone();
     let mut close_reason = TERMINAL_CLOSE_REASON_REMOTE;
+    let host = request.host.trim().to_string();
+    let username = request.username.trim().to_string();
+    // TOFU：已有记录则校验指纹，首次连接成功后记录
+    let expected_fingerprint = known_hosts::lookup_fingerprint(&app, &host, request.port)?;
     let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
     let handler = ConnectionTestClient {
         server_key: Arc::clone(&server_key),
+        expected_fingerprint: expected_fingerprint.clone(),
     };
     let config = Arc::new(client::Config {
         inactivity_timeout: None,
         keepalive_interval: Some(Duration::from_secs(SSH_KEEPALIVE_INTERVAL_SECS)),
         ..Default::default()
     });
-    let host = request.host.trim().to_string();
-    let username = request.username.trim().to_string();
 
-    let mut session = client::connect(config, (host.as_str(), request.port), handler)
-        .await
-        .map_err(connection_error)?;
+    let mut session = match client::connect(config, (host.as_str(), request.port), handler).await {
+        Ok(session) => session,
+        Err(error) => {
+            let snapshot = server_key
+                .lock()
+                .map(|snapshot| snapshot.clone())
+                .unwrap_or_default();
+
+            if let (Some(expected), Some(actual)) = (&expected_fingerprint, &snapshot.fingerprint) {
+                if expected != actual {
+                    return Err(known_hosts::host_key_changed_error(expected, actual));
+                }
+            }
+
+            return Err(connection_error(error));
+        }
+    };
+
+    if expected_fingerprint.is_none() {
+        let snapshot = server_key
+            .lock()
+            .map(|snapshot| snapshot.clone())
+            .unwrap_or_default();
+        if let Some(fingerprint) = &snapshot.fingerprint {
+            let _ = known_hosts::record_host_key(
+                &app,
+                &host,
+                request.port,
+                fingerprint,
+                snapshot.algorithm.as_deref(),
+            );
+        }
+    }
 
     authenticate_session(
         &mut session,
@@ -184,11 +221,21 @@ async fn run_terminal_shell(
             .map_err(connection_error)?;
     }
 
-    // 复用同一个 SFTP 子通道处理目录小操作，出错时丢弃下次重建
-    let mut cached_sftp: Option<SftpSession> = None;
+    // 复用同一个 SFTP 子通道处理目录小操作，出错时丢弃下次重建；
+    // 操作在独立任务里执行（共享缓存加锁），慢操作（如递归删除）不会阻塞终端事件循环
+    let cached_sftp: Arc<AsyncMutex<Option<SftpSession>>> = Arc::new(AsyncMutex::new(None));
     let mut output_buffer: Vec<u8> = Vec::new();
+    let mut flush_deadline: Option<Instant> = None;
 
     loop {
+        // Option<Instant> 是 Copy，async move 拿到的是快照；每轮循环按最新 deadline 重建
+        let flush_timer = async move {
+            match flush_deadline {
+                Some(deadline) => tokio::time::sleep_until(deadline).await,
+                None => std::future::pending::<()>().await,
+            }
+        };
+
         tokio::select! {
             Some(control) = control_receiver.recv() => {
                 match control {
@@ -239,42 +286,57 @@ async fn run_terminal_shell(
                         });
                     }
                     TerminalControl::CreateDirectory { path, responder } => {
-                        let result = match ensure_sftp_session(&mut cached_sftp, &session).await {
-                            Ok(sftp) => create_directory_on_session(sftp, &path).await,
-                            Err(error) => Err(error),
-                        };
-                        if result.is_err() {
-                            cached_sftp = None;
-                        }
-                        let _ = responder.send(result);
+                        let session = Arc::clone(&session);
+                        let cached_sftp = Arc::clone(&cached_sftp);
+                        tauri::async_runtime::spawn(async move {
+                            let mut cached = cached_sftp.lock().await;
+                            let result = match ensure_sftp_session(&mut cached, &session).await {
+                                Ok(sftp) => create_directory_on_session(sftp, &path).await,
+                                Err(error) => Err(error),
+                            };
+                            if result.is_err() {
+                                *cached = None;
+                            }
+                            let _ = responder.send(result);
+                        });
                     }
                     TerminalControl::RenamePath {
                         from_path,
                         to_path,
                         responder,
                     } => {
-                        let result = match ensure_sftp_session(&mut cached_sftp, &session).await {
-                            Ok(sftp) => rename_path_on_session(sftp, &from_path, &to_path).await,
-                            Err(error) => Err(error),
-                        };
-                        if result.is_err() {
-                            cached_sftp = None;
-                        }
-                        let _ = responder.send(result);
+                        let session = Arc::clone(&session);
+                        let cached_sftp = Arc::clone(&cached_sftp);
+                        tauri::async_runtime::spawn(async move {
+                            let mut cached = cached_sftp.lock().await;
+                            let result = match ensure_sftp_session(&mut cached, &session).await {
+                                Ok(sftp) => rename_path_on_session(sftp, &from_path, &to_path).await,
+                                Err(error) => Err(error),
+                            };
+                            if result.is_err() {
+                                *cached = None;
+                            }
+                            let _ = responder.send(result);
+                        });
                     }
                     TerminalControl::DeletePaths {
                         entries,
                         recursive,
                         responder,
                     } => {
-                        let result = match ensure_sftp_session(&mut cached_sftp, &session).await {
-                            Ok(sftp) => delete_paths_on_session(sftp, &entries, recursive).await,
-                            Err(error) => Err(error),
-                        };
-                        if result.is_err() {
-                            cached_sftp = None;
-                        }
-                        let _ = responder.send(result);
+                        let session = Arc::clone(&session);
+                        let cached_sftp = Arc::clone(&cached_sftp);
+                        tauri::async_runtime::spawn(async move {
+                            let mut cached = cached_sftp.lock().await;
+                            let result = match ensure_sftp_session(&mut cached, &session).await {
+                                Ok(sftp) => delete_paths_on_session(sftp, &entries, recursive).await,
+                                Err(error) => Err(error),
+                            };
+                            if result.is_err() {
+                                *cached = None;
+                            }
+                            let _ = responder.send(result);
+                        });
                     }
                     TerminalControl::StartUpload {
                         request,
@@ -317,21 +379,18 @@ async fn run_terminal_shell(
                 match message {
                     ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. } => {
                         output_buffer.extend_from_slice(&data);
-                        let keep = incomplete_utf8_suffix_len(&output_buffer);
-                        let emit_len = output_buffer.len() - keep;
 
-                        if emit_len > 0 {
-                            let text =
-                                String::from_utf8_lossy(&output_buffer[..emit_len]).to_string();
-                            output_buffer.drain(..emit_len);
-                            emit_terminal_event(
+                        if output_buffer.len() >= TERMINAL_FLUSH_THRESHOLD_BYTES {
+                            flush_terminal_output(
                                 &app,
                                 &session_id,
                                 attempt_id.as_deref(),
-                                "output",
-                                Some(text),
-                                None,
-                                None,
+                                &mut output_buffer,
+                            );
+                            flush_deadline = None;
+                        } else if flush_deadline.is_none() {
+                            flush_deadline = Some(
+                                Instant::now() + Duration::from_millis(TERMINAL_FLUSH_INTERVAL_MS),
                             );
                         }
                     }
@@ -340,18 +399,22 @@ async fn run_terminal_shell(
                         break;
                     }
                     ChannelMsg::ExitStatus { exit_status } => {
-                        emit_terminal_event(
-                            &app,
-                            &session_id,
-                            attempt_id.as_deref(),
-                            "output",
-                            Some(format!("\r\n[exit status: {exit_status}]\r\n")),
-                            None,
-                            None,
+                        // 追加进输出缓冲，保持与真实输出的先后顺序
+                        output_buffer.extend_from_slice(
+                            format!("\r\n[exit status: {exit_status}]\r\n").as_bytes(),
                         );
+                        if flush_deadline.is_none() {
+                            flush_deadline = Some(
+                                Instant::now() + Duration::from_millis(TERMINAL_FLUSH_INTERVAL_MS),
+                            );
+                        }
                     }
                     _ => {}
                 }
+            }
+            _ = flush_timer => {
+                flush_terminal_output(&app, &session_id, attempt_id.as_deref(), &mut output_buffer);
+                flush_deadline = None;
             }
         }
     }
@@ -368,7 +431,7 @@ async fn run_terminal_shell(
         );
     }
 
-    if let Some(sftp) = cached_sftp.take() {
+    if let Some(sftp) = cached_sftp.try_lock().ok().and_then(|mut cached| cached.take()) {
         let _ = sftp.close().await;
     }
 
@@ -426,6 +489,24 @@ fn validate_terminal_start_request(request: &TerminalStartRequest) -> Result<(),
     }
 
     Ok(())
+}
+
+// 发出缓冲中的完整 UTF-8 前缀，结尾的不完整多字节序列留待下一次 flush
+fn flush_terminal_output(
+    app: &AppHandle,
+    session_id: &str,
+    attempt_id: Option<&str>,
+    buffer: &mut Vec<u8>,
+) {
+    let keep = incomplete_utf8_suffix_len(buffer);
+    let emit_len = buffer.len() - keep;
+    if emit_len == 0 {
+        return;
+    }
+
+    let text = String::from_utf8_lossy(&buffer[..emit_len]).to_string();
+    buffer.drain(..emit_len);
+    emit_terminal_event(app, session_id, attempt_id, "output", Some(text), None, None);
 }
 
 fn emit_terminal_event(

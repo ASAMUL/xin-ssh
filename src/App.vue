@@ -6,12 +6,14 @@ import WindowChrome from "./components/AppShell/WindowChrome.vue";
 import WorkspaceShell from "./components/AppShell/WorkspaceShell.vue";
 import { useAppStore } from "./stores/appStore";
 import { useFileExplorerStore } from "./stores/fileExplorerStore";
+import { useSessionStore } from "./stores/sessionStore";
 import { useTransferStore } from "./stores/transferStore";
 import { useUiStore } from "./stores/uiStore";
 
 const { t } = useI18n();
 const appStore = useAppStore();
 const fileExplorerStore = useFileExplorerStore();
+const sessionStore = useSessionStore();
 const transferStore = useTransferStore();
 const uiStore = useUiStore();
 
@@ -19,6 +21,8 @@ const visibleError = computed(() => appStore.error || uiStore.error);
 
 onMounted(() => {
   appStore.bootstrap();
+  // 终端事件监听挂在应用层：切到连接中心（终端组件卸载）时也不丢会话状态事件
+  sessionStore.startListening();
   transferStore.startListening();
   fileExplorerStore.startListening();
 });

@@ -132,6 +132,15 @@ pub struct TerminalInputRequest {
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TrustHostKeyRequest {
+    pub host: String,
+    pub port: u16,
+    pub fingerprint: String,
+    pub algorithm: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TerminalResizeRequest {
     pub session_id: String,
     pub columns: u32,

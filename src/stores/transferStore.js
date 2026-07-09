@@ -10,6 +10,8 @@ import {
 const TRANSFER_EVENT_NAME = "transfer-event";
 const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
 const ACTIVE_STATUSES = new Set(["queued", "running", "canceling"]);
+// 已结束任务保留的条数上限，超出自动清理最旧的，避免长会话任务无限堆积
+const MAX_FINISHED_TASKS = 20;
 
 export const useTransferStore = defineStore("transfers", {
   state: () => ({
@@ -243,6 +245,24 @@ export const useTransferStore = defineStore("transfers", {
       } else {
         this.tasks.unshift(normalizedTask);
       }
+
+      this.pruneFinishedTasks();
+    },
+    pruneFinishedTasks() {
+      const finishedCount = this.tasks.reduce(
+        (count, task) => count + (FINISHED_STATUSES.has(task.status) ? 1 : 0),
+        0,
+      );
+      if (finishedCount <= MAX_FINISHED_TASKS) return;
+
+      // 任务按新到旧排列，保留最新的已结束任务
+      let kept = 0;
+      this.tasks = this.tasks.filter((task) => {
+        if (!FINISHED_STATUSES.has(task.status)) return true;
+
+        kept += 1;
+        return kept <= MAX_FINISHED_TASKS;
+      });
     },
     failTask(taskId, error) {
       const task = this.findTask(taskId);

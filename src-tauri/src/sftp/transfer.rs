@@ -295,7 +295,8 @@ async fn upload_file(
     remote_file.shutdown().await.map_err(error_message)?;
     with_progress(progress, |p| {
         p.files_done += 1;
-        p.emit(app, "progress", Some(file.remote_path.clone()), true);
+        // 不强制发送：海量小文件时靠节流合并，最终计数由 completed 事件兜底
+        p.emit(app, "progress", Some(file.remote_path.clone()), false);
     })?;
     Ok(())
 }
@@ -341,7 +342,7 @@ async fn download_file(
     remote_file.shutdown().await.map_err(error_message)?;
     with_progress(progress, |p| {
         p.files_done += 1;
-        p.emit(app, "progress", Some(file.remote_path.clone()), true);
+        p.emit(app, "progress", Some(file.remote_path.clone()), false);
     })?;
     Ok(())
 }
@@ -854,25 +855,16 @@ async fn ensure_remote_directory(sftp: &SftpSession, path: &str) -> Result<(), S
         return Ok(());
     }
 
-    if sftp
-        .try_exists(path.to_string())
-        .await
-        .map_err(connection_error)?
-    {
-        let metadata = sftp
-            .metadata(path.to_string())
-            .await
-            .map_err(connection_error)?;
-        if metadata.file_type().is_dir() {
-            return Ok(());
-        }
+    // 先尝试直接创建（新目录只需 1 次往返），失败再区分“已存在”与真实错误
+    let Err(create_error) = sftp.create_dir(path.to_string()).await else {
+        return Ok(());
+    };
 
-        return Err(format!("Remote path is not a directory: {path}"));
+    match sftp.metadata(path.to_string()).await {
+        Ok(metadata) if metadata.file_type().is_dir() => Ok(()),
+        Ok(_) => Err(format!("Remote path is not a directory: {path}")),
+        Err(_) => Err(connection_error(create_error)),
     }
-
-    sftp.create_dir(path.to_string())
-        .await
-        .map_err(connection_error)
 }
 
 struct TransferProgress {

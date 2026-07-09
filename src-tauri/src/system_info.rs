@@ -95,7 +95,8 @@ async fn execute_remote_command(
             ChannelMsg::ExitStatus { exit_status: status } => {
                 exit_status = Some(status);
             }
-            ChannelMsg::Eof | ChannelMsg::Close => {
+            // Eof 之后可能还有 ExitStatus/Close，等通道真正关闭再退出
+            ChannelMsg::Close => {
                 break;
             }
             _ => {}
@@ -110,7 +111,8 @@ async fn execute_remote_command(
 }
 
 fn remote_system_info_command() -> String {
-    let script = r#"MARK="__XIN_SYSTEM_INFO__"
+    let script = r#"PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+MARK="__XIN_SYSTEM_INFO__"
 section() { printf '\n%s %s\n' "$MARK" "$1"; }
 
 section HOST
@@ -162,7 +164,8 @@ section PS
 } | awk '!seen[$1]++' | head -n 10 || true
 "#;
 
-    format!("sh -lc {}", shell_quote(script))
+    // 非 login shell：避免每次采样都 source 远端 profile（nvm/conda 等会显著拖慢），PATH 在脚本内自补
+    format!("sh -c {}", shell_quote(script))
 }
 
 fn parse_system_snapshot(session_id: &str, output: &str) -> RemoteSystemSnapshot {
