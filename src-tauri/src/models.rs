@@ -22,6 +22,18 @@ pub struct WorkspaceSettings {
     pub terminal_font_family: String,
     #[serde(default = "default_monitor_refresh_seconds")]
     pub monitor_refresh_seconds: u64,
+    #[serde(default = "default_terminal_theme")]
+    pub terminal_theme: String,
+    #[serde(default = "default_terminal_font_size")]
+    pub terminal_font_size: u16,
+}
+
+pub fn default_terminal_theme() -> String {
+    "aurora".to_string()
+}
+
+pub fn default_terminal_font_size() -> u16 {
+    14
 }
 
 #[derive(Clone, Serialize, Deserialize)]

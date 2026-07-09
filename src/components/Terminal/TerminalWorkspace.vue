@@ -8,13 +8,23 @@ import { useI18n } from "vue-i18n";
 import FileExplorer from "../FileExplorer.vue";
 import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useCredentialStore } from "../../stores/credentialStore";
+import {
+  TERMINAL_FONTS,
+  TERMINAL_FONT_SIZES,
+  TERMINAL_THEMES,
+  TERMINAL_THEME_GROUPS,
+  getTerminalTheme,
+  resolveTerminalFontStack,
+} from "../../config/terminalThemes";
 
 const TERMINAL_EVENT_NAME = "terminal-event";
 const { t } = useI18n();
 const profileStore = useProfileStore();
 const sessionStore = useSessionStore();
+const settingsStore = useSettingsStore();
 const uiStore = useUiStore();
 const credentialStore = useCredentialStore();
 const terminalMount = ref(null);
@@ -35,6 +45,39 @@ let lastWrittenSessionId = null;
 let lastWrittenLength = 0;
 
 const activeSession = computed(() => sessionStore.activeSession);
+const isAppearanceOpen = ref(false);
+const hoveredThemeId = ref(null);
+const activeTheme = computed(() => getTerminalTheme(settingsStore.terminalTheme));
+// hovering a card previews the theme live; leaving the panel reverts it
+const displayTheme = computed(() =>
+  hoveredThemeId.value ? getTerminalTheme(hoveredThemeId.value) : activeTheme.value,
+);
+const terminalFontStack = computed(() =>
+  resolveTerminalFontStack(settingsStore.terminalFontFamily),
+);
+const themeGroups = computed(() =>
+  TERMINAL_THEME_GROUPS.map((group) => ({
+    id: group,
+    themes: TERMINAL_THEMES.filter((theme) => theme.group === group),
+  })),
+);
+const themeStyleVars = computed(() => {
+  const ui = displayTheme.value.ui;
+  return {
+    "--term-panel-bg": ui.panelBg,
+    "--term-panel-border": ui.panelBorder,
+    "--term-toolbar-bg": ui.toolbarBg,
+    "--term-divider": ui.divider,
+    "--term-screen-bg": ui.screenBg,
+    "--term-glow": ui.glow,
+    "--term-accent": displayTheme.value.accent,
+    "--term-text": ui.text,
+    "--term-text-muted": ui.textMuted,
+    "--term-soft": ui.soft,
+    "--term-scrollbar-thumb": ui.scrollbarThumb,
+    "--term-scrollbar-edge": ui.scrollbarEdge,
+  };
+});
 const isPasswordAuth = computed(() => activeSession.value?.authMethod === "password");
 const isPrivateKeyAuth = computed(() => activeSession.value?.authMethod === "privateKey");
 const needsCredentials = computed(() => activeSession.value?.status === "authRequired");
@@ -90,41 +133,40 @@ watch(
   },
 );
 
+watch(displayTheme, (theme) => {
+  if (!terminal) return;
+
+  terminal.options.theme = { ...theme.xterm };
+});
+
+watch(terminalFontStack, (stack) => {
+  if (!terminal) return;
+
+  terminal.options.fontFamily = stack;
+  refitAfterFontLoad();
+});
+
+watch(
+  () => settingsStore.terminalFontSize,
+  (size) => {
+    if (!terminal) return;
+
+    terminal.options.fontSize = size;
+    refitAfterFontLoad();
+  },
+);
+
 onMounted(async () => {
   terminal = new Terminal({
     allowProposedApi: false,
+    allowTransparency: true,
     cursorBlink: true,
-    cursorStyle: "block",
-    fontFamily: '"Cascadia Code", "SFMono-Regular", Consolas, monospace',
-    fontSize: 14,
+    cursorStyle: "bar",
+    fontFamily: terminalFontStack.value,
+    fontSize: settingsStore.terminalFontSize,
     lineHeight: 1.18,
     scrollback: 8000,
-
-    theme: {
-      background: '#1e1e2e', // 深邃紫灰背景
-      foreground: '#cdd6f4', // 亮白文字
-      cursor: '#f38ba8',     // 骚粉色光标
-      cursorAccent: '#1e1e2e',
-      selectionBackground: '#585b70',
-      black: '#45475a',
-      red: '#f38ba8',
-      green: '#a6e3a1',
-      yellow: '#f9e2af',
-      blue: '#89b4fa',
-      magenta: '#f5c2e7',
-      cyan: '#94e2d5',
-      white: '#bac2de',
-      brightBlack: '#585b70',
-      brightRed: '#f38ba8',
-      brightGreen: '#a6e3a1',
-      brightYellow: '#f9e2af',
-      brightBlue: '#89b4fa',
-      brightMagenta: '#f5c2e7',
-      brightCyan: '#94e2d5',
-      brightWhite: '#a6adc8'
-    },
-    cursorBlink: true, // 光标闪烁
-    cursorStyle: 'bar' // 光标样式：block, underline, bar
+    theme: { ...displayTheme.value.xterm },
   });
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
@@ -150,6 +192,8 @@ onMounted(async () => {
   syncTerminalBuffer(true);
   fitTerminal();
   focusActiveInput();
+  // webfont metrics may land after the terminal measured itself
+  document.fonts?.ready?.then(() => fitTerminal());
 });
 
 onBeforeUnmount(() => {
@@ -235,6 +279,46 @@ function reconnectTerminal() {
   sessionStore.reconnectActiveTerminal();
 }
 
+function selectTheme(themeId) {
+  applyAppearance({ terminalTheme: themeId });
+}
+
+function selectFont(fontName) {
+  applyAppearance({ terminalFontFamily: fontName });
+}
+
+function selectFontSize(fontSize) {
+  applyAppearance({ terminalFontSize: fontSize });
+}
+
+function applyAppearance(partial) {
+  if (settingsStore.settings) {
+    // optimistic: re-skin immediately, persistence follows
+    Object.assign(settingsStore.settings, partial);
+    settingsStore.patchSettings(partial).catch((error) => {
+      uiStore.setError(String(error));
+    });
+    return;
+  }
+
+  settingsStore.patchSettings(partial);
+}
+
+function toggleAppearance() {
+  isAppearanceOpen.value = !isAppearanceOpen.value;
+  hoveredThemeId.value = null;
+}
+
+function refitAfterFontLoad() {
+  fitTerminal();
+  document.fonts?.ready?.then(() => fitTerminal());
+}
+
+function themePreviewColors(theme) {
+  const { red, yellow, green, cyan, blue, magenta } = theme.xterm;
+  return [red, yellow, green, cyan, blue, magenta];
+}
+
 function clearCredentialInputs() {
   credentials.password = "";
   credentials.passphrase = "";
@@ -274,7 +358,7 @@ async function savePendingCredential() {
 
 <template>
   <section class="terminal-workspace">
-    <section class="terminal-panel-top">
+    <section class="terminal-panel-top" :style="themeStyleVars">
       <header class="terminal-panel-toolbar">
         <div class="terminal-title-block">
           <span class="terminal-live-dot" :class="activeSession?.status"></span>
@@ -289,6 +373,15 @@ async function savePendingCredential() {
 
         <div class="terminal-window-actions">
           <span class="terminal-state-label">{{ terminalStatusText }}</span>
+          <button
+            type="button"
+            :class="{ active: isAppearanceOpen }"
+            :aria-label="t('terminal.appearance')"
+            :title="t('terminal.appearance')"
+            @click="toggleAppearance"
+          >
+            <UIcon name="i-lucide-palette" />
+          </button>
           <button type="button" :aria-label="t('terminal.clear')" @click="sessionStore.clearActiveTerminal">
             <UIcon name="i-lucide-eraser" />
           </button>
@@ -346,6 +439,99 @@ async function savePendingCredential() {
           <span>{{ activeSession.error }}</span>
         </div>
       </div>
+
+      <Transition name="appearance-slide">
+        <aside
+          v-if="isAppearanceOpen"
+          class="terminal-appearance"
+          @mouseleave="hoveredThemeId = null"
+        >
+          <header class="appearance-head">
+            <strong>{{ t("terminal.appearance") }}</strong>
+            <button type="button" :aria-label="t('settings.close')" @click="toggleAppearance">
+              <UIcon name="i-lucide-x" />
+            </button>
+          </header>
+
+          <div class="appearance-body">
+            <section
+              v-for="group in themeGroups"
+              :key="group.id"
+              class="appearance-section"
+            >
+              <h4>{{ t(`terminal.themeGroup.${group.id}`) }}</h4>
+
+              <div class="theme-grid">
+                <button
+                  v-for="theme in group.themes"
+                  :key="theme.id"
+                  type="button"
+                  class="theme-card"
+                  :class="{ active: theme.id === activeTheme.id }"
+                  :style="{ '--card-accent': theme.accent }"
+                  @mouseenter="hoveredThemeId = theme.id"
+                  @focus="hoveredThemeId = theme.id"
+                  @click="selectTheme(theme.id)"
+                >
+                  <span class="theme-swatch" :style="{ background: theme.preview }">
+                    <span class="swatch-line">
+                      <i :style="{ color: theme.xterm.green }">➜</i>
+                      <em :style="{ color: theme.xterm.foreground }">~ ssh</em>
+                      <b :style="{ background: theme.xterm.cursor }"></b>
+                    </span>
+                    <span class="swatch-dots">
+                      <i
+                        v-for="(color, index) in themePreviewColors(theme)"
+                        :key="index"
+                        :style="{ background: color }"
+                      ></i>
+                    </span>
+                  </span>
+                  <span class="theme-card-name">
+                    <span>{{ theme.name }}</span>
+                    <UIcon v-if="theme.id === activeTheme.id" name="i-lucide-check" />
+                  </span>
+                </button>
+              </div>
+            </section>
+
+            <section class="appearance-section">
+              <h4>{{ t("terminal.font") }}</h4>
+
+              <div class="font-list">
+                <button
+                  v-for="font in TERMINAL_FONTS"
+                  :key="font.name"
+                  type="button"
+                  class="font-option"
+                  :class="{ active: font.name === settingsStore.terminalFontFamily }"
+                  @click="selectFont(font.name)"
+                >
+                  <span class="font-sample" :style="{ fontFamily: font.stack }">Aa =&gt; {}</span>
+                  <span class="font-name">{{ font.name }}</span>
+                  <UIcon v-if="font.name === settingsStore.terminalFontFamily" name="i-lucide-check" />
+                </button>
+              </div>
+            </section>
+
+            <section class="appearance-section">
+              <h4>{{ t("terminal.fontSize") }}</h4>
+
+              <div class="size-row">
+                <button
+                  v-for="size in TERMINAL_FONT_SIZES"
+                  :key="size"
+                  type="button"
+                  :class="{ active: size === settingsStore.terminalFontSize }"
+                  @click="selectFontSize(size)"
+                >
+                  {{ size }}
+                </button>
+              </div>
+            </section>
+          </div>
+        </aside>
+      </Transition>
     </section>
 
     <FileExplorer :active-session="activeSession" />
@@ -353,3 +539,4 @@ async function savePendingCredential() {
 </template>
 
 <style scoped src="../../assets/css/terminal-workspace.css"></style>
+<style scoped src="../../assets/css/terminal-appearance.css"></style>

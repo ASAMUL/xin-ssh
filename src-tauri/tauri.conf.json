@@ -18,7 +18,11 @@
         "minWidth": 1000,
         "minHeight": 720,
         "decorations": false,
-        "resizable": true
+        "resizable": true,
+        "transparent": true,
+        "windowEffects": {
+          "effects": ["mica", "acrylic", "blur"]
+        }
       }
     ],
     "security": {

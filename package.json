@@ -10,6 +10,10 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/noto-sans-sc": "^5.2.10",
+    "@fontsource/fira-code": "^5.2.7",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@nuxt/ui": "^4.7.1",
     "@tanstack/vue-virtual": "^3.13.31",
     "@tauri-apps/api": "^2",

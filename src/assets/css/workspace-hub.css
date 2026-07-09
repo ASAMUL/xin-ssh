@@ -34,9 +34,9 @@
 
 .connection-hub-title span {
   color: #0f172a;
-  font-size: 26px;
-  font-weight: 850;
-  letter-spacing: 0;
+  font-size: 25px;
+  font-weight: 720;
+  letter-spacing: -0.2px;
 }
 
 .connection-hub-title small,
@@ -53,18 +53,16 @@
   display: grid;
   grid-template-columns: minmax(240px, 320px) auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   justify-self: end;
-  padding: 5px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(246, 248, 252, 0.66)),
-    rgba(255, 255, 255, 0.68);
+  padding: 6px;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: 16px;
+  background: var(--xin-glass);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.92) inset,
-    0 12px 30px rgba(15, 23, 42, 0.045);
-  backdrop-filter: blur(22px);
+    var(--xin-specular),
+    0 12px 30px rgba(20, 34, 62, 0.06);
+  backdrop-filter: var(--xin-glass-blur);
 }
 
 .connection-hub-search {
@@ -73,14 +71,14 @@
 
 .connection-hub-search :deep(input) {
   height: 38px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .connection-hub-actions :deep(button) {
   min-height: 38px;
-  border-radius: 8px;
-  font-weight: 760;
+  border-radius: 11px;
+  font-weight: 640;
 }
 
 .connection-hub-body {
@@ -119,14 +117,15 @@
   width: max-content;
   max-width: 100%;
   min-height: 28px;
-  padding: 0 11px;
+  padding: 0 12px;
   color: #334155;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--xin-glass-border);
+  border-radius: 999px;
+  background: var(--xin-glass);
   font-size: 12px;
-  font-weight: 780;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.86) inset;
+  font-weight: 650;
+  box-shadow: var(--xin-specular);
+  backdrop-filter: var(--xin-glass-blur);
 }
 
 .connection-hub-group-title span {
@@ -152,14 +151,13 @@
   grid-template-columns: minmax(0, 1fr) 34px;
   align-items: stretch;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 251, 253, 0.86)),
-    rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--xin-glass-border);
+  border-radius: var(--xin-radius-lg);
+  background: var(--xin-glass);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.94) inset,
-    0 16px 34px rgba(31, 41, 55, 0.065);
+    var(--xin-specular),
+    0 16px 34px rgba(20, 34, 62, 0.07);
+  backdrop-filter: var(--xin-glass-blur);
   transition:
     transform 160ms ease,
     border-color 160ms ease,
@@ -169,7 +167,7 @@
 
 .connection-card.connected {
   --status-color: var(--xin-success);
-  --status-soft: rgba(97, 191, 134, 0.14);
+  --status-soft: rgba(53, 184, 113, 0.15);
 }
 
 .connection-card.connecting {
@@ -188,14 +186,12 @@
 }
 
 .connection-card:hover {
-  border-color: rgba(47, 109, 246, 0.26);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(252, 253, 255, 0.92)),
-    rgba(255, 255, 255, 0.96);
+  border-color: rgba(47, 109, 246, 0.32);
+  background: rgba(255, 255, 255, 0.72);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.98) inset,
-    0 20px 40px rgba(31, 41, 55, 0.1);
-  transform: translateY(-1px);
+    var(--xin-specular),
+    0 22px 46px rgba(20, 34, 62, 0.12);
+  transform: translateY(-2px);
 }
 
 .connection-card-main {
@@ -219,13 +215,11 @@
   place-items: center;
   grid-row: 1 / span 2;
   color: #ffffff;
-  border-radius: 8px;
-  background:
-    linear-gradient(145deg, rgba(88, 132, 255, 0.98), rgba(47, 109, 246, 0.98)),
-    #2f6df6;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #6f9aff 0%, #2f6df6 100%);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.34) inset,
-    0 12px 24px rgba(47, 109, 246, 0.2);
+    0 1px 0 rgba(255, 255, 255, 0.4) inset,
+    0 10px 22px rgba(47, 109, 246, 0.28);
   font-size: 22px;
 }
 
@@ -248,7 +242,7 @@
 .connection-card-copy strong {
   color: #0f172a;
   font-size: 15px;
-  font-weight: 820;
+  font-weight: 680;
 }
 
 .connection-card-copy em {
@@ -263,12 +257,12 @@
   width: max-content;
   max-width: 100%;
   height: 26px;
-  padding: 0 9px;
+  padding: 0 10px;
   color: #475569;
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--status-soft);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: 620;
 }
 
 .connection-card-status i {
@@ -317,8 +311,8 @@
   margin: 0;
   color: #0f172a;
   font-size: 24px;
-  font-weight: 830;
-  letter-spacing: 0;
+  font-weight: 720;
+  letter-spacing: -0.2px;
 }
 
 @media (max-width: 840px) {

@@ -2,33 +2,50 @@
 @import "@nuxt/ui";
 
 :root {
-  --ui-radius: 0.5rem;
-  --xin-text: #111827;
-  --xin-text-muted: #667085;
+  --ui-radius: 0.7rem;
+  --xin-text: #101a2c;
+  --xin-text-muted: #5d6c84;
   --xin-text-soft: #8a94a6;
   --xin-accent: #2f6df6;
   --xin-accent-strong: #155eef;
   --xin-accent-soft: rgba(47, 109, 246, 0.12);
-  --xin-success: #61bf86;
+  --xin-success: #35b871;
   --xin-warning: #d7a641;
-  --xin-border: rgba(137, 148, 166, 0.22);
+  --xin-danger: #ef4444;
+  --xin-border: rgba(120, 136, 160, 0.22);
   --xin-border-strong: rgba(111, 123, 143, 0.34);
-  --xin-surface: rgba(255, 255, 255, 0.82);
-  --xin-surface-strong: rgba(255, 255, 255, 0.94);
-  --xin-surface-muted: rgba(245, 247, 251, 0.84);
-  --xin-shadow-soft: 0 10px 30px rgba(31, 41, 55, 0.07);
-  --xin-shadow-panel: 0 20px 54px rgba(31, 41, 55, 0.11);
-  --xin-radius: 8px;
+  /* liquid glass surfaces */
+  --xin-glass: rgba(255, 255, 255, 0.55);
+  --xin-glass-strong: rgba(255, 255, 255, 0.76);
+  --xin-glass-muted: rgba(248, 250, 253, 0.45);
+  --xin-glass-border: rgba(255, 255, 255, 0.62);
+  --xin-glass-edge: rgba(16, 26, 44, 0.09);
+  --xin-glass-blur: blur(28px) saturate(1.55);
+  --xin-specular: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+  --xin-surface: var(--xin-glass);
+  --xin-surface-strong: var(--xin-glass-strong);
+  --xin-surface-muted: var(--xin-glass-muted);
+  --xin-shadow-soft: 0 10px 32px rgba(20, 34, 62, 0.08);
+  --xin-shadow-panel: 0 24px 64px rgba(20, 34, 62, 0.14);
+  --xin-radius-xl: 22px;
+  --xin-radius-lg: 16px;
+  --xin-radius: 12px;
+  --xin-radius-sm: 9px;
   color: var(--xin-text);
-  background: #f4f7fb;
+  background: #eef2f9;
   font-family:
+    "Inter Variable",
     "SF Pro Display",
     "Segoe UI Variable",
     "Segoe UI",
+    "Noto Sans SC Variable",
+    "PingFang SC",
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
     system-ui,
     sans-serif;
   font-synthesis: none;
-  text-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -45,13 +62,42 @@ body,
 
 body {
   overflow: hidden;
-  background: #f3f6fa;
+  background: #eef2f9;
 }
 
-button,
-input,
-select {
-  font: inherit;
+/* Base form styles live in the `base` cascade layer so Tailwind utility
+   classes from Nuxt UI components (e.g. the leading-icon padding on UInput)
+   keep winning over them. Unlayered rules would override those utilities. */
+@layer base {
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  input,
+  select {
+    width: 100%;
+    height: 42px;
+    padding: 0 13px;
+    color: var(--xin-text);
+    border: 1px solid var(--xin-border);
+    border-radius: var(--xin-radius);
+    outline: 0;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease,
+      background 140ms ease;
+  }
+
+  input:focus,
+  select:focus {
+    border-color: rgba(47, 109, 246, 0.55);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0 0 4px rgba(47, 109, 246, 0.13);
+  }
 }
 
 button {
@@ -74,35 +120,48 @@ button {
   }
 }
 
-input,
-select {
-  color: var(--xin-text);
-}
-
 .desktop-window {
   width: 100vw;
   height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* soft ambient color field so glass panels have something to refract */
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 253, 0.98) 36%, rgba(238, 243, 249, 0.99) 100%),
-    #f3f6fa;
+    radial-gradient(1100px 720px at 6% -12%, rgba(88, 134, 255, 0.18), transparent 62%),
+    radial-gradient(920px 640px at 102% -4%, rgba(56, 189, 248, 0.15), transparent 58%),
+    radial-gradient(1100px 860px at 50% 118%, rgba(167, 139, 250, 0.14), transparent 62%),
+    linear-gradient(180deg, #f7f9fd 0%, #eef2f9 100%);
 }
 
+/* Inside Tauri the window itself is transparent with a native Mica/Acrylic
+   backdrop (see tauri.conf.json), so the app base turns translucent and the
+   desktop shows through — WeChat 4 style. */
+.native-glass,
+.native-glass body {
+  background: transparent;
+}
+
+.native-glass .desktop-window {
+  background:
+    radial-gradient(1100px 720px at 6% -12%, rgba(88, 134, 255, 0.15), transparent 62%),
+    radial-gradient(920px 640px at 102% -4%, rgba(56, 189, 248, 0.12), transparent 58%),
+    radial-gradient(1100px 860px at 50% 118%, rgba(167, 139, 250, 0.12), transparent 62%),
+    linear-gradient(180deg, rgba(247, 249, 253, 0.84) 0%, rgba(238, 242, 249, 0.88) 100%);
+}
+
+/* Title bar melts into the window surface: no fill, no seam — the session
+   pills float directly on the glass. */
 .window-chrome {
-  height: 62px;
-  min-height: 62px;
+  height: 60px;
+  min-height: 60px;
   display: grid;
   grid-template-columns: minmax(190px, 258px) minmax(0, 1fr) auto auto;
   align-items: center;
   padding: 0 10px 0 0;
-  border-bottom: 1px solid rgba(137, 148, 166, 0.16);
-  background: rgba(250, 252, 255, 0.74);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.86) inset,
-    0 10px 28px rgba(15, 23, 42, 0.035);
-  backdrop-filter: blur(28px) saturate(1.25);
+  border-bottom: 0;
+  background: transparent;
+  box-shadow: none;
   user-select: none;
 }
 
@@ -110,11 +169,12 @@ select {
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   padding: 0 16px 0 20px;
   color: var(--xin-text);
-  font-size: 14px;
-  font-weight: 820;
+  font-size: 13.5px;
+  font-weight: 680;
+  letter-spacing: 0.1px;
 }
 
 .window-brand > span:last-child {
@@ -130,11 +190,11 @@ select {
   display: grid;
   place-items: center;
   color: #ffffff;
-  border-radius: 8px;
+  border-radius: 9px;
   background: linear-gradient(145deg, #83a7ff, #2f6df6);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.34) inset,
-    0 10px 22px rgba(47, 109, 246, 0.26);
+    0 1px 0 rgba(255, 255, 255, 0.4) inset,
+    0 8px 18px rgba(47, 109, 246, 0.32);
 }
 
 .window-drag-space {
@@ -153,11 +213,11 @@ select {
   height: 38px;
   justify-content: center;
   color: #344054;
-  border-radius: 8px;
+  border-radius: 11px;
 }
 
 .window-tools button:hover {
-  background: rgba(137, 148, 166, 0.12);
+  background: rgba(137, 148, 166, 0.14);
 }
 
 .window-controls {
@@ -174,7 +234,7 @@ select {
   place-items: center;
   color: #344054;
   border: 0;
-  border-radius: 8px;
+  border-radius: 11px;
   background: transparent;
 }
 
@@ -235,15 +295,17 @@ select {
 .startup-mark,
 .setup-mark,
 .empty-icon {
-  width: 64px;
-  height: 64px;
+  width: 68px;
+  height: 68px;
   display: grid;
   place-items: center;
   color: #ffffff;
   font-size: 30px;
-  border-radius: var(--xin-radius);
+  border-radius: 20px;
   background: linear-gradient(145deg, #7fa3ff, #4264f4);
-  box-shadow: 0 20px 44px rgba(63, 99, 242, 0.25);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.42) inset,
+    0 20px 44px rgba(63, 99, 242, 0.28);
 }
 
 .setup-panel {
@@ -252,11 +314,13 @@ select {
   flex-direction: column;
   gap: 20px;
   padding: 34px;
-  border: 1px solid var(--xin-border);
-  border-radius: var(--xin-radius);
-  background: var(--xin-surface-strong);
-  box-shadow: var(--xin-shadow-panel);
-  backdrop-filter: blur(22px);
+  border: 1px solid var(--xin-glass-border);
+  border-radius: var(--xin-radius-xl);
+  background: var(--xin-glass-strong);
+  box-shadow:
+    var(--xin-specular),
+    var(--xin-shadow-panel);
+  backdrop-filter: var(--xin-glass-blur);
 }
 
 .setup-copy h1,
@@ -265,9 +329,9 @@ select {
 .settings-panel h2 {
   margin: 0;
   color: #0f172a;
-  font-size: 24px;
-  font-weight: 820;
-  letter-spacing: 0;
+  font-size: 23px;
+  font-weight: 720;
+  letter-spacing: -0.2px;
 }
 
 .setup-copy p,
@@ -297,7 +361,7 @@ select {
   justify-content: center;
   gap: 9px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--xin-radius);
 }
 
 .choice-button {
@@ -337,25 +401,7 @@ label {
   gap: 7px;
   color: #344054;
   font-size: 12px;
-  font-weight: 760;
-}
-
-input,
-select {
-  width: 100%;
-  height: 42px;
-  padding: 0 12px;
-  border: 1px solid var(--xin-border);
-  border-radius: var(--xin-radius);
-  outline: 0;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.86) inset;
-}
-
-input:focus,
-select:focus {
-  border-color: rgba(47, 109, 246, 0.55);
-  box-shadow: 0 0 0 3px rgba(47, 109, 246, 0.12);
+  font-weight: 640;
 }
 
 .setup-hint,
@@ -372,11 +418,23 @@ select:focus {
 
 .primary-action {
   min-height: 42px;
-  padding: 0 16px;
+  padding: 0 18px;
   color: #ffffff;
-  font-weight: 760;
-  background: linear-gradient(145deg, #7f9dff, var(--xin-accent-strong));
-  box-shadow: 0 14px 28px rgba(63, 99, 242, 0.25);
+  font-weight: 650;
+  background: linear-gradient(180deg, #5f8bff 0%, var(--xin-accent-strong) 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.32) inset,
+    0 12px 26px rgba(47, 109, 246, 0.32);
+  transition:
+    box-shadow 140ms ease,
+    filter 140ms ease;
+}
+
+.primary-action:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.32) inset,
+    0 14px 30px rgba(47, 109, 246, 0.4);
 }
 
 .primary-action:disabled {
@@ -385,10 +443,16 @@ select:focus {
 
 .secondary-action {
   min-height: 40px;
-  padding: 0 14px;
+  padding: 0 15px;
   color: #344054;
   border: 1px solid var(--xin-border);
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  transition: background 140ms ease;
+}
+
+.secondary-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .secondary-action:disabled {
@@ -401,9 +465,7 @@ select:focus {
   flex: 1;
   gap: 12px;
   padding: 12px;
-  background:
-    linear-gradient(180deg, rgba(248, 250, 253, 0.94) 0%, rgba(239, 244, 249, 0.98) 100%),
-    #eef3f8;
+  background: transparent;
 }
 
 .workspace-layout.connection-hub-layout {
@@ -1102,8 +1164,8 @@ select:focus {
   display: grid;
   place-items: center;
   padding: 30px;
-  background: rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(14px);
+  background: rgba(23, 33, 54, 0.26);
+  backdrop-filter: blur(10px) saturate(1.1);
 }
 
 .connection-form,
@@ -1112,12 +1174,14 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 24px;
-  border: 1px solid var(--xin-border);
-  border-radius: var(--xin-radius);
-  background: var(--xin-surface-strong);
-  box-shadow: 0 28px 80px rgba(31, 41, 55, 0.2);
-  backdrop-filter: blur(22px);
+  padding: 26px;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: var(--xin-radius-xl);
+  background: var(--xin-glass-strong);
+  box-shadow:
+    var(--xin-specular),
+    0 32px 90px rgba(20, 34, 62, 0.28);
+  backdrop-filter: var(--xin-glass-blur);
 }
 
 .connection-form header,
@@ -1138,17 +1202,18 @@ select:focus {
   place-items: center;
   color: #475569;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
 }
 
 .segmented-control {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 5px;
   padding: 4px;
-  border-radius: 8px;
-  background: rgba(226, 232, 240, 0.56);
+  border-radius: var(--xin-radius);
+  background: rgba(16, 26, 44, 0.06);
+  box-shadow: inset 0 1px 2px rgba(16, 26, 44, 0.05);
 }
 
 .segmented-control button {
@@ -1159,14 +1224,20 @@ select:focus {
   gap: 8px;
   color: #475569;
   border: 0;
-  border-radius: 7px;
+  border-radius: calc(var(--xin-radius) - 3px);
   background: transparent;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .segmented-control button.active {
   color: #0757e6;
-  background: #ffffff;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 4px 14px rgba(20, 34, 62, 0.1);
 }
 
 .key-fields {
@@ -1186,7 +1257,7 @@ select:focus {
   padding: 0 12px;
   color: #0757e6;
   border: 1px solid rgba(37, 99, 235, 0.22);
-  border-radius: 8px;
+  border-radius: var(--xin-radius);
   background: rgba(37, 99, 235, 0.06);
 }
 
@@ -1203,8 +1274,8 @@ select:focus {
   padding: 8px;
   color: #64748b;
   border: 1px solid rgba(37, 99, 235, 0.14);
-  border-radius: 8px;
-  background: rgba(247, 249, 252, 0.84);
+  border-radius: var(--xin-radius);
+  background: rgba(247, 249, 252, 0.6);
 }
 
 .form-group-creator input {
@@ -1231,8 +1302,8 @@ select:focus {
 .credential-save-option {
   padding: 10px 12px;
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 8px;
-  background: rgba(248, 250, 252, 0.72);
+  border-radius: var(--xin-radius);
+  background: rgba(248, 250, 252, 0.5);
 }
 
 .credential-save-option label {
@@ -1255,8 +1326,8 @@ select:focus {
   min-height: 52px;
   padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 10px;
-  background: rgba(248, 250, 252, 0.7);
+  border-radius: var(--xin-radius);
+  background: rgba(248, 250, 252, 0.55);
 }
 
 .connection-test-panel.success {
@@ -1310,19 +1381,24 @@ select:focus {
 }
 
 .error-banner {
+  /* top-right so it never overlaps the transfer toast in the bottom-right corner */
   position: absolute;
   right: 18px;
-  bottom: 18px;
+  top: 14px;
+  z-index: 40;
   max-width: 460px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 14px 16px;
   color: #991b1b;
-  border: 1px solid rgba(248, 113, 113, 0.24);
-  border-radius: 8px;
-  background: rgba(254, 242, 242, 0.94);
-  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.18);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: var(--xin-radius-lg);
+  background: rgba(255, 245, 245, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 16px 38px rgba(15, 23, 42, 0.16);
+  backdrop-filter: var(--xin-glass-blur);
 }
 
 ::selection {

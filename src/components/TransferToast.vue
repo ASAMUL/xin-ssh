@@ -135,11 +135,13 @@ function taskMeta(task) {
   gap: 10px;
   padding: 14px;
   color: #0f172a;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
-  backdrop-filter: blur(20px);
+  border: 1px solid var(--xin-glass-border);
+  border-radius: var(--xin-radius-lg);
+  background: var(--xin-glass-strong);
+  box-shadow:
+    var(--xin-specular),
+    0 24px 60px rgba(15, 23, 42, 0.22);
+  backdrop-filter: var(--xin-glass-blur);
 }
 
 .transfer-head {
@@ -177,8 +179,8 @@ function taskMeta(task) {
   place-items: center;
   color: #475569;
   border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 6px;
-  background: #ffffff;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .transfer-head button:disabled {
@@ -197,9 +199,9 @@ function taskMeta(task) {
   align-items: center;
   gap: 8px;
   padding: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 7px;
-  background: #fbfcfe;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.55);
 }
 
 .transfer-icon {
@@ -252,7 +254,7 @@ function taskMeta(task) {
   height: 4px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e2e8f0;
+  background: rgba(16, 26, 44, 0.09);
 }
 
 .task-progress span,
@@ -300,7 +302,7 @@ function taskMeta(task) {
   height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e2e8f0;
+  background: rgba(16, 26, 44, 0.09);
 }
 
 @media (max-width: 980px) {

@@ -76,42 +76,42 @@ const { t } = useI18n();
   height: 100%;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
   padding: 0 6px 0 4px;
 }
 
 .home-tab,
 .session-tab {
-  height: 44px;
+  height: 36px;
   border: 1px solid transparent;
-  border-bottom: 0;
-  border-radius: 10px 10px 0 0;
+  border-radius: 12px;
   background: transparent;
   box-shadow: none;
   color: var(--xin-text-muted);
   transition:
     background 140ms ease,
     border-color 140ms ease,
-    color 140ms ease;
+    color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .home-tab:hover,
 .session-tab:hover {
   color: var(--xin-text);
-  background: rgba(148, 163, 184, 0.14);
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .home-tab.active,
 .session-tab.active {
-  margin-bottom: -1px;
   color: var(--xin-text);
-  border-color: rgba(148, 163, 184, 0.18);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), #ffffff);
+  border-color: var(--xin-glass-border);
+  background: rgba(255, 255, 255, 0.6);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.96) inset,
-    0 10px 22px rgba(15, 23, 42, 0.06);
+    var(--xin-specular),
+    0 8px 22px rgba(20, 34, 62, 0.1);
+  backdrop-filter: var(--xin-glass-blur);
 }
 
 .home-tab {
@@ -121,7 +121,7 @@ const { t } = useI18n();
   min-width: 104px;
   padding: 0 15px;
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 640;
   white-space: nowrap;
 }
 
@@ -134,8 +134,8 @@ const { t } = useI18n();
   min-width: 0;
   height: 100%;
   display: flex;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -145,7 +145,9 @@ const { t } = useI18n();
 }
 
 .session-tab {
-  width: clamp(154px, 17vw, 226px);
+  width: auto;
+  min-width: 128px;
+  max-width: 226px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px;
   align-items: center;
@@ -181,7 +183,7 @@ const { t } = useI18n();
 
 .tab-status.connected {
   background: var(--xin-success);
-  box-shadow: 0 0 0 4px rgba(97, 191, 134, 0.15);
+  box-shadow: 0 0 0 4px rgba(53, 184, 113, 0.16);
 }
 
 .tab-status.connecting {
@@ -198,7 +200,7 @@ const { t } = useI18n();
   min-width: 0;
   overflow: hidden;
   font-size: 12px;
-  font-weight: 780;
+  font-weight: 640;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -210,32 +212,31 @@ const { t } = useI18n();
   place-items: center;
   color: #64748b;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
 }
 
 .tab-close:hover {
   color: #0f172a;
-  background: rgba(148, 163, 184, 0.14);
+  background: rgba(148, 163, 184, 0.18);
 }
 
 .new-connection-tab {
   width: 36px;
   height: 36px;
   min-width: 36px;
-  margin-bottom: 4px;
   justify-content: center;
   color: var(--xin-text-muted);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
 }
 
 .new-connection-tab:hover {
   color: var(--xin-text);
-  border-color: rgba(47, 109, 246, 0.24);
-  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(47, 109, 246, 0.3);
+  background: rgba(255, 255, 255, 0.85);
 }
 
 @media (max-width: 980px) {
@@ -250,13 +251,14 @@ const { t } = useI18n();
   }
 
   .session-tab {
-    width: clamp(126px, 20vw, 168px);
+    max-width: 168px;
   }
 }
 
 @media (max-width: 760px) {
   .session-tab {
-    width: 118px;
+    min-width: 108px;
+    max-width: 140px;
   }
 }
 </style>

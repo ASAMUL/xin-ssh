@@ -320,6 +320,8 @@ fn default_settings() -> WorkspaceSettings {
         locale: "zh-CN".to_string(),
         terminal_font_family: "Cascadia Code".to_string(),
         monitor_refresh_seconds: 5,
+        terminal_theme: crate::models::default_terminal_theme(),
+        terminal_font_size: crate::models::default_terminal_font_size(),
     }
 }
 
