@@ -6,12 +6,16 @@ import "@fontsource/fira-code/400.css";
 import "@fontsource/fira-code/700.css";
 import "./assets/css/main.css";
 
+import { addCollection } from "@iconify/vue";
+import lucideIcons from "@iconify-json/lucide/icons.json";
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createRouter, createWebHashHistory } from "vue-router";
 import App from "./App.vue";
 import { i18n } from "./i18n";
 import ui from "@nuxt/ui/vue-plugin";
+
+addCollection(lucideIcons);
 
 // 运行在 Tauri 里时窗口是透明的（Mica/Acrylic 玻璃），CSS 据此切换到半透明底色；
 // 浏览器里跑 dev 时保持不透明底色。

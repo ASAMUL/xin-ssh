@@ -6304,7 +6304,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "xterminal"
+name = "xin-terminal"
 version = "0.1.0"
 dependencies = [
  "futures",
