@@ -322,6 +322,13 @@ fn default_settings() -> WorkspaceSettings {
         monitor_refresh_seconds: 5,
         terminal_theme: crate::models::default_terminal_theme(),
         terminal_font_size: crate::models::default_terminal_font_size(),
+        show_monitor_sidebar: true,
+        show_file_explorer: true,
+        show_file_tree: true,
+        show_hidden_files: true,
+        monitor_pane_size: crate::models::default_monitor_pane_size(),
+        file_pane_size: crate::models::default_file_pane_size(),
+        file_tree_size: crate::models::default_file_tree_size(),
     }
 }
 

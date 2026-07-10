@@ -1,9 +1,6 @@
-.terminal-workspace {
+/* 终端 + 文件面板的纵向 splitpanes 容器（分割条样式见 splitpanes.css） */
+.terminal-split {
   min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(280px, 1.14fr) minmax(250px, 0.86fr);
-  gap: 12px;
-  flex: 1;
   color: #cdd6f4;
   background: transparent;
 }
@@ -172,18 +169,23 @@
   overflow-y: auto;
 }
 
+/* 滚动条要可以点击拖动：不要把 .xterm-screen 拉宽到 100%，
+   否则屏幕层会盖住右侧滚动条（xterm 的 screen 在 viewport 之上）。 */
 .terminal-xterm :deep(.xterm-viewport::-webkit-scrollbar) {
-  width: 10px;
+  width: 12px;
 }
 
 .terminal-xterm :deep(.xterm-viewport::-webkit-scrollbar-thumb) {
-  border: 2px solid var(--term-scrollbar-edge, transparent);
+  border: 3px solid var(--term-scrollbar-edge, transparent);
   border-radius: 999px;
   background: var(--term-scrollbar-thumb, rgba(205, 214, 244, 0.32));
+  background-clip: padding-box;
 }
 
-.terminal-xterm :deep(.xterm-screen) {
-  width: 100%;
+.terminal-xterm :deep(.xterm-viewport::-webkit-scrollbar-thumb:hover),
+.terminal-xterm :deep(.xterm-viewport::-webkit-scrollbar-thumb:active) {
+  background: var(--term-accent, rgba(205, 214, 244, 0.55));
+  background-clip: padding-box;
 }
 
 .terminal-output-real {
@@ -380,10 +382,6 @@
 }
 
 @media (max-width: 900px) {
-  .terminal-workspace {
-    grid-template-rows: minmax(250px, 1fr) minmax(250px, 0.92fr);
-  }
-
   .terminal-state-label {
     display: none;
   }

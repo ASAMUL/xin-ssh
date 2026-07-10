@@ -1,7 +1,7 @@
 .host-monitor-sidebar {
-  width: 235px;
-  min-width: 235px;
-  max-width: 235px;
+  /* 宽度由外层 splitpanes 的 pane 控制，可拖拽调整 */
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   display: flex;
   overflow: hidden;

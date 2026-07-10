@@ -112,6 +112,12 @@
   background: transparent;
 }
 
+/* 开关型工具按钮的“开启”态（如显示隐藏文件） */
+.file-panel-actions button.toggle-on {
+  color: var(--xin-accent-strong);
+  background: rgba(47, 109, 246, 0.1);
+}
+
 .file-path-row {
   display: grid;
   grid-template-columns: auto minmax(180px, 1fr);
@@ -200,6 +206,121 @@
 .file-workbench.drag-over {
   outline: 2px solid rgba(47, 109, 246, 0.28);
   outline-offset: -2px;
+}
+
+/* ---- 左侧目录树 ---- */
+.file-tree {
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 5px 12px;
+  background: rgba(255, 255, 255, 0.3);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(137, 148, 166, 0.34) transparent;
+}
+
+.file-tree::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.file-tree::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(137, 148, 166, 0.34);
+  background-clip: padding-box;
+}
+
+.tree-row {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px 0 calc(4px + var(--tree-depth, 0) * 14px);
+  color: #344054;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  user-select: none;
+}
+
+.tree-row:hover {
+  background: rgba(47, 109, 246, 0.08);
+}
+
+.tree-row.active {
+  color: var(--xin-accent-strong);
+  background: rgba(47, 109, 246, 0.13);
+  font-weight: 700;
+}
+
+.tree-caret {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: #98a2b3;
+  border-radius: 5px;
+  font-size: 13px;
+}
+
+.tree-caret:hover {
+  color: var(--xin-text);
+  background: rgba(137, 148, 166, 0.2);
+}
+
+.tree-caret :deep(svg),
+.tree-caret svg {
+  transition: transform 140ms ease;
+}
+
+.tree-caret.expanded :deep(svg),
+.tree-caret.expanded svg {
+  transform: rotate(90deg);
+}
+
+/* 已确认没有子目录的节点：箭头占位但不可见，保持缩进对齐 */
+.tree-caret.leaf {
+  visibility: hidden;
+}
+
+.tree-folder-icon {
+  flex: 0 0 auto;
+  color: #d9951a;
+  font-size: 15px;
+}
+
+.tree-row.active .tree-folder-icon {
+  color: var(--xin-accent-strong);
+}
+
+.tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 26px 10px;
+  color: var(--xin-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.tree-empty :deep(svg),
+.tree-empty svg {
+  color: #9aa7b6;
+  font-size: 20px;
 }
 
 .file-table-wrap {

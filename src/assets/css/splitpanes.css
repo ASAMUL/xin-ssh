@@ -1,0 +1,81 @@
+/* splitpanes 主题：分割条本体透明（占位即面板间距），悬停/拖拽时浮出
+   系统蓝胶囊手柄 —— 经典面板分割交互，贴合液态玻璃语言。 */
+
+.xin-split {
+  background: transparent;
+}
+
+.xin-split > .splitpanes__pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  background: transparent;
+  transition: none;
+}
+
+.xin-split > .splitpanes__pane > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.xin-split > .splitpanes__splitter {
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+}
+
+.xin-split.splitpanes--vertical > .splitpanes__splitter {
+  width: 11px;
+  cursor: col-resize;
+}
+
+.xin-split.splitpanes--horizontal > .splitpanes__splitter {
+  height: 11px;
+  cursor: row-resize;
+}
+
+.xin-split > .splitpanes__splitter::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 999px;
+  background: rgba(93, 108, 132, 0.28);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition:
+    opacity 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.xin-split.splitpanes--vertical > .splitpanes__splitter::before {
+  width: 4px;
+  height: 46px;
+}
+
+.xin-split.splitpanes--horizontal > .splitpanes__splitter::before {
+  width: 46px;
+  height: 4px;
+}
+
+.xin-split > .splitpanes__splitter:hover::before,
+.xin-split.splitpanes--dragging > .splitpanes__splitter::before {
+  opacity: 1;
+  background: rgba(47, 109, 246, 0.6);
+  box-shadow: 0 0 0 3px rgba(47, 109, 246, 0.14);
+}
+
+/* 文件管理器内部的树/列表分割：面板间距更小 */
+.xin-split.explorer-split.splitpanes--vertical > .splitpanes__splitter {
+  width: 7px;
+}
+
+.xin-split.explorer-split > .splitpanes__splitter::before {
+  height: 34px;
+}

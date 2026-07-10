@@ -7,7 +7,7 @@ use std::sync::Arc;
 use russh::client;
 use russh_sftp::{
     client::{RawSftpSession, SftpSession},
-    protocol::{File, FileType},
+    protocol::{File, FileAttributes, FileType},
 };
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -73,10 +73,18 @@ pub(crate) async fn ensure_sftp_session<'a>(
 }
 
 pub(crate) fn remote_file_entry(parent_path: &str, file: &File) -> RemoteFileEntry {
-    let attrs = &file.attrs;
-    let file_type = attrs.file_type();
     let name = file.filename.clone();
     let path = normalize_remote_path(&format!("{parent_path}/{name}"));
+
+    remote_file_entry_from_attrs(path, name, &file.attrs)
+}
+
+pub(crate) fn remote_file_entry_from_attrs(
+    path: String,
+    name: String,
+    attrs: &FileAttributes,
+) -> RemoteFileEntry {
+    let file_type = attrs.file_type();
     let permissions_mode = attrs.permissions.map(|mode| mode & 0o777);
 
     RemoteFileEntry {

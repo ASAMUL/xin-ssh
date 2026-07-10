@@ -3,12 +3,14 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useVirtualizer } from "@tanstack/vue-virtual";
+import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
 import { useSessionStore } from "../stores/sessionStore";
-import { joinRemotePath, parentRemotePath } from "../utils/remotePath";
+import { joinRemotePath, parentRemotePath, quoteRemotePathForShell } from "../utils/remotePath";
 
 const props = defineProps({
   activeSession: {
@@ -19,6 +21,7 @@ const props = defineProps({
 
 const { t, locale } = useI18n();
 const fileExplorerStore = useFileExplorerStore();
+const settingsStore = useSettingsStore();
 const transferStore = useTransferStore();
 const uiStore = useUiStore();
 const sessionStore = useSessionStore();
@@ -30,6 +33,7 @@ const searchInputControl = ref(null);
 const isDragOver = ref(false);
 const lastSelectedPath = ref("");
 const contextMenuEntry = ref(null);
+const treeContextNode = ref(null);
 const nameDialog = reactive({
   open: false,
   mode: "create",
@@ -81,16 +85,20 @@ const canTransfer = computed(() => Boolean(props.activeSession) && isConnected.v
 const canRefresh = computed(() => Boolean(props.activeSession) && !isConnecting.value && !fileState.value.isLoading);
 const canGoBack = computed(() => fileState.value.historyIndex > 0);
 const canGoForward = computed(() => fileState.value.historyIndex < fileState.value.history.length - 1);
-const hasEntries = computed(() => fileState.value.entries.length > 0);
 const query = computed({
   get: () => fileState.value.query,
   set: (value) => fileExplorerStore.setQuery(props.activeSession?.id, value),
 });
 const visibleEntries = computed(() => {
   const keyword = query.value.trim().toLowerCase();
-  if (!keyword) return fileState.value.entries;
+  const showHidden = settingsStore.showHiddenFiles;
 
-  return fileState.value.entries.filter((entry) => entry.name.toLowerCase().includes(keyword));
+  return fileState.value.entries.filter((entry) => {
+    if (!showHidden && entry.isHidden) return false;
+    if (!keyword) return true;
+
+    return entry.name.toLowerCase().includes(keyword);
+  });
 });
 // 行高需与 file-explorer.css 中 .file-row 的 min-height 保持一致
 const FILE_ROW_HEIGHT = 32;
@@ -134,6 +142,12 @@ const contextMenuItems = computed(() => {
               label: t("files.open"),
               icon: "i-lucide-folder-open",
               onSelect: openContextEntry,
+            },
+            {
+              label: t("files.cdTerminal"),
+              icon: "i-lucide-square-terminal",
+              disabled: !canTransfer.value,
+              onSelect: () => cdTerminalTo(entry.path),
             },
           ]
         : []),
@@ -188,6 +202,12 @@ const contextMenuItems = computed(() => {
         onSelect: openCreateFolderDialog,
       },
       {
+        label: t("files.newFile"),
+        icon: "i-lucide-file-plus",
+        disabled: !canTransfer.value,
+        onSelect: openCreateFileDialog,
+      },
+      {
         label: t("files.refresh"),
         icon: "i-lucide-refresh-cw",
         disabled: !canRefresh.value,
@@ -196,15 +216,104 @@ const contextMenuItems = computed(() => {
     ],
   ];
 });
-const nameDialogTitle = computed(() =>
-  t(nameDialog.mode === "create" ? "files.createFolderTitle" : "files.renameTitle"),
-);
-const nameDialogDescription = computed(() =>
-  t(nameDialog.mode === "create" ? "files.createFolderDescription" : "files.renameDescription"),
-);
-const nameDialogSubmitLabel = computed(() =>
-  t(nameDialog.mode === "create" ? "files.createFolder" : "files.rename"),
-);
+// 目录树右键菜单（独立于文件列表菜单）
+const treeContextMenuItems = computed(() => {
+  const node = treeContextNode.value;
+  if (!node) return [];
+
+  return [
+    [
+      {
+        label: t("files.open"),
+        icon: "i-lucide-folder-open",
+        disabled: !canNavigate.value,
+        onSelect: () => openTreeDirectory(node),
+      },
+      {
+        label: t("files.cdTerminal"),
+        icon: "i-lucide-square-terminal",
+        disabled: !canTransfer.value,
+        onSelect: () => cdTerminalTo(node.path),
+      },
+      {
+        label: t("files.copyPath"),
+        icon: "i-lucide-copy",
+        onSelect: () => copyPathToClipboard(node.path),
+      },
+    ],
+    [
+      {
+        label: t("files.refreshChildren"),
+        icon: "i-lucide-refresh-cw",
+        disabled: !canTransfer.value,
+        onSelect: () => refreshTreeNode(node),
+      },
+    ],
+  ];
+});
+// 目录树扁平化渲染行：只含目录，跟随隐藏文件开关
+const treeRows = computed(() => {
+  const nodes = fileState.value.treeNodes || {};
+  const rootNode = nodes["/"];
+  if (!rootNode) return [];
+
+  const showHidden = settingsStore.showHiddenFiles;
+  const rows = [];
+  const visit = (node, depth) => {
+    rows.push({ node, depth });
+    if (!node.expanded) return;
+
+    for (const child of node.childDirs) {
+      if (!showHidden && child.isHidden) continue;
+
+      const childNode = nodes[child.path];
+      if (childNode) visit(childNode, depth + 1);
+    }
+  };
+
+  visit(rootNode, 0);
+  return rows;
+});
+const historyMenuItems = computed(() => {
+  const seenPaths = new Set();
+  const items = [];
+
+  for (let index = fileState.value.history.length - 1; index >= 0; index -= 1) {
+    const path = fileState.value.history[index];
+    if (seenPaths.has(path)) continue;
+
+    seenPaths.add(path);
+    items.push({
+      label: path,
+      icon: path === currentPath.value ? "i-lucide-check" : "i-lucide-folder",
+      disabled: !canNavigate.value,
+      onSelect: () => fileExplorerStore.loadDirectory(props.activeSession, path),
+    });
+
+    if (items.length >= 12) break;
+  }
+
+  return [items];
+});
+const hasHistory = computed(() => historyMenuItems.value[0].length > 0);
+const nameDialogTitle = computed(() => {
+  if (nameDialog.mode === "create") return t("files.createFolderTitle");
+  if (nameDialog.mode === "createFile") return t("files.createFileTitle");
+
+  return t("files.renameTitle");
+});
+const nameDialogDescription = computed(() => {
+  if (nameDialog.mode === "create") return t("files.createFolderDescription");
+  if (nameDialog.mode === "createFile") return t("files.createFileDescription");
+
+  return t("files.renameDescription");
+});
+const nameDialogSubmitLabel = computed(() => {
+  if (nameDialog.mode === "create") return t("files.createFolder");
+  if (nameDialog.mode === "createFile") return t("files.createFile");
+
+  return t("files.rename");
+});
 const deleteDialogTitle = computed(() =>
   t("files.deleteTitle", { count: deleteDialog.entries.length }),
 );
@@ -304,7 +413,19 @@ watch(
     if (!marker || marker === previousMarker || !props.activeSession || !isConnected.value) return;
 
     fileExplorerStore.refreshDirectory(props.activeSession);
+    fileExplorerStore.refreshTreeChildren(props.activeSession, currentPath.value);
   },
+);
+
+// 当前路径变化时让目录树展开到对应位置（树可见且已连接才加载）
+watch(
+  () => [props.activeSession?.id, currentPath.value, isConnected.value, settingsStore.showFileTree],
+  ([, path, connected, treeVisible]) => {
+    if (!props.activeSession || !connected || !treeVisible) return;
+
+    fileExplorerStore.revealTreePath(props.activeSession, path);
+  },
+  { immediate: true },
 );
 
 watch(
@@ -505,6 +626,92 @@ function openCreateFolderDialog() {
   nameDialog.error = "";
 }
 
+function openCreateFileDialog() {
+  closeContextMenu();
+  if (!canTransfer.value) return;
+
+  nameDialog.open = true;
+  nameDialog.mode = "createFile";
+  nameDialog.entry = null;
+  nameDialog.value = "";
+  nameDialog.error = "";
+}
+
+// ---- 目录树 ----
+function toggleTreeRow(node) {
+  if (!isConnected.value) return;
+
+  fileExplorerStore.toggleTreeNode(props.activeSession, node.path);
+}
+
+function openTreeDirectory(node) {
+  closeTreeContextMenu();
+  if (!canNavigate.value) return;
+
+  fileExplorerStore.loadDirectory(props.activeSession, node.path);
+  if (!node.expanded) {
+    fileExplorerStore.toggleTreeNode(props.activeSession, node.path);
+  }
+}
+
+function refreshTreeNode(node) {
+  closeTreeContextMenu();
+  if (!isConnected.value) return;
+
+  fileExplorerStore.loadTreeChildren(props.activeSession, node.path, { force: true });
+}
+
+function prepareTreeContextMenu(event) {
+  if (!isConnected.value) {
+    closeTreeContextMenu();
+    return;
+  }
+
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  const row = target?.closest("[data-tree-path]");
+  const treePath = row?.dataset.treePath;
+
+  treeContextNode.value = treePath
+    ? fileState.value.treeNodes[treePath] ?? null
+    : null;
+}
+
+function closeTreeContextMenu() {
+  treeContextNode.value = null;
+}
+
+// 向当前会话的终端发送 cd，让终端与文件管理器进入同一目录
+async function cdTerminalTo(path) {
+  closeContextMenu();
+  closeTreeContextMenu();
+  if (!isConnected.value || !path) return;
+
+  try {
+    await sessionStore.sendActiveTerminalInput(`cd ${quoteRemotePathForShell(path)}\n`);
+  } catch (error) {
+    uiStore.setError(error);
+  }
+}
+
+async function copyPathToClipboard(path) {
+  closeTreeContextMenu();
+  if (!path) return;
+
+  try {
+    await navigator.clipboard?.writeText(path);
+  } catch (error) {
+    uiStore.setError(error);
+  }
+}
+
+// 树/列表分割拖拽结束后持久化占比
+function persistTreeSize(event) {
+  const panes = Array.isArray(event) ? event : event?.panes ?? [];
+  if (!settingsStore.showFileTree || panes.length < 2) return;
+
+  settingsStore.applySettingsPatch({ fileTreeSize: panes[0].size });
+}
+
 function openRenameDialog(entry = selectedEntries.value[0]) {
   closeContextMenu();
   if (!canTransfer.value || !entry) return;
@@ -545,6 +752,11 @@ async function submitNameDialog() {
   try {
     if (nameDialog.mode === "create") {
       await fileExplorerStore.createDirectory(
+        props.activeSession,
+        joinRemotePath(currentPath.value, name),
+      );
+    } else if (nameDialog.mode === "createFile") {
+      await fileExplorerStore.createFile(
         props.activeSession,
         joinRemotePath(currentPath.value, name),
       );
@@ -882,9 +1094,16 @@ function fileTypeLabel(entry) {
           <UIcon name="i-lucide-folder" />
           <span>{{ t("files.fileTab") }}</span>
         </button>
-        <button type="button" class="file-panel-tab">
-          <UIcon name="i-lucide-terminal-square" />
-          <span>{{ t("files.commandTab") }}</span>
+        <button
+          type="button"
+          class="file-panel-tab"
+          :class="{ active: settingsStore.showFileTree }"
+          :aria-label="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
+          :title="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
+          @click="settingsStore.toggleFileTree()"
+        >
+          <UIcon name="i-lucide-list-tree" />
+          <span>{{ t("files.treeTab") }}</span>
         </button>
       </div>
 
@@ -901,9 +1120,25 @@ function fileTypeLabel(entry) {
           :ui="fileSearchInputUi"
         />
         <span class="file-count">{{ t("files.itemCount", { count: visibleEntries.length }) }}</span>
-        <button type="button" :aria-label="t('files.history')" :title="t('files.history')" :disabled="!hasEntries">
-          <UIcon name="i-lucide-history" />
+        <button
+          type="button"
+          :class="{ 'toggle-on': settingsStore.showHiddenFiles }"
+          :aria-label="t(settingsStore.showHiddenFiles ? 'files.hideHidden' : 'files.showHidden')"
+          :title="t(settingsStore.showHiddenFiles ? 'files.hideHidden' : 'files.showHidden')"
+          @click="settingsStore.toggleHiddenFiles()"
+        >
+          <UIcon :name="settingsStore.showHiddenFiles ? 'i-lucide-eye' : 'i-lucide-eye-off'" />
         </button>
+        <UDropdownMenu :items="historyMenuItems" size="xs" :ui="fileContextMenuUi">
+          <button
+            type="button"
+            :aria-label="t('files.history')"
+            :title="t('files.history')"
+            :disabled="!hasHistory"
+          >
+            <UIcon name="i-lucide-history" />
+          </button>
+        </UDropdownMenu>
         <button
           type="button"
           :aria-label="t('files.refresh')"
@@ -967,6 +1202,15 @@ function fileTypeLabel(entry) {
         >
           <UIcon name="i-lucide-folder-plus" />
         </button>
+        <button
+          type="button"
+          :aria-label="t('files.newFile')"
+          :title="t('files.newFile')"
+          :disabled="!canTransfer"
+          @click="openCreateFileDialog"
+        >
+          <UIcon name="i-lucide-file-plus" />
+        </button>
       </div>
     </header>
 
@@ -999,8 +1243,59 @@ function fileTypeLabel(entry) {
       </form>
     </div>
 
-    <UContextMenu :items="contextMenuItems" size="xs" :ui="fileContextMenuUi">
-      <div class="file-workbench" :class="{ 'drag-over': isDragOver }" @contextmenu="prepareContextMenu">
+    <Splitpanes class="xin-split explorer-split" @resized="persistTreeSize">
+      <Pane
+        v-if="settingsStore.showFileTree"
+        :size="settingsStore.fileTreeSize"
+        min-size="12"
+        max-size="46"
+      >
+        <UContextMenu :items="treeContextMenuItems" size="xs" :ui="fileContextMenuUi">
+          <aside class="file-tree" @contextmenu="prepareTreeContextMenu">
+            <template v-if="isConnected">
+              <button
+                v-for="row in treeRows"
+                :key="row.node.path"
+                type="button"
+                class="tree-row"
+                :class="{ active: row.node.path === currentPath }"
+                :style="{ '--tree-depth': row.depth }"
+                :data-tree-path="row.node.path"
+                :title="row.node.path"
+                @click="openTreeDirectory(row.node)"
+              >
+                <span
+                  class="tree-caret"
+                  :class="{
+                    expanded: row.node.expanded,
+                    leaf: row.node.loaded && !row.node.childDirs.length,
+                  }"
+                  @click.stop="toggleTreeRow(row.node)"
+                >
+                  <UIcon
+                    :name="row.node.loading ? 'i-lucide-loader-circle' : 'i-lucide-chevron-right'"
+                    :class="{ 'spin-icon': row.node.loading }"
+                  />
+                </span>
+                <UIcon
+                  class="tree-folder-icon"
+                  :name="row.node.expanded ? 'i-lucide-folder-open' : 'i-lucide-folder'"
+                />
+                <span class="tree-name">{{ row.node.name }}</span>
+              </button>
+            </template>
+
+            <div v-else class="tree-empty">
+              <UIcon name="i-lucide-list-tree" />
+              <span>{{ t("files.treeEmpty") }}</span>
+            </div>
+          </aside>
+        </UContextMenu>
+      </Pane>
+
+      <Pane :size="settingsStore.showFileTree ? 100 - settingsStore.fileTreeSize : 100">
+        <UContextMenu :items="contextMenuItems" size="xs" :ui="fileContextMenuUi">
+          <div class="file-workbench" :class="{ 'drag-over': isDragOver }" @contextmenu="prepareContextMenu">
         <section ref="fileTableWrap" class="file-table-wrap">
           <div class="file-row file-heading">
             <span class="name-column">{{ t("files.name") }}</span>
@@ -1056,8 +1351,10 @@ function fileTypeLabel(entry) {
           <strong>{{ t("files.dropUploadTitle") }}</strong>
           <span>{{ t("files.dropUploadDescription", { path: currentPath }) }}</span>
         </div>
-      </div>
-    </UContextMenu>
+          </div>
+        </UContextMenu>
+      </Pane>
+    </Splitpanes>
 
     <UModal
       v-model:open="nameDialog.open"

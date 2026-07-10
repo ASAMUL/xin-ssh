@@ -76,6 +76,14 @@ export function createRemoteDirectory(request) {
   return invoke("create_remote_directory", { request });
 }
 
+export function createRemoteFile(request) {
+  return invoke("create_remote_file", { request });
+}
+
+export function listRemoteDirectory(request) {
+  return invoke("list_remote_directory", { request });
+}
+
 export function renameRemotePath(request) {
   return invoke("rename_remote_path", { request });
 }

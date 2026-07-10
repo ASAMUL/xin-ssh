@@ -6,6 +6,9 @@ import { DEFAULT_TERMINAL_THEME_ID, TERMINAL_FONTS, TERMINAL_FONT_SIZES } from "
 const MONITOR_REFRESH_SECONDS_OPTIONS = [2, 5, 10, 30];
 const DEFAULT_MONITOR_REFRESH_SECONDS = 5;
 const DEFAULT_TERMINAL_FONT_SIZE = 14;
+const DEFAULT_MONITOR_PANE_SIZE = 22;
+const DEFAULT_FILE_PANE_SIZE = 42;
+const DEFAULT_FILE_TREE_SIZE = 22;
 
 export const useSettingsStore = defineStore("settings", {
   state: () => ({
@@ -19,6 +22,16 @@ export const useSettingsStore = defineStore("settings", {
     terminalFontFamily: (state) =>
       normalizeTerminalFontFamily(state.settings?.terminalFontFamily),
     terminalFontSize: (state) => normalizeTerminalFontSize(state.settings?.terminalFontSize),
+    showMonitorSidebar: (state) => state.settings?.showMonitorSidebar ?? true,
+    showFileExplorer: (state) => state.settings?.showFileExplorer ?? true,
+    showFileTree: (state) => state.settings?.showFileTree ?? true,
+    showHiddenFiles: (state) => state.settings?.showHiddenFiles ?? true,
+    monitorPaneSize: (state) =>
+      normalizePaneSize(state.settings?.monitorPaneSize, DEFAULT_MONITOR_PANE_SIZE),
+    filePaneSize: (state) =>
+      normalizePaneSize(state.settings?.filePaneSize, DEFAULT_FILE_PANE_SIZE),
+    fileTreeSize: (state) =>
+      normalizePaneSize(state.settings?.fileTreeSize, DEFAULT_FILE_TREE_SIZE),
   },
   actions: {
     hydrate(settings) {
@@ -44,6 +57,29 @@ export const useSettingsStore = defineStore("settings", {
       const snapshot = await saveSettings(nextSettings);
       this.hydrate(snapshot.settings);
       return snapshot;
+    },
+    // 布局/外观类偏好：先改内存立即生效，持久化失败不回滚（下次启动回落到旧值）
+    applySettingsPatch(partial) {
+      if (this.settings) {
+        Object.assign(this.settings, partial);
+      }
+
+      return this.patchSettings(partial).catch((error) => {
+        console.warn("[Xin Terminal] settings patch failed", error);
+        return null;
+      });
+    },
+    toggleMonitorSidebar() {
+      return this.applySettingsPatch({ showMonitorSidebar: !this.showMonitorSidebar });
+    },
+    toggleFileExplorer() {
+      return this.applySettingsPatch({ showFileExplorer: !this.showFileExplorer });
+    },
+    toggleFileTree() {
+      return this.applySettingsPatch({ showFileTree: !this.showFileTree });
+    },
+    toggleHiddenFiles() {
+      return this.applySettingsPatch({ showHiddenFiles: !this.showHiddenFiles });
     },
     setLocale(locale) {
       return this.patchSettings({ locale });
@@ -90,4 +126,13 @@ function normalizeTerminalFontSize(value) {
   }
 
   return DEFAULT_TERMINAL_FONT_SIZE;
+}
+
+function normalizePaneSize(value, fallback) {
+  const size = Number(value);
+  if (!Number.isFinite(size) || size <= 0 || size >= 100) {
+    return fallback;
+  }
+
+  return size;
 }

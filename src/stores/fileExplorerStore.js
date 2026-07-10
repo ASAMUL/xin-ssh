@@ -2,7 +2,9 @@ import { defineStore } from "pinia";
 import { listen } from "@tauri-apps/api/event";
 import {
   createRemoteDirectory,
+  createRemoteFile,
   deleteRemoteEntries,
+  listRemoteDirectory,
   renameRemotePath,
   streamRemoteDirectory,
 } from "../services/workspaceApi";
@@ -204,6 +206,16 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
         path: directoryPath,
       });
       await this.refreshDirectory(session);
+      this.refreshTreeChildren(session, parentRemotePath(directoryPath));
+    },
+    async createFile(session, filePath) {
+      if (!session || session.status !== "connected") return;
+
+      await createRemoteFile({
+        sessionId: session.id,
+        path: filePath,
+      });
+      await this.refreshDirectory(session);
     },
     async renameEntry(session, fromPath, toPath) {
       if (!session || session.status !== "connected") return;
@@ -214,6 +226,8 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
         toPath,
       });
       await this.refreshDirectory(session);
+      this.refreshTreeChildren(session, parentRemotePath(fromPath));
+      this.refreshTreeChildren(session, parentRemotePath(toPath));
     },
     async deleteEntries(session, entries, recursive = false) {
       if (!session || session.status !== "connected" || !entries?.length) return;
@@ -229,14 +243,96 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
         recursive,
       });
       await this.refreshDirectory(session);
+
+      const parentPaths = new Set(entries.map((entry) => parentRemotePath(entry.path)));
+      for (const parentPath of parentPaths) {
+        this.refreshTreeChildren(session, parentPath);
+      }
+    },
+    // ---- 目录树（懒加载，仅目录；与面板流式列表互不影响） ----
+    async loadTreeChildren(session, path, options = {}) {
+      if (!session || session.status !== "connected") return;
+
+      const state = this.ensureSessionState(session);
+      const node = ensureTreeNode(state, path);
+      if (node.loading || (node.loaded && !options.force)) return;
+
+      node.loading = true;
+      node.error = null;
+
+      try {
+        const entries = await listRemoteDirectory({
+          sessionId: session.id,
+          path: node.path,
+        });
+        node.childDirs = entries
+          .filter((entry) => entry.isDirectory)
+          .sort((left, right) => left.name.toLowerCase().localeCompare(right.name.toLowerCase()))
+          .map((entry) => ({
+            path: normalizeRemotePath(entry.path),
+            name: entry.name,
+            isHidden: Boolean(entry.isHidden),
+          }));
+
+        for (const child of node.childDirs) {
+          ensureTreeNode(state, child.path, child.name);
+        }
+
+        node.loaded = true;
+      } catch (error) {
+        node.error = String(error);
+        useSessionStore().handleConnectionOperationError(session.id, error);
+      } finally {
+        node.loading = false;
+      }
+    },
+    async toggleTreeNode(session, path) {
+      const state = this.ensureSessionState(session);
+      const node = ensureTreeNode(state, path);
+
+      node.expanded = !node.expanded;
+      if (node.expanded && !node.loaded) {
+        await this.loadTreeChildren(session, node.path);
+      }
+    },
+    // 面板路径变化时展开目录树上的祖先链，让当前目录在树里可见
+    async revealTreePath(session, targetPath) {
+      if (!session || session.status !== "connected") return;
+
+      const state = this.ensureSessionState(session);
+      const path = normalizeRemotePath(targetPath);
+      const ancestorPaths = ["/"];
+      const segments = path === "/" ? [] : path.slice(1).split("/");
+      let currentPath = "";
+
+      for (const segment of segments.slice(0, -1)) {
+        currentPath = `${currentPath}/${segment}`;
+        ancestorPaths.push(currentPath);
+      }
+
+      for (const ancestorPath of ancestorPaths) {
+        const node = ensureTreeNode(state, ancestorPath);
+        node.expanded = true;
+        if (!node.loaded) {
+          await this.loadTreeChildren(session, ancestorPath);
+        }
+      }
+    },
+    refreshTreeChildren(session, parentPath) {
+      const state = this.sessionStates[session?.id];
+      if (!state) return;
+
+      const node = state.treeNodes[normalizeRemotePath(parentPath)];
+      if (!node?.loaded) return;
+
+      return this.loadTreeChildren(session, node.path, { force: true });
     },
   },
 });
 
 function createFileState(path) {
   const currentPath = normalizeRemotePath(path);
-
-  return {
+  const state = {
     entries: [],
     currentPath,
     requestedPath: currentPath,
@@ -249,7 +345,29 @@ function createFileState(path) {
     historyIndex: 0,
     requestToken: null,
     pushHistoryOnLoad: true,
+    treeNodes: {},
   };
+
+  ensureTreeNode(state, DEFAULT_REMOTE_PATH);
+  return state;
+}
+
+function ensureTreeNode(state, path, name = "") {
+  const normalized = normalizeRemotePath(path);
+
+  if (!state.treeNodes[normalized]) {
+    state.treeNodes[normalized] = {
+      path: normalized,
+      name: name || (normalized === "/" ? "/" : normalized.split("/").pop()),
+      expanded: normalized === "/",
+      loading: false,
+      loaded: false,
+      error: null,
+      childDirs: [],
+    };
+  }
+
+  return state.treeNodes[normalized];
 }
 
 function normalizeRemoteEntry(entry) {

@@ -1,5 +1,8 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+@import "splitpanes/dist/splitpanes.css";
+@import "./splitpanes.css";
+@import "./modal-forms.css";
 
 :root {
   --ui-radius: 0.7rem;
@@ -104,6 +107,14 @@ button {
   cursor: default;
 }
 
+/* Nuxt UI 的 neutral 组件聚焦时默认使用近黑的 inverted ring/outline，
+   与玻璃主题冲突；统一改成系统蓝。此规则必须保持在 layer 之外，
+   以覆盖 utilities 层里的 ring 颜色。 */
+:where(input, select, textarea, button, [role="checkbox"], [role="radio"], [role="switch"], [role="combobox"]):focus-visible {
+  --tw-ring-color: rgba(47, 109, 246, 0.55);
+  outline-color: rgba(47, 109, 246, 0.55);
+}
+
 .spin-icon {
   animation: icon-spin 0.82s linear infinite;
 }
@@ -156,7 +167,7 @@ button {
   height: 60px;
   min-height: 60px;
   display: grid;
-  grid-template-columns: minmax(190px, 258px) minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   padding: 0 10px 0 0;
   border-bottom: 0;
@@ -169,12 +180,12 @@ button {
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 11px;
-  padding: 0 16px 0 20px;
+  gap: 10px;
+  padding: 0 4px 0 16px;
   color: var(--xin-text);
-  font-size: 13.5px;
-  font-weight: 680;
-  letter-spacing: 0.1px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
 }
 
 .window-brand > span:last-child {
@@ -184,17 +195,29 @@ button {
   white-space: nowrap;
 }
 
+/* 品牌区与会话 tab 之间的呼吸感分隔线 */
+.window-brand::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 1px;
+  height: 18px;
+  margin-left: 13px;
+  border-radius: 1px;
+  background: rgba(16, 26, 44, 0.14);
+}
+
 .app-dot {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   color: #ffffff;
+  font-size: 15px;
   border-radius: 9px;
   background: linear-gradient(145deg, #83a7ff, #2f6df6);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.4) inset,
-    0 8px 18px rgba(47, 109, 246, 0.32);
+    0 6px 16px rgba(47, 109, 246, 0.3);
 }
 
 .window-drag-space {
@@ -305,15 +328,6 @@ button {
     0 20px 44px rgba(63, 99, 242, 0.28);
 }
 
-.connection-form h2,
-.settings-panel h2 {
-  margin: 0;
-  color: #0f172a;
-  font-size: 23px;
-  font-weight: 720;
-  letter-spacing: -0.2px;
-}
-
 .secondary-action,
 .primary-action {
   display: inline-flex;
@@ -324,12 +338,6 @@ button {
   border-radius: var(--xin-radius);
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
 label {
   display: flex;
   flex-direction: column;
@@ -337,17 +345,6 @@ label {
   color: #344054;
   font-size: 12px;
   font-weight: 640;
-}
-
-.form-error,
-.form-progress {
-  margin: 0;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.form-error {
-  color: #dc2626;
 }
 
 .primary-action {
@@ -397,7 +394,6 @@ label {
   min-width: 0;
   display: flex;
   flex: 1;
-  gap: 12px;
   padding: 12px;
   background: transparent;
 }
@@ -406,36 +402,11 @@ label {
   padding: 0;
 }
 
-.group-creator {
-  display: grid;
-  grid-template-columns: 1fr 32px 32px;
-  align-items: center;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid rgba(37, 99, 235, 0.14);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.68);
-}
-
-.group-creator input {
-  height: 34px;
-  padding: 0 10px;
-}
-
-.group-creator button {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  color: #475569;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-}
-
-.group-creator button:hover {
-  color: #0757e6;
-  background: rgba(37, 99, 235, 0.08);
+/* 有会话时的三栏分割容器（splitpanes） */
+.workspace-split {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .workspace-main {
@@ -445,229 +416,6 @@ label {
   flex-direction: column;
   gap: 10px;
   background: transparent;
-}
-
-.modal-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  padding: 30px;
-  background: rgba(23, 33, 54, 0.26);
-  backdrop-filter: blur(10px) saturate(1.1);
-}
-
-.connection-form,
-.settings-panel {
-  width: min(640px, calc(100vw - 60px));
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 26px;
-  border: 1px solid var(--xin-glass-border);
-  border-radius: var(--xin-radius-xl);
-  background: var(--xin-glass-strong);
-  box-shadow:
-    var(--xin-specular),
-    0 32px 90px rgba(20, 34, 62, 0.28);
-  backdrop-filter: var(--xin-glass-blur);
-}
-
-.connection-form header,
-.settings-panel header,
-.connection-form footer,
-.settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.connection-form header button,
-.settings-panel header button {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  color: #475569;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-}
-
-.segmented-control {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  padding: 4px;
-  border-radius: var(--xin-radius);
-  background: rgba(16, 26, 44, 0.06);
-  box-shadow: inset 0 1px 2px rgba(16, 26, 44, 0.05);
-}
-
-.segmented-control button {
-  height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #475569;
-  border: 0;
-  border-radius: calc(var(--xin-radius) - 3px);
-  background: transparent;
-  transition:
-    background 140ms ease,
-    color 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.segmented-control button.active {
-  color: #0757e6;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 4px 14px rgba(20, 34, 62, 0.1);
-}
-
-.key-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.inline-field {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-}
-
-.inline-field button {
-  height: 42px;
-  padding: 0 12px;
-  color: #0757e6;
-  border: 1px solid rgba(37, 99, 235, 0.22);
-  border-radius: var(--xin-radius);
-  background: rgba(37, 99, 235, 0.06);
-}
-
-.group-select-field button {
-  width: 42px;
-  padding: 0;
-}
-
-.form-group-creator {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 34px 34px;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  color: #64748b;
-  border: 1px solid rgba(37, 99, 235, 0.14);
-  border-radius: var(--xin-radius);
-  background: rgba(247, 249, 252, 0.6);
-}
-
-.form-group-creator input {
-  height: 34px;
-  padding: 0 10px;
-}
-
-.form-group-creator button {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  color: #475569;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-}
-
-.form-group-creator button:hover {
-  color: #0757e6;
-  background: rgba(37, 99, 235, 0.08);
-}
-
-.credential-save-option {
-  padding: 10px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: var(--xin-radius);
-  background: rgba(248, 250, 252, 0.5);
-}
-
-.credential-save-option label {
-  color: #344054;
-  font-size: 12px;
-  font-weight: 780;
-}
-
-.credential-save-option p {
-  color: #64748b;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.connection-test-panel {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: var(--xin-radius);
-  background: rgba(248, 250, 252, 0.55);
-}
-
-.connection-test-panel.success {
-  border-color: rgba(34, 197, 94, 0.24);
-  background: rgba(240, 253, 244, 0.7);
-}
-
-.test-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.connection-test-result {
-  min-width: 0;
-  margin: 0;
-  color: #166534;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.connection-test-result strong,
-.connection-test-result span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-row {
-  min-height: 58px;
-  padding: 14px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
-}
-
-.settings-row strong,
-.settings-row small {
-  display: block;
-}
-
-.settings-row small {
-  max-width: 420px;
-  overflow: hidden;
-  margin-top: 5px;
-  color: #64748b;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .error-banner {

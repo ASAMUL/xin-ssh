@@ -25,20 +25,22 @@ const locale = computed({
         </button>
       </header>
 
-      <div class="settings-row">
-        <div>
-          <strong>{{ t("settings.language") }}</strong>
+      <div class="settings-body">
+        <div class="settings-row">
+          <div>
+            <strong>{{ t("settings.language") }}</strong>
+          </div>
+          <select v-model="locale">
+            <option value="zh-CN">中文</option>
+            <option value="en-US">English</option>
+          </select>
         </div>
-        <select v-model="locale">
-          <option value="zh-CN">中文</option>
-          <option value="en-US">English</option>
-        </select>
-      </div>
 
-      <div class="settings-row">
-        <div>
-          <strong>{{ t("settings.workspaceDir") }}</strong>
-          <small>{{ appStore.workspaceDir }}</small>
+        <div class="settings-row">
+          <div>
+            <strong>{{ t("settings.workspaceDir") }}</strong>
+            <small>{{ appStore.workspaceDir }}</small>
+          </div>
         </div>
       </div>
     </section>

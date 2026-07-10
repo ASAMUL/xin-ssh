@@ -33,3 +33,8 @@ export function joinRemotePath(base, child) {
 
   return cleanBase === DEFAULT_REMOTE_PATH ? `/${cleanChild}` : `${cleanBase}/${cleanChild}`;
 }
+
+// POSIX shell 单引号包裹，路径里的单引号转义为 '\''（与 Rust 端 util::shell_quote 对齐）
+export function quoteRemotePathForShell(path) {
+  return `'${String(path).replaceAll("'", `'\\''`)}'`;
+}

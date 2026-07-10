@@ -26,6 +26,21 @@ pub struct WorkspaceSettings {
     pub terminal_theme: String,
     #[serde(default = "default_terminal_font_size")]
     pub terminal_font_size: u16,
+    // 工作区面板布局：显隐开关 + splitpanes 百分比，serde default 兼容旧 settings.json
+    #[serde(default = "default_true")]
+    pub show_monitor_sidebar: bool,
+    #[serde(default = "default_true")]
+    pub show_file_explorer: bool,
+    #[serde(default = "default_true")]
+    pub show_file_tree: bool,
+    #[serde(default = "default_true")]
+    pub show_hidden_files: bool,
+    #[serde(default = "default_monitor_pane_size")]
+    pub monitor_pane_size: f64,
+    #[serde(default = "default_file_pane_size")]
+    pub file_pane_size: f64,
+    #[serde(default = "default_file_tree_size")]
+    pub file_tree_size: f64,
 }
 
 pub fn default_terminal_theme() -> String {
@@ -34,6 +49,25 @@ pub fn default_terminal_theme() -> String {
 
 pub fn default_terminal_font_size() -> u16 {
     14
+}
+
+pub fn default_true() -> bool {
+    true
+}
+
+// 监控栏占工作区宽度的百分比
+pub fn default_monitor_pane_size() -> f64 {
+    22.0
+}
+
+// 文件面板占工作区高度的百分比
+pub fn default_file_pane_size() -> f64 {
+    42.0
+}
+
+// 目录树占文件面板宽度的百分比
+pub fn default_file_tree_size() -> f64 {
+    22.0
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -192,6 +226,20 @@ pub struct RemoteSystemInfoRequest {
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteCreateDirectoryRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCreateFileRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteListDirectoryRequest {
     pub session_id: String,
     pub path: String,
 }

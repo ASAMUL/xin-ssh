@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
 import FileExplorer from "../FileExplorer.vue";
 import { useProfileStore } from "../../stores/profileStore";
@@ -300,6 +301,14 @@ function toggleAppearance() {
   hoveredThemeId.value = null;
 }
 
+// 文件面板拖拽结束后持久化高度占比（xterm 的 ResizeObserver 会自动 refit）
+function persistFilePaneSize(event) {
+  const panes = Array.isArray(event) ? event : event?.panes ?? [];
+  if (!settingsStore.showFileExplorer || panes.length < 2) return;
+
+  settingsStore.applySettingsPatch({ filePaneSize: panes[panes.length - 1].size });
+}
+
 function refitAfterFontLoad() {
   fitTerminal();
   document.fonts?.ready?.then(() => fitTerminal());
@@ -348,8 +357,12 @@ async function savePendingCredential() {
 </script>
 
 <template>
-  <section class="terminal-workspace">
-    <section class="terminal-panel-top" :style="themeStyleVars">
+  <Splitpanes horizontal class="xin-split terminal-split" @resized="persistFilePaneSize">
+    <Pane
+      :size="settingsStore.showFileExplorer ? 100 - settingsStore.filePaneSize : 100"
+      min-size="26"
+    >
+      <section class="terminal-panel-top" :style="themeStyleVars">
       <header class="terminal-panel-toolbar">
         <div class="terminal-title-block">
           <span class="terminal-live-dot" :class="activeSession?.status"></span>
@@ -364,6 +377,24 @@ async function savePendingCredential() {
 
         <div class="terminal-window-actions">
           <span class="terminal-state-label">{{ terminalStatusText }}</span>
+          <button
+            type="button"
+            :class="{ active: !settingsStore.showMonitorSidebar }"
+            :aria-label="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
+            :title="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
+            @click="settingsStore.toggleMonitorSidebar()"
+          >
+            <UIcon :name="settingsStore.showMonitorSidebar ? 'i-lucide-panel-left-close' : 'i-lucide-panel-left-open'" />
+          </button>
+          <button
+            type="button"
+            :class="{ active: !settingsStore.showFileExplorer }"
+            :aria-label="t(settingsStore.showFileExplorer ? 'terminal.hideFilePanel' : 'terminal.showFilePanel')"
+            :title="t(settingsStore.showFileExplorer ? 'terminal.hideFilePanel' : 'terminal.showFilePanel')"
+            @click="settingsStore.toggleFileExplorer()"
+          >
+            <UIcon :name="settingsStore.showFileExplorer ? 'i-lucide-panel-bottom-close' : 'i-lucide-panel-bottom-open'" />
+          </button>
           <button
             type="button"
             :class="{ active: isAppearanceOpen }"
@@ -549,9 +580,17 @@ async function savePendingCredential() {
         </aside>
       </Transition>
     </section>
+    </Pane>
 
-    <FileExplorer :active-session="activeSession" />
-  </section>
+    <Pane
+      v-if="settingsStore.showFileExplorer"
+      :size="settingsStore.filePaneSize"
+      min-size="16"
+      max-size="72"
+    >
+      <FileExplorer :active-session="activeSession" />
+    </Pane>
+  </Splitpanes>
 </template>
 
 <style scoped src="../../assets/css/terminal-workspace.css"></style>

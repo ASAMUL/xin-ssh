@@ -5,20 +5,22 @@ use std::sync::{
 
 use russh::client;
 use russh_sftp::client::{error::Error as SftpError, RawSftpSession, SftpSession};
-use russh_sftp::protocol::StatusCode;
+use russh_sftp::protocol::{OpenFlags, StatusCode};
 use tauri::{AppHandle, Emitter, State};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::{timeout, Duration};
 
 use crate::models::{
-    DirectoryEventPayload, RemoteCreateDirectoryRequest, RemoteDeleteRequest,
-    RemoteDirectoryStreamRequest, RemoteFileEntry, RemoteRenameRequest, RemoteTransferEntry,
+    DirectoryEventPayload, RemoteCreateDirectoryRequest, RemoteCreateFileRequest,
+    RemoteDeleteRequest, RemoteDirectoryStreamRequest, RemoteFileEntry,
+    RemoteListDirectoryRequest, RemoteRenameRequest, RemoteTransferEntry,
 };
 use crate::sftp::path::normalize_remote_path;
-use crate::sftp::{open_raw_sftp_session, remote_file_entry};
+use crate::sftp::{open_raw_sftp_session, remote_file_entry, remote_file_entry_from_attrs};
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
-use crate::util::{connection_error, summarize_transfer_errors};
+use crate::util::{connection_error, error_message, summarize_transfer_errors};
 
 const DIRECTORY_EVENT: &str = "directory-event";
 
@@ -49,6 +51,36 @@ pub async fn create_remote_directory(
     )
     .await
     .map_err(|_| "Create directory request timed out after 12 seconds".to_string())?
+}
+
+#[tauri::command]
+pub async fn create_remote_file(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteCreateFileRequest,
+) -> Result<(), String> {
+    validate_create_file_request(&request)?;
+
+    timeout(
+        Duration::from_secs(12),
+        registry.create_file(&request.session_id, normalize_remote_path(&request.path)),
+    )
+    .await
+    .map_err(|_| "Create file request timed out after 12 seconds".to_string())?
+}
+
+#[tauri::command]
+pub async fn list_remote_directory(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteListDirectoryRequest,
+) -> Result<Vec<RemoteFileEntry>, String> {
+    validate_list_directory_request(&request)?;
+
+    timeout(
+        Duration::from_secs(20),
+        registry.list_directory(&request.session_id, normalize_remote_path(&request.path)),
+    )
+    .await
+    .map_err(|_| "List directory request timed out after 20 seconds".to_string())?
 }
 
 #[tauri::command]
@@ -224,6 +256,57 @@ pub(crate) async fn create_directory_on_session(
     sftp.create_dir(path).await.map_err(connection_error)
 }
 
+pub(crate) async fn create_file_on_session(sftp: &SftpSession, path: &str) -> Result<(), String> {
+    let path = normalize_remote_path(path);
+
+    if path == "/" {
+        return Err("Cannot create a file at the root path".to_string());
+    }
+
+    if sftp
+        .try_exists(path.clone())
+        .await
+        .map_err(connection_error)?
+    {
+        return Err(format!("Remote target already exists: {path}"));
+    }
+
+    let mut file = sftp
+        .open_with_flags(
+            path,
+            OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+        )
+        .await
+        .map_err(connection_error)?;
+
+    file.shutdown().await.map_err(error_message)
+}
+
+// 目录树用的一次性列目录：走会话内缓存 SFTP 子通道，与流式面板列表互不影响
+pub(crate) async fn list_directory_on_session(
+    sftp: &SftpSession,
+    path: &str,
+) -> Result<Vec<RemoteFileEntry>, String> {
+    let listing_path = normalize_remote_path(path);
+    let read_dir = sftp
+        .read_dir(listing_path.clone())
+        .await
+        .map_err(connection_error)?;
+
+    Ok(read_dir
+        .into_iter()
+        .map(|child| {
+            let child_path = normalize_remote_path(&child.path());
+            let name = child_path
+                .rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            remote_file_entry_from_attrs(child_path, name, &child.metadata())
+        })
+        .collect())
+}
+
 pub(crate) async fn rename_path_on_session(
     sftp: &SftpSession,
     from_path: &str,
@@ -396,6 +479,34 @@ fn validate_create_directory_request(
 
     if normalize_remote_path(&request.path) == "/" {
         return Err("Cannot create the root directory".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_create_file_request(request: &RemoteCreateFileRequest) -> Result<(), String> {
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.path.trim().is_empty() {
+        return Err("Remote file path is required".to_string());
+    }
+
+    if normalize_remote_path(&request.path) == "/" {
+        return Err("Cannot create a file at the root path".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_list_directory_request(request: &RemoteListDirectoryRequest) -> Result<(), String> {
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.path.trim().is_empty() {
+        return Err("Remote directory path is required".to_string());
     }
 
     Ok(())
