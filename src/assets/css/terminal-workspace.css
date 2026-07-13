@@ -157,20 +157,26 @@
 .terminal-xterm {
   width: 100%;
   height: 100%;
-  padding: 14px 16px 20px;
 }
 
+/* 内边距放在 xterm 自身，而不是外层挂载点，一处修两个布局问题：
+   1) FitAddon 会读取并扣除 .xterm 的 padding，.xterm-screen(内容层)被
+      padding-right 挤入内侧、不再盖住右侧滚动条 —— 滚动条可用鼠标拖动；
+   2) padding-bottom 变成 .xterm-viewport 内部的底部缓冲，最后一行不会再被
+      viewport 的 overflow 裁掉半行 —— 终端底部完整显示。 */
 .terminal-xterm :deep(.xterm) {
   width: 100%;
   height: 100%;
+  padding: 14px 16px 20px;
 }
 
 .terminal-xterm :deep(.xterm-viewport) {
   overflow-y: auto;
 }
 
-/* 滚动条要可以点击拖动：不要把 .xterm-screen 拉宽到 100%，
-   否则屏幕层会盖住右侧滚动条（xterm 的 screen 在 viewport 之上）。 */
+/* 这里的宽度要和 FitAddon 读到的 scrollBarWidth 一致：FitAddon 用它从可用宽度里
+   扣掉滚动条，文本才不会被滚动条压住。滚动条的可拖动性由 .xterm 的 padding-right
+   保证（内容层被挤入内侧、不再盖住滚动条）。 */
 .terminal-xterm :deep(.xterm-viewport::-webkit-scrollbar) {
   width: 12px;
 }
