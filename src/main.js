@@ -4,6 +4,15 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
 import "@fontsource/fira-code/400.css";
 import "@fontsource/fira-code/700.css";
+import "@fontsource/victor-mono/400.css";
+import "@fontsource/victor-mono/400-italic.css";
+import "@fontsource/victor-mono/700.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/700.css";
+import "@fontsource/geist-mono/400.css";
+import "@fontsource/geist-mono/700.css";
+import "@fontsource/space-mono/400.css";
+import "@fontsource/space-mono/700.css";
 import "./assets/css/main.css";
 
 import { addCollection } from "@iconify/vue";

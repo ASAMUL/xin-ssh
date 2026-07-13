@@ -159,39 +159,26 @@
   height: 100%;
 }
 
-/* 内边距放在 xterm 自身，而不是外层挂载点，一处修两个布局问题：
-   1) FitAddon 会读取并扣除 .xterm 的 padding，.xterm-screen(内容层)被
-      padding-right 挤入内侧、不再盖住右侧滚动条 —— 滚动条可用鼠标拖动；
-   2) padding-bottom 变成 .xterm-viewport 内部的底部缓冲，最后一行不会再被
-      viewport 的 overflow 裁掉半行 —— 终端底部完整显示。 */
+/* 内边距放在 xterm 自身而不是外层挂载点：FitAddon 会读取并扣除 .xterm 的
+   padding，算出的列/行数才和实际可视区域一致，文本不会溢出或被裁半行。 */
 .terminal-xterm :deep(.xterm) {
   width: 100%;
   height: 100%;
   padding: 14px 16px 20px;
 }
 
+/* xterm6 遗留元素：内容和滚动都已迁到 .xterm-scrollable-element，这个空壳只给
+   overview ruler 用，但 stock css 仍给它铺了不透明 #000 且绝对定位盖满终端，
+   会挡住玻璃/场景主题的透明背景 —— 必须压掉。 */
 .terminal-xterm :deep(.xterm-viewport) {
-  overflow-y: auto;
+  background-color: transparent !important;
+  overflow-y: hidden;
 }
 
-/* 这里的宽度要和 FitAddon 读到的 scrollBarWidth 一致：FitAddon 用它从可用宽度里
-   扣掉滚动条，文本才不会被滚动条压住。滚动条的可拖动性由 .xterm 的 padding-right
-   保证（内容层被挤入内侧、不再盖住滚动条）。 */
-.terminal-xterm :deep(.xterm-viewport::-webkit-scrollbar) {
-  width: 12px;
-}
-
-.terminal-xterm :deep(.xterm-viewport::-webkit-scrollbar-thumb) {
-  border: 3px solid var(--term-scrollbar-edge, transparent);
+/* xterm6 的滚动条是自绘滑块（.xterm-scrollable-element > .scrollbar > .slider），
+   颜色由 theme.scrollbarSlider* 下发（见 buildXtermTheme），这里只调形状。 */
+.terminal-xterm :deep(.xterm-scrollable-element > .scrollbar > .slider) {
   border-radius: 999px;
-  background: var(--term-scrollbar-thumb, rgba(205, 214, 244, 0.32));
-  background-clip: padding-box;
-}
-
-.terminal-xterm :deep(.xterm-viewport::-webkit-scrollbar-thumb:hover),
-.terminal-xterm :deep(.xterm-viewport::-webkit-scrollbar-thumb:active) {
-  background: var(--term-accent, rgba(205, 214, 244, 0.55));
-  background-clip: padding-box;
 }
 
 .terminal-output-real {

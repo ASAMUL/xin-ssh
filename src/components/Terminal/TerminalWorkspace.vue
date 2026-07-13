@@ -16,6 +16,7 @@ import {
   TERMINAL_FONT_SIZES,
   TERMINAL_THEMES,
   TERMINAL_THEME_GROUPS,
+  buildXtermTheme,
   getTerminalTheme,
   resolveTerminalFontStack,
 } from "../../config/terminalThemes";
@@ -70,8 +71,6 @@ const themeStyleVars = computed(() => {
     "--term-text": ui.text,
     "--term-text-muted": ui.textMuted,
     "--term-soft": ui.soft,
-    "--term-scrollbar-thumb": ui.scrollbarThumb,
-    "--term-scrollbar-edge": ui.scrollbarEdge,
   };
 });
 const isPasswordAuth = computed(() => activeSession.value?.authMethod === "password");
@@ -129,7 +128,7 @@ watch(
 watch(displayTheme, (theme) => {
   if (!terminal) return;
 
-  terminal.options.theme = { ...theme.xterm };
+  terminal.options.theme = buildXtermTheme(theme);
 });
 
 watch(terminalFontStack, (stack) => {
@@ -159,7 +158,7 @@ onMounted(async () => {
     fontSize: settingsStore.terminalFontSize,
     lineHeight: 1.18,
     scrollback: 8000,
-    theme: { ...displayTheme.value.xterm },
+    theme: buildXtermTheme(displayTheme.value),
   });
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);

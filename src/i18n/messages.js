@@ -131,6 +131,7 @@ export const messages = {
       themeGroup: {
         glass: "玻璃",
         scene: "场景",
+        hacker: "黑客",
         classic: "经典",
       },
       more: "更多终端操作",
@@ -436,6 +437,7 @@ export const messages = {
       themeGroup: {
         glass: "Glass",
         scene: "Scenes",
+        hacker: "Hacker",
         classic: "Classic",
       },
       more: "More terminal actions",
