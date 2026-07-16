@@ -9,8 +9,8 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 
 use crate::models::{
-    RemoteDownloadRequest, RemoteFileEntry, RemoteSystemSnapshot, RemoteTransferEntry,
-    RemoteUploadRequest,
+    RemoteDownloadRequest, RemoteFileContent, RemoteFileEntry, RemoteSystemSnapshot,
+    RemoteTransferEntry, RemoteUploadRequest,
 };
 use crate::util::error_message;
 
@@ -43,6 +43,15 @@ pub(crate) enum TerminalControl {
     ListDirectory {
         path: String,
         responder: oneshot::Sender<Result<Vec<RemoteFileEntry>, String>>,
+    },
+    ReadFileText {
+        path: String,
+        responder: oneshot::Sender<Result<RemoteFileContent, String>>,
+    },
+    WriteFileText {
+        path: String,
+        content: String,
+        responder: oneshot::Sender<Result<(), String>>,
     },
     RenamePath {
         from_path: String,
@@ -249,6 +258,57 @@ impl TerminalRegistry {
         receiver
             .await
             .map_err(|_| "List directory request was canceled".to_string())?
+    }
+
+    pub(crate) async fn read_file_text(
+        &self,
+        session_id: &str,
+        path: String,
+    ) -> Result<RemoteFileContent, String> {
+        let sender = self
+            .sessions
+            .lock()
+            .map_err(error_message)?
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::ReadFileText { path, responder })
+            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+
+        receiver
+            .await
+            .map_err(|_| "Read file request was canceled".to_string())?
+    }
+
+    pub(crate) async fn write_file_text(
+        &self,
+        session_id: &str,
+        path: String,
+        content: String,
+    ) -> Result<(), String> {
+        let sender = self
+            .sessions
+            .lock()
+            .map_err(error_message)?
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::WriteFileText {
+                path,
+                content,
+                responder,
+            })
+            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+
+        receiver
+            .await
+            .map_err(|_| "Write file request was canceled".to_string())?
     }
 
     pub(crate) async fn rename_path(

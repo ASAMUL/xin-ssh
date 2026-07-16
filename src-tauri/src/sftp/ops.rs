@@ -7,14 +7,15 @@ use russh::client;
 use russh_sftp::client::{error::Error as SftpError, RawSftpSession, SftpSession};
 use russh_sftp::protocol::{OpenFlags, StatusCode};
 use tauri::{AppHandle, Emitter, State};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::{timeout, Duration};
 
 use crate::models::{
     DirectoryEventPayload, RemoteCreateDirectoryRequest, RemoteCreateFileRequest,
-    RemoteDeleteRequest, RemoteDirectoryStreamRequest, RemoteFileEntry,
-    RemoteListDirectoryRequest, RemoteRenameRequest, RemoteTransferEntry,
+    RemoteDeleteRequest, RemoteDirectoryStreamRequest, RemoteFileContent, RemoteFileEntry,
+    RemoteListDirectoryRequest, RemoteReadFileRequest, RemoteRenameRequest, RemoteTransferEntry,
+    RemoteWriteFileRequest,
 };
 use crate::sftp::path::normalize_remote_path;
 use crate::sftp::{open_raw_sftp_session, remote_file_entry, remote_file_entry_from_attrs};
@@ -23,6 +24,17 @@ use crate::ssh::registry::TerminalRegistry;
 use crate::util::{connection_error, error_message, summarize_transfer_errors};
 
 const DIRECTORY_EVENT: &str = "directory-event";
+// 内置编辑器单文件上限：内容走内存与 IPC 字符串往返，超限引导用户下载后编辑
+const MAX_EDITABLE_FILE_BYTES: u64 = 5 * 1024 * 1024;
+// 与 transfer.rs 的传输缓冲一致，分块写避免单次 SFTP 包过大
+const EDITOR_WRITE_CHUNK_BYTES: usize = 256 * 1024;
+
+fn editable_file_too_large_error() -> String {
+    format!(
+        "File is too large to edit (limit {} MB)",
+        MAX_EDITABLE_FILE_BYTES / (1024 * 1024)
+    )
+}
 
 #[tauri::command]
 pub fn stream_remote_directory(
@@ -81,6 +93,40 @@ pub async fn list_remote_directory(
     )
     .await
     .map_err(|_| "List directory request timed out after 20 seconds".to_string())?
+}
+
+#[tauri::command]
+pub async fn read_remote_file_text(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteReadFileRequest,
+) -> Result<RemoteFileContent, String> {
+    validate_read_file_request(&request)?;
+
+    timeout(
+        Duration::from_secs(60),
+        registry.read_file_text(&request.session_id, normalize_remote_path(&request.path)),
+    )
+    .await
+    .map_err(|_| "Read file request timed out after 60 seconds".to_string())?
+}
+
+#[tauri::command]
+pub async fn write_remote_file_text(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteWriteFileRequest,
+) -> Result<(), String> {
+    validate_write_file_request(&request)?;
+
+    timeout(
+        Duration::from_secs(60),
+        registry.write_file_text(
+            &request.session_id,
+            normalize_remote_path(&request.path),
+            request.content,
+        ),
+    )
+    .await
+    .map_err(|_| "Write file request timed out after 60 seconds".to_string())?
 }
 
 #[tauri::command]
@@ -279,6 +325,84 @@ pub(crate) async fn create_file_on_session(sftp: &SftpSession, path: &str) -> Re
         .await
         .map_err(connection_error)?;
 
+    file.shutdown().await.map_err(error_message)
+}
+
+pub(crate) async fn read_file_text_on_session(
+    sftp: &SftpSession,
+    path: &str,
+) -> Result<RemoteFileContent, String> {
+    let path = normalize_remote_path(path);
+    // metadata 跟随软链接：双击指向目录的软链接时报 "is a directory"，前端据此回退为目录导航
+    let metadata = sftp
+        .metadata(path.clone())
+        .await
+        .map_err(connection_error)?;
+
+    if metadata.file_type().is_dir() {
+        return Err(format!("Remote path is a directory: {path}"));
+    }
+
+    // FIFO/设备文件读取可能永久阻塞并占死共享 SFTP 通道，仅允许常规文件
+    if !metadata.file_type().is_file() {
+        return Err(format!("Remote path is not a regular file: {path}"));
+    }
+
+    let size = metadata.size.unwrap_or(0);
+    if size > MAX_EDITABLE_FILE_BYTES {
+        return Err(editable_file_too_large_error());
+    }
+
+    let mut file = sftp.open(path.clone()).await.map_err(connection_error)?;
+    let mut bytes = Vec::with_capacity(size as usize);
+    let read_result = file.read_to_end(&mut bytes).await;
+    let _ = file.shutdown().await;
+    read_result.map_err(error_message)?;
+
+    // /proc 等虚拟文件 metadata 报 0，按实际读到的字节数兜底校验
+    if bytes.len() as u64 > MAX_EDITABLE_FILE_BYTES {
+        return Err(editable_file_too_large_error());
+    }
+
+    if bytes.contains(&0) {
+        return Err("File appears to be binary and cannot be edited as text".to_string());
+    }
+
+    let content =
+        String::from_utf8(bytes).map_err(|_| "File is not valid UTF-8 text".to_string())?;
+
+    Ok(RemoteFileContent {
+        path,
+        size: content.len() as u64,
+        content,
+    })
+}
+
+pub(crate) async fn write_file_text_on_session(
+    sftp: &SftpSession,
+    path: &str,
+    content: &str,
+) -> Result<(), String> {
+    let path = normalize_remote_path(path);
+
+    if path == "/" {
+        return Err("Cannot write to the root path".to_string());
+    }
+
+    // 就地截断重写以保留权限与属主；不走“临时文件+改名”，SFTP rename 无法覆盖且会重置属主
+    let mut file = sftp
+        .open_with_flags(
+            path,
+            OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+        )
+        .await
+        .map_err(connection_error)?;
+
+    for chunk in content.as_bytes().chunks(EDITOR_WRITE_CHUNK_BYTES) {
+        file.write_all(chunk).await.map_err(error_message)?;
+    }
+
+    file.flush().await.map_err(error_message)?;
     file.shutdown().await.map_err(error_message)
 }
 
@@ -507,6 +631,38 @@ fn validate_list_directory_request(request: &RemoteListDirectoryRequest) -> Resu
 
     if request.path.trim().is_empty() {
         return Err("Remote directory path is required".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_read_file_request(request: &RemoteReadFileRequest) -> Result<(), String> {
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.path.trim().is_empty() {
+        return Err("Remote file path is required".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_write_file_request(request: &RemoteWriteFileRequest) -> Result<(), String> {
+    if request.session_id.trim().is_empty() {
+        return Err("Session id is required".to_string());
+    }
+
+    if request.path.trim().is_empty() {
+        return Err("Remote file path is required".to_string());
+    }
+
+    if normalize_remote_path(&request.path) == "/" {
+        return Err("Cannot write to the root path".to_string());
+    }
+
+    if request.content.len() as u64 > MAX_EDITABLE_FILE_BYTES {
+        return Err(editable_file_too_large_error());
     }
 
     Ok(())

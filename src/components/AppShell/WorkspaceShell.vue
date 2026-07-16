@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { Pane, Splitpanes } from "splitpanes";
 import ConnectionForm from "../ConnectionManager/ConnectionForm.vue";
+import RemoteFileEditor from "../FileEditor/RemoteFileEditor.vue";
 import SettingsPanel from "../Settings/SettingsPanel.vue";
 import TerminalWorkspace from "../Terminal/TerminalWorkspace.vue";
 import EmptyWorkspace from "./EmptyWorkspace.vue";
@@ -73,5 +74,6 @@ function persistMonitorPaneSize(event) {
       @close="uiStore.closeConnectionForm"
     />
     <SettingsPanel v-if="uiStore.isSettingsOpen" @close="uiStore.closeSettings" />
+    <RemoteFileEditor />
   </section>
 </template>

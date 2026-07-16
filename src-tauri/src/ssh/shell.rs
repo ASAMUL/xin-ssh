@@ -13,7 +13,8 @@ use crate::models::{
 use crate::sftp::ensure_sftp_session;
 use crate::sftp::ops::{
     create_directory_on_session, create_file_on_session, delete_paths_on_session,
-    list_directory_on_session, rename_path_on_session, stream_directory_on_session,
+    list_directory_on_session, read_file_text_on_session, rename_path_on_session,
+    stream_directory_on_session, write_file_text_on_session,
 };
 use crate::sftp::transfer::{
     remove_transfer_cancellation, run_download_transfer, run_upload_transfer,
@@ -322,6 +323,40 @@ async fn run_terminal_shell(
                             let mut cached = cached_sftp.lock().await;
                             let result = match ensure_sftp_session(&mut cached, &session).await {
                                 Ok(sftp) => list_directory_on_session(sftp, &path).await,
+                                Err(error) => Err(error),
+                            };
+                            if result.is_err() {
+                                *cached = None;
+                            }
+                            let _ = responder.send(result);
+                        });
+                    }
+                    TerminalControl::ReadFileText { path, responder } => {
+                        let session = Arc::clone(&session);
+                        let cached_sftp = Arc::clone(&cached_sftp);
+                        tauri::async_runtime::spawn(async move {
+                            let mut cached = cached_sftp.lock().await;
+                            let result = match ensure_sftp_session(&mut cached, &session).await {
+                                Ok(sftp) => read_file_text_on_session(sftp, &path).await,
+                                Err(error) => Err(error),
+                            };
+                            if result.is_err() {
+                                *cached = None;
+                            }
+                            let _ = responder.send(result);
+                        });
+                    }
+                    TerminalControl::WriteFileText {
+                        path,
+                        content,
+                        responder,
+                    } => {
+                        let session = Arc::clone(&session);
+                        let cached_sftp = Arc::clone(&cached_sftp);
+                        tauri::async_runtime::spawn(async move {
+                            let mut cached = cached_sftp.lock().await;
+                            let result = match ensure_sftp_session(&mut cached, &session).await {
+                                Ok(sftp) => write_file_text_on_session(sftp, &path, &content).await,
                                 Err(error) => Err(error),
                             };
                             if result.is_err() {

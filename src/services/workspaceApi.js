@@ -96,6 +96,14 @@ export function streamRemoteDirectory(request) {
   return invoke("stream_remote_directory", { request });
 }
 
+export function readRemoteFileText(request) {
+  return invoke("read_remote_file_text", { request });
+}
+
+export function writeRemoteFileText(request) {
+  return invoke("write_remote_file_text", { request });
+}
+
 export function getRemoteSystemInfo(request) {
   return invoke("get_remote_system_info", { request });
 }

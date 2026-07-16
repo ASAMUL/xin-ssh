@@ -6,6 +6,7 @@ import { useVirtualizer } from "@tanstack/vue-virtual";
 import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
+import { useEditorStore } from "../stores/editorStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
@@ -21,6 +22,7 @@ const props = defineProps({
 
 const { t, locale } = useI18n();
 const fileExplorerStore = useFileExplorerStore();
+const editorStore = useEditorStore();
 const settingsStore = useSettingsStore();
 const transferStore = useTransferStore();
 const uiStore = useUiStore();
@@ -148,6 +150,16 @@ const contextMenuItems = computed(() => {
               icon: "i-lucide-square-terminal",
               disabled: !canTransfer.value,
               onSelect: () => cdTerminalTo(entry.path),
+            },
+          ]
+        : []),
+      ...(entry && !entry.isDirectory
+        ? [
+            {
+              label: t("files.edit"),
+              icon: "i-lucide-file-pen-line",
+              disabled: !canTransfer.value,
+              onSelect: editContextEntry,
             },
           ]
         : []),
@@ -885,6 +897,14 @@ function openContextEntry() {
   if (!entry) return;
 
   openEntry(entry);
+}
+
+function editContextEntry() {
+  const entry = contextMenuEntry.value;
+  closeContextMenu();
+  if (!entry || !canTransfer.value) return;
+
+  editorStore.openFile(props.activeSession, entry);
 }
 
 function renameContextEntry() {

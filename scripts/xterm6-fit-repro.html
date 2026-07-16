@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css">
+<style>
+  html, body { margin: 0; height: 100%; }
+  /* mimic app structure: outer pane -> screen -> mount(.terminal-xterm) -> .xterm(padding) */
+  #pane { height: 50%; width: 100%; }
+  #mount { width: 100%; height: 100%; }
+  #mount .xterm { width: 100%; height: 100%; padding: 14px 16px 20px; box-sizing: border-box; }
+  #mount .xterm-viewport { background-color: transparent !important; overflow-y: hidden; }
+</style>
+</head>
+<body>
+<div id="pane"><div id="mount"></div></div>
+<script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+<script>
+  const term = new Terminal({
+    allowProposedApi: false,
+    allowTransparency: true,
+    cursorBlink: true,
+    cursorStyle: "bar",
+    fontSize: 14,
+    lineHeight: 1.18,
+    scrollback: 8000,
+    theme: { background: "rgba(0, 0, 0, 0)" },
+  });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById("mount"));
+
+  const log = [];
+  const ro = new ResizeObserver(() => {
+    try {
+      fit.fit();
+      log.push(`RO fit -> cols=${term.cols} rows=${term.rows}`);
+    } catch (e) {
+      log.push(`RO fit THREW: ${e.message}`);
+    }
+  });
+  ro.observe(document.getElementById("mount"));
+
+  window.runTest = async () => {
+    fit.fit();
+    for (let i = 1; i <= 45; i++) term.write(`line ${i} of MOTD output padding padding\r\n`);
+    await new Promise(r => setTimeout(r, 300));
+    const before = { cols: term.cols, rows: term.rows, propose: fit.proposeDimensions() };
+    // simulate collapsing the bottom file explorer: pane grows to full height
+    document.getElementById("pane").style.height = "100%";
+    await new Promise(r => setTimeout(r, 500));
+    const after = { cols: term.cols, rows: term.rows, propose: fit.proposeDimensions() };
+    const screen = document.querySelector(".xterm-screen");
+    const scrollable = document.querySelector(".xterm-scrollable-element");
+    return JSON.stringify({
+      before, after, log,
+      screenH: screen && screen.getBoundingClientRect().height,
+      scrollableH: scrollable && scrollable.getBoundingClientRect().height,
+      mountH: document.getElementById("mount").getBoundingClientRect().height,
+    }, null, 2);
+  };
+</script>
+</body>
+</html>

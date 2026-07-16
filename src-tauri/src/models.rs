@@ -246,6 +246,29 @@ pub struct RemoteListDirectoryRequest {
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RemoteReadFileRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteWriteFileRequest {
+    pub session_id: String,
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteFileContent {
+    pub path: String,
+    pub size: u64,
+    pub content: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RemoteRenameRequest {
     pub session_id: String,
     pub from_path: String,

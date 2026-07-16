@@ -28,6 +28,7 @@ pub fn run() {
             sftp::ops::stream_remote_directory,
             workspace::load_workspace,
             credentials::read_credential,
+            sftp::ops::read_remote_file_text,
             credentials::remove_credential,
             sftp::ops::rename_remote_path,
             ssh::shell::resize_terminal,
@@ -41,6 +42,7 @@ pub fn run() {
             sftp::transfer::start_upload_transfer,
             ssh::known_hosts::trust_host_key,
             ssh::test::test_connection,
+            sftp::ops::write_remote_file_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

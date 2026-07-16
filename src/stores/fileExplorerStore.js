@@ -13,6 +13,7 @@ import {
   normalizeRemotePath,
   parentRemotePath,
 } from "../utils/remotePath";
+import { useEditorStore } from "./editorStore";
 import { useSessionStore } from "./sessionStore";
 
 const DIRECTORY_EVENT_NAME = "directory-event";
@@ -172,9 +173,11 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       return this.loadDirectory(session, state.currentPath, { pushHistory: false });
     },
     openEntry(session, entry) {
-      if (!entry?.isDirectory) return;
+      if (!entry) return;
+      if (entry.isDirectory) return this.loadDirectory(session, entry.path);
 
-      return this.loadDirectory(session, entry.path);
+      // 双击文件：打开内置编辑器（软链接指向目录时由编辑器回退为导航）
+      return useEditorStore().openFile(session, entry);
     },
     goToParent(session) {
       const state = this.ensureSessionState(session);
