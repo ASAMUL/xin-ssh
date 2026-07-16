@@ -24,6 +24,7 @@
     "@fontsource/space-mono": "^5.2.9",
     "@fontsource/victor-mono": "^5.2.8",
     "@iconify/vue": "^5.0.1",
+    "@lezer/highlight": "^1.2.3",
     "@nuxt/ui": "^4.7.1",
     "@tanstack/vue-virtual": "^3.13.31",
     "@tauri-apps/api": "^2",

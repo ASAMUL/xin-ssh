@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import CodeMirrorEditor from "./CodeMirrorEditor.vue";
 import { TERMINAL_FONTS } from "../../config/terminalThemes";
@@ -10,6 +10,8 @@ const { t, locale } = useI18n();
 const editorStore = useEditorStore();
 const settingsStore = useSettingsStore();
 const editorRef = ref(null);
+const editorLanguage = ref("");
+const editorCursor = ref({ line: 1, column: 1, selectionLength: 0 });
 
 const editorModalUi = {
   content:
@@ -49,6 +51,24 @@ const savedAtFormatter = computed(
 );
 const savedAtLabel = computed(() =>
   editorStore.lastSavedAt ? savedAtFormatter.value.format(new Date(editorStore.lastSavedAt)) : "",
+);
+const editorLanguageLabel = computed(() => editorLanguage.value || t("editor.plainText"));
+const editorCursorLabel = computed(() =>
+  t("editor.cursorPosition", {
+    line: editorCursor.value.line,
+    column: editorCursor.value.column,
+  }),
+);
+const editorSelectionLabel = computed(() =>
+  t("editor.selectionLength", { count: editorCursor.value.selectionLength }),
+);
+
+watch(
+  () => editorStore.path,
+  () => {
+    editorLanguage.value = "";
+    editorCursor.value = { line: 1, column: 1, selectionLength: 0 };
+  },
 );
 
 onMounted(() => {
@@ -112,6 +132,14 @@ function handleWindowKeydown(event) {
 // dismissible=false 时 UModal 不会自行关闭，这里兜底外部触发的关闭请求
 function handleOpenChange(open) {
   if (!open) editorStore.requestClose();
+}
+
+function handleLanguageChange(language) {
+  editorLanguage.value = language;
+}
+
+function handleCursorChange(position) {
+  editorCursor.value = position;
 }
 </script>
 
@@ -179,6 +207,8 @@ function handleOpenChange(open) {
           :content="editorStore.initialContent"
           :filename="editorStore.name"
           @change="editorStore.markDirty()"
+          @cursor-change="handleCursorChange"
+          @language-change="handleLanguageChange"
           @save="save()"
         />
         <UAlert
@@ -226,9 +256,24 @@ function handleOpenChange(open) {
 
       <template v-else>
         <div class="remote-editor-meta">
-          <template v-if="editorStore.isSaving">{{ t("editor.saving") }}</template>
-          <template v-else-if="editorStore.isDirty">{{ t("editor.unsavedChanges") }}</template>
-          <template v-else-if="savedAtLabel">{{ t("editor.savedAt", { time: savedAtLabel }) }}</template>
+          <div v-if="editorStore.hasDocument" class="remote-editor-status">
+            <span class="remote-editor-status-item remote-editor-language">
+              <UIcon name="i-lucide-code-2" />
+              {{ editorLanguageLabel }}
+            </span>
+            <span class="remote-editor-status-item">UTF-8</span>
+            <span class="remote-editor-status-item">{{ editorCursorLabel }}</span>
+            <span v-if="editorCursor.selectionLength" class="remote-editor-status-item">
+              {{ editorSelectionLabel }}
+            </span>
+          </div>
+          <span v-if="editorStore.isSaving" class="remote-editor-save-state">{{ t("editor.saving") }}</span>
+          <span v-else-if="editorStore.isDirty" class="remote-editor-save-state">
+            {{ t("editor.unsavedChanges") }}
+          </span>
+          <span v-else-if="savedAtLabel" class="remote-editor-save-state">
+            {{ t("editor.savedAt", { time: savedAtLabel }) }}
+          </span>
         </div>
         <div class="remote-editor-actions">
           <UButton

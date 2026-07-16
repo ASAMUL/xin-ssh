@@ -120,51 +120,181 @@
 
 /* ---- CodeMirror 编辑区 ---- */
 
+/*
+ * 编辑区是一块深色代码画布（与终端一致，不随浅/深主题翻转），
+ * 但颜色集中在这组令牌里，避免散落的魔法色值，后续要接主题只改这里。
+ */
 .remote-editor-surface {
+  --xin-editor-bg: #101827;
+  --xin-editor-bg-gutter: #0c1423;
+  --xin-editor-bg-panel: #162033;
+  --xin-editor-bg-field: #0d1524;
+  --xin-editor-text: #d8e2f4;
+  --xin-editor-text-muted: #64748f;
+  --xin-editor-edge: rgba(148, 163, 184, 0.16);
+  --xin-editor-accent: #7dd3fc;
+  --xin-editor-accent-soft: rgba(96, 165, 250, 0.12);
+  --xin-editor-accent-line: rgba(96, 165, 250, 0.72);
+  --xin-editor-selection: rgba(59, 130, 246, 0.34);
+  --xin-editor-match: rgba(251, 191, 36, 0.22);
+  --xin-editor-scrollbar: rgba(148, 163, 184, 0.38);
+  --xin-editor-scrollbar-hover: rgba(148, 163, 184, 0.62);
+
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--xin-editor-edge);
+  background: var(--xin-editor-bg);
+  color: var(--xin-editor-text);
 }
 
 .code-editor-host {
   height: 100%;
   font-size: 13px;
+  background: var(--xin-editor-bg);
 }
 
 .code-editor-host :deep(.cm-editor) {
   height: 100%;
-  background: transparent;
+  color: var(--xin-editor-text);
+  background: var(--xin-editor-bg);
 }
 
 .code-editor-host :deep(.cm-editor.cm-focused) {
   outline: none;
+  box-shadow: inset 3px 0 0 var(--xin-editor-accent-line);
 }
 
 .code-editor-host :deep(.cm-scroller) {
   font-family: inherit;
   line-height: 1.6;
+  overflow: auto;
 }
 
 .code-editor-host :deep(.cm-gutters) {
-  background: var(--xin-glass-muted);
-  border-right: 1px solid var(--xin-glass-edge);
-  color: var(--xin-text-soft);
+  min-width: 52px;
+  padding: 8px 0;
+  color: var(--xin-editor-text-muted);
+  border-right: 1px solid var(--xin-editor-edge);
+  background: var(--xin-editor-bg-gutter);
+}
+
+.code-editor-host :deep(.cm-gutterElement) {
+  padding: 0 12px 0 8px;
+}
+
+.code-editor-host :deep(.cm-content) {
+  min-height: 100%;
+  padding: 8px 0 24px;
+  caret-color: var(--xin-editor-accent);
+}
+
+.code-editor-host :deep(.cm-line) {
+  padding: 0 18px;
 }
 
 .code-editor-host :deep(.cm-activeLine) {
-  background: rgba(47, 109, 246, 0.05);
+  background: var(--xin-editor-accent-soft);
 }
 
 .code-editor-host :deep(.cm-activeLineGutter) {
-  background: rgba(47, 109, 246, 0.09);
-  color: var(--xin-accent-strong);
+  color: #9cc6ff;
+  background: rgba(96, 165, 250, 0.12);
 }
 
 .code-editor-host :deep(.cm-selectionBackground) {
-  background: rgba(47, 109, 246, 0.16) !important;
+  background: var(--xin-editor-selection) !important;
+}
+
+.code-editor-host :deep(.cm-selectionMatch) {
+  background: var(--xin-editor-match);
 }
 
 .code-editor-host :deep(.cm-cursor) {
-  border-left-color: var(--xin-accent-strong);
+  border-left-color: var(--xin-editor-accent);
+}
+
+.code-editor-host :deep(.cm-matchingBracket) {
+  color: #fef3c7 !important;
+  border-bottom: 1px solid #fbbf24;
+  background: rgba(251, 191, 36, 0.14);
+}
+
+.code-editor-host :deep(.cm-nonmatchingBracket) {
+  color: #fecaca !important;
+  background: rgba(248, 113, 113, 0.18);
+}
+
+.code-editor-host :deep(.cm-foldPlaceholder) {
+  padding: 0 4px;
+  color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.34);
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.code-editor-host :deep(.cm-panels) {
+  color: var(--xin-editor-text);
+  border-bottom: 1px solid var(--xin-editor-edge);
+  background: var(--xin-editor-bg-panel);
+}
+
+.code-editor-host :deep(.cm-textfield) {
+  color: #e4edf9;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 5px;
+  outline: none;
+  background: var(--xin-editor-bg-field);
+}
+
+.code-editor-host :deep(.cm-button) {
+  color: #c8d8f1;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 5px;
+  background: rgba(148, 163, 184, 0.1);
+  cursor: pointer;
+}
+
+.code-editor-host :deep(.cm-button:hover) {
+  background: rgba(96, 165, 250, 0.18);
+}
+
+.code-editor-host :deep(.cm-searchMatch) {
+  color: #fef3c7;
+  background: rgba(251, 191, 36, 0.28);
+}
+
+.code-editor-host :deep(.cm-searchMatch.cm-searchMatch-selected) {
+  color: #ffffff;
+  background: rgba(59, 130, 246, 0.6);
+}
+
+.code-editor-host :deep(.cm-tooltip) {
+  color: var(--xin-editor-text);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 6px;
+  background: var(--xin-editor-bg-panel);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.35);
+}
+
+.code-editor-host :deep(.cm-tooltip-autocomplete > ul > li[aria-selected]) {
+  color: #eff6ff;
+  background: rgba(59, 130, 246, 0.45);
+}
+
+.code-editor-host :deep(.cm-scroller::-webkit-scrollbar) {
+  width: 10px;
+  height: 10px;
+}
+
+.code-editor-host :deep(.cm-scroller::-webkit-scrollbar-thumb) {
+  border: 3px solid var(--xin-editor-bg);
+  border-radius: 999px;
+  background: var(--xin-editor-scrollbar);
+}
+
+.code-editor-host :deep(.cm-scroller::-webkit-scrollbar-thumb:hover) {
+  background: var(--xin-editor-scrollbar-hover);
 }
 
 /* 保存失败提示浮在编辑区底部，不打断编辑 */
@@ -180,8 +310,54 @@
 /* ---- 底部状态栏 ---- */
 
 .remote-editor-meta {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
   font-size: 12px;
   color: var(--xin-text-muted);
+}
+
+.remote-editor-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.remote-editor-status-item {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.remote-editor-status-item + .remote-editor-status-item::before {
+  width: 1px;
+  height: 12px;
+  margin-right: 5px;
+  content: "";
+  background: var(--xin-border);
+}
+
+.remote-editor-language {
+  color: var(--xin-accent-strong);
+  font-weight: 650;
+}
+
+.remote-editor-language :deep(svg) {
+  font-size: 14px;
+}
+
+.remote-editor-save-state {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--xin-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .remote-editor-actions {
@@ -203,4 +379,14 @@
 .remote-editor-confirm :deep(svg) {
   font-size: 16px;
   flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .remote-editor-status-item:nth-child(n + 3) {
+    display: none;
+  }
+
+  .remote-editor-save-state {
+    display: none;
+  }
 }
