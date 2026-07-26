@@ -163,6 +163,7 @@ onMounted(async () => {
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
   terminal.open(terminalMount.value);
+  setupClipboardShortcuts();
 
   disposeDataListener = terminal.onData((data) => {
     sessionStore.sendActiveTerminalInput(data).catch(() => { });
@@ -215,6 +216,37 @@ function fitTerminal() {
   if (!terminal || !fitAddon || !terminalMount.value) return;
 
   fitAddon.fit();
+}
+
+// Ctrl+C 有选区时复制而不发送中断;Ctrl+V 交给原生 paste 事件送入 xterm
+function setupClipboardShortcuts() {
+  terminal.attachCustomKeyEventHandler((event) => {
+    if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) {
+      return true;
+    }
+
+    const key = event.key.toLowerCase();
+
+    if (key === "c" && terminal.hasSelection()) {
+      copyTerminalSelection();
+      return false;
+    }
+
+    if (key === "v") {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function copyTerminalSelection() {
+  const selection = terminal?.getSelection();
+  if (!selection) return;
+
+  navigator.clipboard?.writeText(selection).catch(() => { });
+  // 清掉选区作为“已复制”的视觉反馈，下一次 Ctrl+C 恢复为中断信号
+  terminal.clearSelection();
 }
 
 // 会话切换 / 清屏 / 重连时全量重建：回放有界缓冲快照，然后注册直写通道，
