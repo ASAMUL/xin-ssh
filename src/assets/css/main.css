@@ -70,37 +70,15 @@ body {
 }
 
 /* Base form styles live in the `base` cascade layer so Tailwind utility
-   classes from Nuxt UI components (e.g. the leading-icon padding on UInput)
-   keep winning over them. Unlayered rules would override those utilities. */
+   classes from Nuxt UI components keep winning over them.
+   表单控件已全面换用 Nuxt UI（UInput / USelect / UButton …），这里不再给
+   原生 input/select 定全局皮肤，避免污染第三方库（xterm / CodeMirror）
+   动态生成的控件。 */
 @layer base {
   button,
   input,
   select {
     font: inherit;
-  }
-
-  input,
-  select {
-    width: 100%;
-    height: 42px;
-    padding: 0 13px;
-    color: var(--xin-text);
-    border: 1px solid var(--xin-border);
-    border-radius: var(--xin-radius);
-    outline: 0;
-    background: rgba(255, 255, 255, 0.72);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
-    transition:
-      border-color 140ms ease,
-      box-shadow 140ms ease,
-      background 140ms ease;
-  }
-
-  input:focus,
-  select:focus {
-    border-color: rgba(47, 109, 246, 0.55);
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 0 0 4px rgba(47, 109, 246, 0.13);
   }
 }
 
@@ -329,30 +307,9 @@ button {
     0 20px 44px rgba(63, 99, 242, 0.28);
 }
 
-.secondary-action,
-.primary-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  border: 0;
-  border-radius: var(--xin-radius);
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  color: #344054;
-  font-size: 12px;
-  font-weight: 640;
-}
-
-.primary-action {
-  min-height: 42px;
-  padding: 0 18px;
-  color: #ffffff;
-  font-weight: 650;
+/* 品牌渐变主按钮：叠加在 UButton（color="primary" variant="solid"）上，
+   保留液态玻璃语言里的高光渐变 CTA 质感 */
+.cta-button {
   background: linear-gradient(180deg, #5f8bff 0%, var(--xin-accent-strong) 100%);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.32) inset,
@@ -362,33 +319,16 @@ label {
     filter 140ms ease;
 }
 
-.primary-action:hover:not(:disabled) {
+.cta-button:hover:not(:disabled) {
   filter: brightness(1.05);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.32) inset,
     0 14px 30px rgba(47, 109, 246, 0.4);
 }
 
-.primary-action:disabled {
+.cta-button:disabled {
   opacity: 0.52;
-}
-
-.secondary-action {
-  min-height: 40px;
-  padding: 0 15px;
-  color: #344054;
-  border: 1px solid var(--xin-border);
-  background: rgba(255, 255, 255, 0.62);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
-  transition: background 140ms ease;
-}
-
-.secondary-action:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.88);
-}
-
-.secondary-action:disabled {
-  opacity: 0.52;
+  filter: none;
 }
 
 .workspace-layout {

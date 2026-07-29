@@ -13,6 +13,11 @@ const locale = computed({
   get: () => settingsStore.locale,
   set: (value) => settingsStore.setLocale(value),
 });
+
+const localeItems = [
+  { label: "中文", value: "zh-CN" },
+  { label: "English", value: "en-US" },
+];
 </script>
 
 <template>
@@ -20,9 +25,14 @@ const locale = computed({
     <section class="settings-panel">
       <header>
         <h2>{{ t("settings.title") }}</h2>
-        <button type="button" :aria-label="t('settings.close')" @click="emit('close')">
-          <UIcon name="i-lucide-x" />
-        </button>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          square
+          icon="i-lucide-x"
+          :aria-label="t('settings.close')"
+          @click="emit('close')"
+        />
       </header>
 
       <div class="settings-body">
@@ -30,10 +40,7 @@ const locale = computed({
           <div>
             <strong>{{ t("settings.language") }}</strong>
           </div>
-          <select v-model="locale">
-            <option value="zh-CN">中文</option>
-            <option value="en-US">English</option>
-          </select>
+          <USelect v-model="locale" class="settings-locale" :items="localeItems" />
         </div>
 
         <div class="settings-row">

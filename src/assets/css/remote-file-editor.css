@@ -58,27 +58,6 @@
   white-space: nowrap;
 }
 
-.remote-editor-close {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  border: 1px solid transparent;
-  border-radius: var(--xin-radius-sm);
-  background: transparent;
-  color: var(--xin-text-muted);
-  font-size: 16px;
-  cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease;
-}
-
-.remote-editor-close:hover {
-  background: var(--xin-glass-muted);
-  border-color: var(--xin-glass-border);
-  color: var(--xin-text);
-}
-
 /* ---- 三态主体 ---- */
 
 .remote-editor-state {

@@ -53,26 +53,6 @@
   letter-spacing: -0.2px;
 }
 
-.connection-form > header button,
-.settings-panel > header button {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  color: #64748b;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  font-size: 16px;
-  transition: background 140ms ease, color 140ms ease;
-}
-
-.connection-form > header button:hover,
-.settings-panel > header button:hover {
-  color: var(--xin-text);
-  background: rgba(137, 148, 166, 0.14);
-}
-
 .form-body {
   min-height: 0;
   display: flex;
@@ -114,7 +94,7 @@
 
 /* 主机地址宽、端口窄、用户名居中收尾，一行读完连接目标 */
 .form-grid.host-grid {
-  grid-template-columns: minmax(0, 1.9fr) 88px minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1.9fr) 128px minmax(0, 1.1fr);
 }
 
 .form-error,
@@ -174,36 +154,9 @@
   gap: 8px;
 }
 
-.inline-field button {
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 13px;
-  color: #0757e6;
-  border: 1px solid rgba(37, 99, 235, 0.22);
-  border-radius: var(--xin-radius);
-  background: rgba(37, 99, 235, 0.06);
-  font-size: 12.5px;
-  font-weight: 640;
-  transition: background 140ms ease, border-color 140ms ease;
-}
-
-.inline-field button:hover {
-  border-color: rgba(37, 99, 235, 0.4);
-  background: rgba(37, 99, 235, 0.12);
-}
-
-/* 新建分组按钮：与输入框同高的方形图标按钮，字号即图标尺寸 */
-.group-select-field button {
-  width: 42px;
-  padding: 0;
-  font-size: 18px;
-}
-
 .form-group-creator {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 36px 36px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -212,32 +165,6 @@
   border-radius: var(--xin-radius);
   background: rgba(240, 245, 253, 0.7);
   font-size: 16px;
-}
-
-.form-group-creator input {
-  height: 34px;
-  padding: 0 10px;
-}
-
-.form-group-creator button {
-  width: 36px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  color: #475569;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  font-size: 16px;
-}
-
-.form-group-creator button:hover:not(:disabled) {
-  color: #0757e6;
-  background: rgba(37, 99, 235, 0.1);
-}
-
-.form-group-creator button:disabled {
-  opacity: 0.45;
 }
 
 .credential-save-option {
@@ -277,10 +204,6 @@
 }
 
 .test-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
   white-space: nowrap;
 }
 
@@ -320,8 +243,8 @@
   border-bottom: 0;
 }
 
-.settings-row select {
-  max-width: 200px;
+.settings-locale {
+  min-width: 160px;
 }
 
 .settings-row strong,

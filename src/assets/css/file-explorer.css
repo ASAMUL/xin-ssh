@@ -175,11 +175,13 @@
 }
 
 .path-bar input {
+  flex: 1;
   min-width: 0;
   height: 26px;
   padding: 0;
   border: 0;
   border-radius: 0;
+  outline: 0;
   background: transparent;
   box-shadow: none;
   color: var(--xin-accent-strong);

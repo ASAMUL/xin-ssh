@@ -329,20 +329,9 @@
   line-height: 1.45;
 }
 
-.terminal-auth-panel label {
-  color: rgba(205, 214, 244, 0.8);
-}
-
-.terminal-auth-panel input {
-  color: #f8fbff;
-  border-color: rgba(205, 214, 244, 0.2);
-  background: rgba(17, 17, 27, 0.42);
-}
-
-.terminal-auth-panel input:focus {
-  border-color: rgba(137, 180, 250, 0.62);
-  background: rgba(17, 17, 27, 0.55);
-  box-shadow: 0 0 0 4px rgba(137, 180, 250, 0.16);
+/* 深色玻璃面板上 UFormField 的默认深色 label 不可读，翻成浅色 */
+.terminal-auth-field :deep(label) {
+  color: rgba(205, 214, 244, 0.85);
 }
 
 .terminal-save-credential {

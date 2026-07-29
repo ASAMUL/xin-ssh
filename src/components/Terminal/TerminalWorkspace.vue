@@ -200,7 +200,7 @@ function focusTerminal() {
 }
 
 function focusCredentialInput() {
-  credentialInput.value?.focus();
+  credentialInput.value?.inputRef?.focus();
 }
 
 function focusActiveInput() {
@@ -453,33 +453,46 @@ async function savePendingCredential() {
             <small>{{ t("terminal.authDescription") }}</small>
           </div>
 
-          <label v-if="isPasswordAuth">
-            <span>{{ t("profile.password") }}</span>
-            <input ref="credentialInput" v-model="credentials.password" type="password"
-              autocomplete="current-password" />
-          </label>
+          <UFormField v-if="isPasswordAuth" class="terminal-auth-field" :label="t('profile.password')">
+            <UInput
+              ref="credentialInput"
+              v-model="credentials.password"
+              type="password"
+              size="lg"
+              class="w-full"
+              autocomplete="current-password"
+            />
+          </UFormField>
 
-          <label v-if="isPrivateKeyAuth">
-            <span>{{ t("profile.privateKeyPath") }}</span>
-            <input :value="activeSession.privateKeyPath || ''" type="text" readonly />
-          </label>
+          <UFormField v-if="isPrivateKeyAuth" class="terminal-auth-field" :label="t('profile.privateKeyPath')">
+            <UInput :model-value="activeSession.privateKeyPath || ''" size="lg" class="w-full" readonly />
+          </UFormField>
 
-          <label v-if="isPrivateKeyAuth">
-            <span>{{ t("profile.passphrase") }}</span>
-            <input ref="credentialInput" v-model="credentials.passphrase" type="password"
-              autocomplete="current-password" />
-          </label>
+          <UFormField v-if="isPrivateKeyAuth" class="terminal-auth-field" :label="t('profile.passphrase')">
+            <UInput
+              ref="credentialInput"
+              v-model="credentials.passphrase"
+              type="password"
+              size="lg"
+              class="w-full"
+              autocomplete="current-password"
+            />
+          </UFormField>
 
           <UCheckbox v-model="shouldSaveCredential" class="terminal-save-credential" :label="saveCredentialLabel"
             :description="t('terminal.saveCredentialDescription')" />
 
           <p v-if="activeSession?.error" class="terminal-auth-error">{{ activeSession.error }}</p>
 
-          <button type="submit" class="primary-action" :disabled="activeSession?.status === 'connecting'">
-            <UIcon :name="activeSession?.status === 'connecting' ? 'i-lucide-loader-circle' : 'i-lucide-plug-zap'"
-              :class="{ 'spin-icon': activeSession?.status === 'connecting' }" />
-            <span>{{ t("terminal.connectReal") }}</span>
-          </button>
+          <UButton
+            type="submit"
+            color="primary"
+            size="lg"
+            class="cta-button"
+            icon="i-lucide-plug-zap"
+            :loading="activeSession?.status === 'connecting'"
+            :label="t('terminal.connectReal')"
+          />
         </form>
 
         <div v-else-if="activeSession?.status === 'connecting'" class="terminal-connecting">
@@ -506,10 +519,14 @@ async function savePendingCredential() {
               <code>{{ activeSession.hostKeyChange.actualFingerprint }}</code>
             </div>
           </div>
-          <button type="button" class="primary-action" @click="trustCurrentHostKey">
-            <UIcon name="i-lucide-shield-check" />
-            <span>{{ t("terminal.trustHostKey") }}</span>
-          </button>
+          <UButton
+            color="primary"
+            size="lg"
+            class="cta-button"
+            icon="i-lucide-shield-check"
+            :label="t('terminal.trustHostKey')"
+            @click="trustCurrentHostKey"
+          />
         </div>
 
         <div v-else-if="activeSession?.status === 'error'" class="terminal-connecting error">

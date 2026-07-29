@@ -175,14 +175,14 @@ function handleCursorChange(position) {
           </strong>
           <span class="remote-editor-path" :title="editorStore.path">{{ editorStore.path }}</span>
         </div>
-        <button
-          type="button"
-          class="remote-editor-close"
+        <UButton
+          color="neutral"
+          variant="ghost"
+          square
+          icon="i-lucide-x"
           :aria-label="t('editor.close')"
           @click="editorStore.requestClose()"
-        >
-          <UIcon name="i-lucide-x" />
-        </button>
+        />
       </div>
     </template>
 

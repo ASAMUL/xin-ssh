@@ -46,6 +46,9 @@ const saveButtonText = computed(() => {
 });
 const saveProgressMessage = computed(() => (saveProgressKey.value ? t(saveProgressKey.value) : ""));
 const groupOptions = computed(() => profileStore.activeGroups);
+const groupSelectItems = computed(() =>
+  groupOptions.value.map((group) => ({ label: groupDisplayName(group), value: group.id })),
+);
 const saveCredentialLabel = computed(() =>
   t(form.authMethod === "password" ? "profile.savePassword" : "profile.savePassphrase"),
 );
@@ -312,65 +315,87 @@ async function createInlineGroup() {
     <form class="connection-form" @submit.prevent="submitProfile">
       <header>
         <h2>{{ formTitle }}</h2>
-        <button type="button" :aria-label="t('profile.cancel')" @click="emit('close')">
-          <UIcon name="i-lucide-x" />
-        </button>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          square
+          icon="i-lucide-x"
+          :aria-label="t('profile.cancel')"
+          @click="emit('close')"
+        />
       </header>
 
       <div class="form-body">
         <div class="form-grid">
-          <label>
-            <span>{{ t("profile.name") }}</span>
-            <input v-model="form.name" type="text" />
-          </label>
-          <label>
-            <span>{{ t("profile.group") }}</span>
-            <div class="inline-field group-select-field">
-              <select v-model="form.groupId">
-                <option v-for="group in groupOptions" :key="group.id" :value="group.id">
-                  {{ groupDisplayName(group) }}
-                </option>
-              </select>
-              <button type="button" :aria-label="t('sidebar.addGroup')" :title="t('sidebar.addGroup')" @click="openInlineGroupCreator">
-                <UIcon name="i-lucide-folder-plus" />
-              </button>
+          <UFormField :label="t('profile.name')">
+            <UInput v-model="form.name" size="lg" class="w-full" />
+          </UFormField>
+          <UFormField :label="t('profile.group')">
+            <div class="inline-field">
+              <USelect v-model="form.groupId" size="lg" class="w-full" :items="groupSelectItems" />
+              <UButton
+                color="primary"
+                variant="soft"
+                size="lg"
+                square
+                icon="i-lucide-folder-plus"
+                :aria-label="t('sidebar.addGroup')"
+                :title="t('sidebar.addGroup')"
+                @click="openInlineGroupCreator"
+              />
             </div>
-          </label>
+          </UFormField>
         </div>
 
         <div v-if="isGroupCreatorOpen" class="form-group-creator">
           <UIcon name="i-lucide-folder-plus" />
-          <input
+          <UInput
             v-model="newGroupName"
-            type="text"
+            size="sm"
+            class="w-full"
             :placeholder="t('sidebar.groupName')"
             autofocus
             @keydown.enter.prevent="createInlineGroup"
           />
-          <button type="button" :disabled="!newGroupName.trim() || isSavingGroup" @click="createInlineGroup">
-            <UIcon
-              :name="isSavingGroup ? 'i-lucide-loader-circle' : 'i-lucide-check'"
-              :class="{ 'spin-icon': isSavingGroup }"
-            />
-          </button>
-          <button type="button" @click="closeInlineGroupCreator">
-            <UIcon name="i-lucide-x" />
-          </button>
+          <UButton
+            color="primary"
+            variant="soft"
+            size="sm"
+            square
+            icon="i-lucide-check"
+            :loading="isSavingGroup"
+            :disabled="!newGroupName.trim()"
+            :aria-label="t('sidebar.addGroup')"
+            @click="createInlineGroup"
+          />
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            square
+            icon="i-lucide-x"
+            :aria-label="t('profile.cancel')"
+            @click="closeInlineGroupCreator"
+          />
         </div>
 
         <div class="form-grid host-grid">
-          <label>
-            <span>{{ t("profile.host") }}</span>
-            <input v-model="form.host" type="text" />
-          </label>
-          <label>
-            <span>{{ t("profile.port") }}</span>
-            <input v-model="form.port" type="number" min="1" max="65535" />
-          </label>
-          <label>
-            <span>{{ t("profile.username") }}</span>
-            <input v-model="form.username" type="text" />
-          </label>
+          <UFormField :label="t('profile.host')">
+            <UInput v-model="form.host" size="lg" class="w-full" />
+          </UFormField>
+          <UFormField :label="t('profile.port')">
+            <UInputNumber
+              v-model="form.port"
+              size="lg"
+              class="w-full"
+              :min="1"
+              :max="65535"
+              :format-options="{ useGrouping: false }"
+            />
+          </UFormField>
+          <UFormField :label="t('profile.username')">
+            <UInput v-model="form.username" size="lg" class="w-full" />
+          </UFormField>
         </div>
 
         <div class="segmented-control">
@@ -392,33 +417,40 @@ async function createInlineGroup() {
           </button>
         </div>
 
-        <label v-if="form.authMethod === 'password'">
-          <span>{{ t("profile.password") }}</span>
-          <input
+        <UFormField v-if="form.authMethod === 'password'" :label="t('profile.password')">
+          <UInput
             v-model="secretPassword"
             type="password"
+            size="lg"
+            class="w-full"
             autocomplete="new-password"
             :placeholder="hasSavedCredential ? t('profile.savedPasswordPlaceholder') : ''"
           />
-        </label>
+        </UFormField>
 
         <div v-else class="key-fields">
-          <label>
-            <span>{{ t("profile.privateKeyPath") }}</span>
+          <UFormField :label="t('profile.privateKeyPath')">
             <div class="inline-field">
-              <input v-model="form.privateKeyPath" type="text" />
-              <button type="button" @click="choosePrivateKey">{{ t("profile.choosePrivateKey") }}</button>
+              <UInput v-model="form.privateKeyPath" size="lg" class="w-full" />
+              <UButton
+                color="primary"
+                variant="soft"
+                size="lg"
+                :label="t('profile.choosePrivateKey')"
+                @click="choosePrivateKey"
+              />
             </div>
-          </label>
-          <label>
-            <span>{{ t("profile.passphrase") }}</span>
-            <input
+          </UFormField>
+          <UFormField :label="t('profile.passphrase')">
+            <UInput
               v-model="passphrase"
               type="password"
+              size="lg"
+              class="w-full"
               autocomplete="new-password"
               :placeholder="hasSavedCredential ? t('profile.savedPassphrasePlaceholder') : ''"
             />
-          </label>
+          </UFormField>
         </div>
 
         <UCheckbox
@@ -428,24 +460,22 @@ async function createInlineGroup() {
           :description="saveCredentialDescription"
         />
 
-        <label>
-          <span>{{ t("profile.defaultRemotePath") }}</span>
-          <input v-model="form.defaultRemotePath" type="text" />
-        </label>
+        <UFormField :label="t('profile.defaultRemotePath')">
+          <UInput v-model="form.defaultRemotePath" size="lg" class="w-full" />
+        </UFormField>
 
         <div class="connection-test-panel" :class="{ success: connectionTestResult }">
-          <button
-            type="button"
-            class="secondary-action test-action"
-            :disabled="!canSave || isTestingConnection"
+          <UButton
+            color="neutral"
+            variant="outline"
+            size="lg"
+            class="test-action"
+            icon="i-lucide-plug-zap"
+            :loading="isTestingConnection"
+            :disabled="!canSave"
+            :label="isTestingConnection ? t('profile.testing') : t('profile.test')"
             @click="testCurrentConnection"
-          >
-            <UIcon
-              :name="isTestingConnection ? 'i-lucide-loader-circle' : 'i-lucide-plug-zap'"
-              :class="{ 'spin-icon': isTestingConnection }"
-            />
-            <span>{{ isTestingConnection ? t("profile.testing") : t("profile.test") }}</span>
-          </button>
+          />
           <p v-if="connectionTestResult" class="connection-test-result">
             <strong>{{ t("profile.testConnected") }}</strong>
             <span>{{ testResultMessage }}</span>
@@ -457,16 +487,23 @@ async function createInlineGroup() {
       </div>
 
       <footer>
-        <button type="button" class="secondary-action" @click="emit('close')">
-          {{ t("profile.cancel") }}
-        </button>
-        <button type="submit" class="primary-action" :disabled="!canSave || isSavingProfile">
-          <UIcon
-            :name="isSavingProfile ? 'i-lucide-loader-circle' : 'i-lucide-save'"
-            :class="{ 'spin-icon': isSavingProfile }"
-          />
-          <span>{{ saveButtonText }}</span>
-        </button>
+        <UButton
+          color="neutral"
+          variant="outline"
+          size="lg"
+          :label="t('profile.cancel')"
+          @click="emit('close')"
+        />
+        <UButton
+          type="submit"
+          color="primary"
+          size="lg"
+          class="cta-button"
+          icon="i-lucide-save"
+          :loading="isSavingProfile"
+          :disabled="!canSave"
+          :label="saveButtonText"
+        />
       </footer>
     </form>
   </div>
