@@ -120,6 +120,14 @@ function handleWindowKeydown(event) {
     return;
   }
 
+  // 焦点在弹窗其他位置（如底部按钮）时也能用 Ctrl+F 唤起编辑器搜索；
+  // 焦点在编辑器内时 CodeMirror 快捷键已 preventDefault，不会走到这里
+  if ((event.ctrlKey || event.metaKey) && event.key?.toLowerCase() === "f") {
+    event.preventDefault();
+    editorRef.value?.openSearch();
+    return;
+  }
+
   if (event.key === "Escape") {
     if (editorStore.confirmingClose) {
       editorStore.cancelCloseConfirm();

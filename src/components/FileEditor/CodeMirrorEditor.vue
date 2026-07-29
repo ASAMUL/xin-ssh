@@ -1,12 +1,14 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { basicSetup } from "codemirror";
 import { EditorView, keymap } from "@codemirror/view";
 import { Compartment, EditorState } from "@codemirror/state";
 import { indentWithTab } from "@codemirror/commands";
+import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { tags } from "@lezer/highlight";
+import EditorSearchPanel from "./EditorSearchPanel.vue";
 
 const props = defineProps({
   content: {
@@ -22,6 +24,10 @@ const props = defineProps({
 const emit = defineEmits(["change", "save", "language-change", "cursor-change"]);
 
 const host = ref(null);
+const searchPanel = ref(null);
+const searchOpen = ref(false);
+const editorView = shallowRef(null);
+const editorTick = ref(0);
 const languageCompartment = new Compartment();
 let view = null;
 let languageLoadToken = 0;
@@ -94,6 +100,7 @@ onMounted(() => {
     parent: host.value,
     state: createEditorState(props.content),
   });
+  editorView.value = view;
   view.focus();
   emitCursorPosition(view.state);
   loadLanguage(props.filename);
@@ -101,6 +108,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   languageLoadToken += 1;
+  editorView.value = null;
   view?.destroy();
   view = null;
 });
@@ -116,6 +124,7 @@ watch(
       filename !== previousFilename ||
       (content !== previousContent && view.state.doc.toString() !== content)
     ) {
+      searchOpen.value = false;
       view.setState(createEditorState(content));
       activeLanguageName = null;
       emitCursorPosition(view.state);
@@ -139,17 +148,69 @@ function createEditorState(doc) {
             return true;
           },
         },
+        {
+          key: "Mod-f",
+          run: () => openSearch(),
+        },
+        {
+          key: "Escape",
+          run: () => {
+            if (!searchOpen.value) return false;
+            closeSearch();
+            return true;
+          },
+        },
         indentWithTab,
       ]),
+      // 查找/替换 UI 用自定义的 EditorSearchPanel：这里只挂一个隐藏锚点，
+      // 让 CodeMirror 维持「面板已打开」的内部状态来驱动全文匹配高亮
+      search({
+        top: true,
+        scrollToMatch: (range) => EditorView.scrollIntoView(range, { y: "center" }),
+        createPanel: () => {
+          const dom = document.createElement("div");
+          dom.className = "cm-xin-search-anchor";
+          dom.setAttribute("aria-hidden", "true");
+          return { dom, top: true };
+        },
+      }),
       basicSetup,
       syntaxHighlighting(syntaxHighlightTheme),
       languageCompartment.of([]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) emit("change");
-        if (update.docChanged || update.selectionSet) emitCursorPosition(update.state);
+        if (update.docChanged || update.selectionSet) {
+          emitCursorPosition(update.state);
+          editorTick.value += 1;
+        }
       }),
     ],
   });
+}
+
+// 打开（或重新聚焦）搜索面板；有单行选区时预填为搜索词
+function openSearch() {
+  if (!view) return true;
+
+  const selection = view.state.selection.main;
+  let seed = "";
+  if (!selection.empty && selection.to - selection.from <= 200) {
+    const text = view.state.sliceDoc(selection.from, selection.to);
+    if (!text.includes("\n")) seed = text;
+  }
+
+  openSearchPanel(view);
+  searchOpen.value = true;
+  nextTick(() => searchPanel.value?.activate(seed));
+  return true;
+}
+
+function closeSearch() {
+  searchOpen.value = false;
+  if (view) {
+    closeSearchPanel(view);
+    view.focus();
+  }
 }
 
 function resolveLanguageDescription(filename) {
@@ -220,9 +281,23 @@ async function loadLanguage(filename) {
 defineExpose({
   getContent: () => view?.state.doc.toString() ?? null,
   focus: () => view?.focus(),
+  openSearch,
 });
 </script>
 
 <template>
-  <div ref="host" class="code-editor-host"></div>
+  <div class="code-editor-shell">
+    <div ref="host" class="code-editor-host"></div>
+    <Transition name="editor-search-pop">
+      <EditorSearchPanel
+        v-if="searchOpen && editorView"
+        ref="searchPanel"
+        :view="editorView"
+        :tick="editorTick"
+        @close="closeSearch"
+      />
+    </Transition>
+  </div>
 </template>
+
+<style scoped src="../../assets/css/code-editor.css"></style>

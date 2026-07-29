@@ -34,9 +34,7 @@
   --xin-radius-lg: 16px;
   --xin-radius: 12px;
   --xin-radius-sm: 9px;
-  color: var(--xin-text);
-  background: #eef2f9;
-  font-family:
+  --xin-font-ui:
     "Inter Variable",
     "SF Pro Display",
     "Segoe UI Variable",
@@ -47,6 +45,9 @@
     "Microsoft YaHei",
     system-ui,
     sans-serif;
+  color: var(--xin-text);
+  background: #eef2f9;
+  font-family: var(--xin-font-ui);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
