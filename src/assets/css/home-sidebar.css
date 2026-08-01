@@ -1,0 +1,119 @@
+.home-sidebar {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px 12px 12px;
+  overflow: auto;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: var(--xin-radius-xl);
+  background: var(--xin-glass);
+  box-shadow:
+    var(--xin-specular),
+    0 18px 44px rgba(20, 34, 62, 0.08);
+  backdrop-filter: var(--xin-glass-blur);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(137, 148, 166, 0.34) transparent;
+}
+
+.home-sidebar-nav,
+.home-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.home-sidebar-label {
+  padding: 0 12px 5px;
+  color: var(--xin-text-soft);
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.home-sidebar-item {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  color: #3b4a63;
+  border: 1px solid transparent;
+  border-radius: var(--xin-radius);
+  background: transparent;
+  font-size: 13.5px;
+  font-weight: 620;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.home-sidebar-item .nav-icon {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  color: #64748b;
+  transition: color 140ms ease;
+}
+
+.home-sidebar-item > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-sidebar-item > em {
+  margin-left: auto;
+  color: var(--xin-text-soft);
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 620;
+}
+
+.home-sidebar-item:hover {
+  color: var(--xin-text);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.home-sidebar-item.active {
+  color: var(--xin-accent-strong);
+  border-color: rgba(255, 255, 255, 0.6);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(233, 241, 255, 0.66));
+  box-shadow:
+    var(--xin-specular),
+    0 8px 20px rgba(47, 109, 246, 0.14);
+}
+
+.home-sidebar-item.active .nav-icon {
+  color: var(--xin-accent);
+}
+
+.home-sidebar-group-icon {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--group-color, var(--xin-accent));
+  border-radius: 8px;
+  background: var(--group-soft, var(--xin-accent-soft));
+}
+
+.home-sidebar-group-icon :deep(svg) {
+  width: 14px;
+  height: 14px;
+}
+
+.home-sidebar-group.active {
+  color: var(--group-color, var(--xin-accent-strong));
+}
+
+.home-sidebar-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--xin-glass-edge);
+}

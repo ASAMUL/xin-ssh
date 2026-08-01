@@ -10,6 +10,7 @@ import {
 } from "../services/workspaceApi";
 import { i18n } from "../i18n";
 import { useCredentialStore } from "./credentialStore";
+import { useProfileStore } from "./profileStore";
 
 const TERMINAL_EVENT_NAME = "terminal-event";
 const INITIAL_TERMINAL_COLUMNS = 120;
@@ -316,6 +317,8 @@ export const useSessionStore = defineStore("sessions", {
         session.hostKeyChange = null;
         session.connectedAt = Date.now();
         session.lastDisconnectReason = null;
+        // 首页「最近连接」打点，失败不影响会话
+        useProfileStore().markConnected(session.profileId);
         return;
       }
 

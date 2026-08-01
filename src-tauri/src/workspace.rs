@@ -105,6 +105,27 @@ pub async fn save_profile(
     load_workspace_from_dir(&workspace)
 }
 
+// 记录最近一次成功连接时间；不 bump updated_at，避免「连了一下」触发同步冲突
+#[tauri::command]
+pub async fn mark_profile_connected(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<WorkspaceSnapshot, String> {
+    let workspace = active_workspace_dir(&app)?;
+    let mut profiles_file = read_profiles_file(&workspace)?;
+
+    if let Some(profile) = profiles_file
+        .profiles
+        .iter_mut()
+        .find(|item| item.id == profile_id)
+    {
+        profile.last_connected_at = Some(now_stamp());
+    }
+
+    write_profiles_file(&workspace, &profiles_file)?;
+    load_workspace_from_dir(&workspace)
+}
+
 #[tauri::command]
 pub async fn delete_profile(app: AppHandle, profile_id: String) -> Result<WorkspaceSnapshot, String> {
     let workspace = active_workspace_dir(&app)?;
@@ -329,6 +350,7 @@ fn default_settings() -> WorkspaceSettings {
         monitor_pane_size: crate::models::default_monitor_pane_size(),
         file_pane_size: crate::models::default_file_pane_size(),
         file_tree_size: crate::models::default_file_tree_size(),
+        home_view_mode: crate::models::default_home_view_mode(),
     }
 }
 

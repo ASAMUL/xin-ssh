@@ -5,29 +5,17 @@ import ConnectionForm from "../ConnectionManager/ConnectionForm.vue";
 import RemoteFileEditor from "../FileEditor/RemoteFileEditor.vue";
 import SettingsPanel from "../Settings/SettingsPanel.vue";
 import TerminalWorkspace from "../Terminal/TerminalWorkspace.vue";
-import EmptyWorkspace from "./EmptyWorkspace.vue";
+import HomeDashboard from "../Home/HomeDashboard.vue";
 import HostMonitorSidebar from "./HostMonitorSidebar.vue";
-import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
 
-const profileStore = useProfileStore();
 const sessionStore = useSessionStore();
 const settingsStore = useSettingsStore();
 const uiStore = useUiStore();
 
 const hasActiveSession = computed(() => Boolean(sessionStore.activeSession));
-const profileStatuses = computed(() =>
-  sessionStore.sessions.reduce((statuses, session) => {
-    statuses[session.profileId] = session.status;
-    return statuses;
-  }, {}),
-);
-
-function openProfile(profile) {
-  sessionStore.openProfileSession(profile);
-}
 
 // splitpanes 拖拽结束才落盘；兼容事件载荷为数组或 { panes } 两种形态
 function persistMonitorPaneSize(event) {
@@ -59,13 +47,7 @@ function persistMonitorPaneSize(event) {
     </Splitpanes>
 
     <section v-else class="workspace-main">
-      <EmptyWorkspace
-        :profile-groups="profileStore.profilesByGroup"
-        :profile-statuses="profileStatuses"
-        @open-profile="openProfile"
-        @edit-profile="uiStore.openConnectionForm"
-        @create-connection="uiStore.openConnectionForm"
-      />
+      <HomeDashboard />
     </section>
 
     <ConnectionForm

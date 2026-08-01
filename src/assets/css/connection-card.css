@@ -1,0 +1,182 @@
+.connection-card {
+  --status-color: #94a3b8;
+  --status-soft: rgba(148, 163, 184, 0.12);
+  position: relative;
+  min-width: 0;
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: var(--xin-radius-lg);
+  background: var(--xin-glass);
+  box-shadow:
+    var(--xin-specular),
+    0 16px 34px rgba(20, 34, 62, 0.07);
+  backdrop-filter: var(--xin-glass-blur);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.connection-card.connected {
+  --status-color: var(--xin-success);
+  --status-soft: rgba(53, 184, 113, 0.15);
+}
+
+.connection-card.connecting {
+  --status-color: var(--xin-warning);
+  --status-soft: rgba(215, 166, 65, 0.14);
+}
+
+.connection-card.authRequired {
+  --status-color: var(--xin-accent);
+  --status-soft: rgba(47, 109, 246, 0.14);
+}
+
+.connection-card.error {
+  --status-color: var(--xin-danger);
+  --status-soft: rgba(239, 68, 68, 0.12);
+}
+
+.connection-card:hover {
+  border-color: rgba(47, 109, 246, 0.32);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    var(--xin-specular),
+    0 22px 46px rgba(20, 34, 62, 0.12);
+  transform: translateY(-2px);
+}
+
+.connection-card-main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 12px 13px;
+  padding: 16px;
+  color: var(--xin-text);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.connection-card-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  border-radius: 13px;
+  background: linear-gradient(160deg, #6f9aff 0%, #2f6df6 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.4) inset,
+    0 10px 22px rgba(47, 109, 246, 0.28);
+  font-size: 21px;
+}
+
+.connection-card-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* 给右上角的星标/编辑按钮留出空间 */
+  padding-right: 52px;
+}
+
+.connection-card-copy strong,
+.connection-card-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-card-copy strong {
+  color: var(--xin-text);
+  font-size: 14.5px;
+  font-weight: 680;
+}
+
+.connection-card-copy small {
+  color: var(--xin-text-muted);
+  font-size: 12px;
+}
+
+.connection-card-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+.connection-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: max-content;
+  max-width: 100%;
+  height: 25px;
+  padding: 0 10px;
+  color: #475569;
+  border-radius: 999px;
+  background: var(--status-soft);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.connection-card-status i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--status-color);
+}
+
+.connection-card-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-card-meta > em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--xin-text-soft);
+  font-size: 11.5px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-card-tools {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  gap: 2px;
+}
+
+.connection-card-tools :deep(button) {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.connection-card:hover .connection-card-tools :deep(button),
+.connection-card-tools :deep(button:focus-visible) {
+  opacity: 1;
+}
+
+/* 已收藏的星标常显、着琥珀色 */
+.connection-card.favorite .connection-card-star {
+  opacity: 1;
+}
+
+.connection-card.favorite .connection-card-star :deep(svg),
+.connection-card.favorite .connection-card-star :deep(span) {
+  color: #f2a83b;
+}

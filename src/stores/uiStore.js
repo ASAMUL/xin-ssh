@@ -6,8 +6,19 @@ export const useUiStore = defineStore("ui", {
     editingProfileId: null,
     isSettingsOpen: false,
     error: null,
+    // 首页导航：home | all | favorites | recents；groupFilter 为分组 id 或 null
+    homeNav: "home",
+    homeGroupFilter: null,
   }),
   actions: {
+    setHomeNav(nav) {
+      this.homeNav = nav;
+      this.homeGroupFilter = null;
+    },
+    setHomeGroupFilter(groupId) {
+      this.homeNav = "all";
+      this.homeGroupFilter = groupId;
+    },
     openConnectionForm(profileId = null) {
       this.editingProfileId = profileId;
       this.isConnectionFormOpen = true;

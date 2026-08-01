@@ -162,6 +162,8 @@ async function submitProfile() {
         credentialRef,
         defaultRemotePath: form.defaultRemotePath || "/",
         sortOrder: currentProfile?.sortOrder ?? profileStore.activeProfiles.length,
+        favorite: currentProfile?.favorite ?? false,
+        lastConnectedAt: currentProfile?.lastConnectedAt ?? null,
         createdAt: currentProfile?.createdAt ?? now,
         updatedAt: now,
         deletedAt: currentProfile?.deletedAt ?? null,

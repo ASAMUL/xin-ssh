@@ -32,6 +32,8 @@ export const useSettingsStore = defineStore("settings", {
       normalizePaneSize(state.settings?.filePaneSize, DEFAULT_FILE_PANE_SIZE),
     fileTreeSize: (state) =>
       normalizePaneSize(state.settings?.fileTreeSize, DEFAULT_FILE_TREE_SIZE),
+    homeViewMode: (state) =>
+      state.settings?.homeViewMode === "list" ? "list" : "grid",
   },
   actions: {
     hydrate(settings) {
@@ -80,6 +82,11 @@ export const useSettingsStore = defineStore("settings", {
     },
     toggleHiddenFiles() {
       return this.applySettingsPatch({ showHiddenFiles: !this.showHiddenFiles });
+    },
+    setHomeViewMode(homeViewMode) {
+      return this.applySettingsPatch({
+        homeViewMode: homeViewMode === "list" ? "list" : "grid",
+      });
     },
     setLocale(locale) {
       return this.patchSettings({ locale });

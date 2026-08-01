@@ -24,6 +24,10 @@ export function deleteProfile(profileId) {
   return invoke("delete_profile", { profileId });
 }
 
+export function markProfileConnected(profileId) {
+  return invoke("mark_profile_connected", { profileId });
+}
+
 export function saveGroup(group) {
   return invoke("save_group", { group });
 }

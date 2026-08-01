@@ -1,0 +1,158 @@
+.connection-table {
+  min-width: 0;
+  overflow: auto hidden;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: var(--xin-radius-lg);
+  background: var(--xin-glass);
+  box-shadow:
+    var(--xin-specular),
+    0 16px 34px rgba(20, 34, 62, 0.07);
+  backdrop-filter: var(--xin-glass-blur);
+}
+
+.connection-table table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.connection-table th {
+  padding: 12px 14px;
+  color: var(--xin-text-soft);
+  border-bottom: 1px solid var(--xin-glass-edge);
+  font-size: 12px;
+  font-weight: 640;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.connection-table td {
+  max-width: 260px;
+  overflow: hidden;
+  padding: 10px 14px;
+  color: var(--xin-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-table tbody tr {
+  --status-color: #94a3b8;
+  --status-soft: rgba(148, 163, 184, 0.12);
+  border-bottom: 1px solid rgba(16, 26, 44, 0.05);
+  transition: background 120ms ease;
+}
+
+.connection-table tbody tr:last-child {
+  border-bottom: 0;
+}
+
+.connection-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.connection-table tbody tr.connected {
+  --status-color: var(--xin-success);
+  --status-soft: rgba(53, 184, 113, 0.15);
+}
+
+.connection-table tbody tr.connecting {
+  --status-color: var(--xin-warning);
+  --status-soft: rgba(215, 166, 65, 0.14);
+}
+
+.connection-table tbody tr.authRequired {
+  --status-color: var(--xin-accent);
+  --status-soft: rgba(47, 109, 246, 0.14);
+}
+
+.connection-table tbody tr.error {
+  --status-color: var(--xin-danger);
+  --status-soft: rgba(239, 68, 68, 0.12);
+}
+
+.col-name {
+  min-width: 180px;
+}
+
+td.col-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.row-star {
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.connection-table tbody tr:hover .row-star,
+.row-star:focus-visible,
+.row-star.favorite {
+  opacity: 1;
+}
+
+.row-star.favorite :deep(svg),
+.row-star.favorite :deep(span) {
+  color: #f2a83b;
+}
+
+.row-name {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  color: var(--xin-text);
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.row-name:hover {
+  color: var(--xin-accent-strong);
+}
+
+.cell-muted {
+  color: var(--xin-text-muted);
+}
+
+.row-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 24px;
+  padding: 0 10px;
+  color: #475569;
+  border-radius: 999px;
+  background: var(--status-soft);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.row-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-color);
+}
+
+.col-actions {
+  width: 96px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+td.col-actions :deep(button) {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.connection-table tbody tr:hover td.col-actions :deep(button),
+td.col-actions :deep(button:focus-visible) {
+  opacity: 1;
+}

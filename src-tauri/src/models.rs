@@ -41,6 +41,9 @@ pub struct WorkspaceSettings {
     pub file_pane_size: f64,
     #[serde(default = "default_file_tree_size")]
     pub file_tree_size: f64,
+    // 首页「所有连接」视图模式：grid | list
+    #[serde(default = "default_home_view_mode")]
+    pub home_view_mode: String,
 }
 
 pub fn default_terminal_theme() -> String {
@@ -68,6 +71,10 @@ pub fn default_file_pane_size() -> f64 {
 // 目录树占文件面板宽度的百分比
 pub fn default_file_tree_size() -> f64 {
     22.0
+}
+
+pub fn default_home_view_mode() -> String {
+    "grid".to_string()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -106,6 +113,12 @@ pub struct ConnectionProfile {
     pub credential_ref: Option<String>,
     pub default_remote_path: String,
     pub sort_order: i32,
+    // 首页 Dashboard 字段：收藏走 save_profile 正常同步；最后连接时间由
+    // mark_profile_connected 单独写入且不 bump updated_at（避免同步冲突）
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default)]
+    pub last_connected_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
