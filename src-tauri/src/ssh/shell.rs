@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use russh::{client, ChannelMsg, Disconnect};
+use russh::{ChannelMsg, Disconnect};
 use russh_sftp::client::SftpSession;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{mpsc, Mutex as AsyncMutex};
@@ -19,14 +19,12 @@ use crate::sftp::ops::{
 use crate::sftp::transfer::{
     remove_transfer_cancellation, run_download_transfer, run_upload_transfer,
 };
-use crate::ssh::client::{authenticate_session, ConnectionTestClient, ServerKeySnapshot};
-use crate::ssh::known_hosts;
+use crate::ssh::client::{authenticate_session, connect_with_tofu};
 use crate::ssh::registry::{TerminalControl, TerminalRegistry};
 use crate::system_info::collect_system_info_on_session;
 use crate::util::{connection_error, shell_quote};
 
 const TERMINAL_EVENT: &str = "terminal-event";
-const SSH_KEEPALIVE_INTERVAL_SECS: u64 = 30;
 const TERMINAL_CLOSE_REASON_CLIENT: &str = "client";
 const TERMINAL_CLOSE_REASON_REMOTE: &str = "remote";
 const TERMINAL_CLOSE_REASON_ERROR: &str = "error";
@@ -122,52 +120,7 @@ async fn run_terminal_shell(
     let mut close_reason = TERMINAL_CLOSE_REASON_REMOTE;
     let host = request.host.trim().to_string();
     let username = request.username.trim().to_string();
-    // TOFU：已有记录则校验指纹，首次连接成功后记录
-    let expected_fingerprint = known_hosts::lookup_fingerprint(&app, &host, request.port)?;
-    let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
-    let handler = ConnectionTestClient {
-        server_key: Arc::clone(&server_key),
-        expected_fingerprint: expected_fingerprint.clone(),
-    };
-    let config = Arc::new(client::Config {
-        inactivity_timeout: None,
-        keepalive_interval: Some(Duration::from_secs(SSH_KEEPALIVE_INTERVAL_SECS)),
-        ..Default::default()
-    });
-
-    let mut session = match client::connect(config, (host.as_str(), request.port), handler).await {
-        Ok(session) => session,
-        Err(error) => {
-            let snapshot = server_key
-                .lock()
-                .map(|snapshot| snapshot.clone())
-                .unwrap_or_default();
-
-            if let (Some(expected), Some(actual)) = (&expected_fingerprint, &snapshot.fingerprint) {
-                if expected != actual {
-                    return Err(known_hosts::host_key_changed_error(expected, actual));
-                }
-            }
-
-            return Err(connection_error(error));
-        }
-    };
-
-    if expected_fingerprint.is_none() {
-        let snapshot = server_key
-            .lock()
-            .map(|snapshot| snapshot.clone())
-            .unwrap_or_default();
-        if let Some(fingerprint) = &snapshot.fingerprint {
-            let _ = known_hosts::record_host_key(
-                &app,
-                &host,
-                request.port,
-                fingerprint,
-                snapshot.algorithm.as_deref(),
-            );
-        }
-    }
+    let mut session = connect_with_tofu(&app, &host, request.port).await?;
 
     authenticate_session(
         &mut session,

@@ -6,14 +6,15 @@ use std::{
 use tauri::{AppHandle, Manager};
 
 use crate::models::{
-    AppStateFile, AppStatus, ConnectionGroup, ConnectionProfile, ProfilesFile, WorkspaceSettings,
-    WorkspaceSnapshot,
+    AppStateFile, AppStatus, ConnectionGroup, ConnectionProfile, ProfilesFile, TunnelConfig,
+    TunnelsFile, WorkspaceSettings, WorkspaceSnapshot,
 };
 use crate::util::{error_message, now_stamp, path_to_string};
 
 const APP_STATE_FILE: &str = "app-state.json";
 const PROFILES_FILE: &str = "profiles.json";
 const SETTINGS_FILE: &str = "settings.json";
+const TUNNELS_FILE: &str = "tunnels.json";
 pub(crate) const CURRENT_SCHEMA_VERSION: u16 = 1;
 
 #[tauri::command]
@@ -200,6 +201,74 @@ pub async fn save_settings(
     let workspace = active_workspace_dir(&app)?;
     write_settings_file(&workspace, &settings)?;
     load_workspace_from_dir(&workspace)
+}
+
+// —— SSH 隧道配置（tunnels.json，按需创建；软删除同 profiles）——
+
+#[tauri::command]
+pub async fn list_tunnel_configs(app: AppHandle) -> Result<Vec<TunnelConfig>, String> {
+    let workspace = active_workspace_dir(&app)?;
+    Ok(read_tunnels_file(&workspace)?.tunnels)
+}
+
+#[tauri::command]
+pub async fn save_tunnel_config(
+    app: AppHandle,
+    tunnel: TunnelConfig,
+) -> Result<Vec<TunnelConfig>, String> {
+    let workspace = active_workspace_dir(&app)?;
+    let mut tunnels_file = read_tunnels_file(&workspace)?;
+    let mut next_tunnel = tunnel;
+    next_tunnel.updated_at = now_stamp();
+
+    if let Some(existing) = tunnels_file
+        .tunnels
+        .iter_mut()
+        .find(|item| item.id == next_tunnel.id)
+    {
+        *existing = next_tunnel;
+    } else {
+        tunnels_file.tunnels.push(next_tunnel);
+    }
+
+    write_tunnels_file(&workspace, &tunnels_file)?;
+    Ok(tunnels_file.tunnels)
+}
+
+#[tauri::command]
+pub async fn delete_tunnel_config(
+    app: AppHandle,
+    tunnel_id: String,
+) -> Result<Vec<TunnelConfig>, String> {
+    let workspace = active_workspace_dir(&app)?;
+    let mut tunnels_file = read_tunnels_file(&workspace)?;
+
+    if let Some(tunnel) = tunnels_file
+        .tunnels
+        .iter_mut()
+        .find(|item| item.id == tunnel_id)
+    {
+        tunnel.deleted_at = Some(now_stamp());
+    }
+
+    write_tunnels_file(&workspace, &tunnels_file)?;
+    Ok(tunnels_file.tunnels)
+}
+
+fn read_tunnels_file(workspace: &Path) -> Result<TunnelsFile, String> {
+    let path = workspace.join(TUNNELS_FILE);
+    if !path.exists() {
+        return Ok(TunnelsFile {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            tunnels: Vec::new(),
+        });
+    }
+
+    read_json_file(&path)
+}
+
+fn write_tunnels_file(workspace: &Path, tunnels_file: &TunnelsFile) -> Result<(), String> {
+    write_json_file(&workspace.join(TUNNELS_FILE), tunnels_file)
 }
 
 fn load_workspace_from_dir(workspace: &Path) -> Result<WorkspaceSnapshot, String> {

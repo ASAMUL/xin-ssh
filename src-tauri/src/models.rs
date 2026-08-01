@@ -131,6 +131,56 @@ pub enum AuthMethod {
     PrivateKey,
 }
 
+// —— SSH 隧道（本地端口转发）——
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelsFile {
+    pub schema_version: u16,
+    pub tunnels: Vec<TunnelConfig>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelConfig {
+    pub id: String,
+    pub sync_id: String,
+    pub profile_id: String,
+    pub name: String,
+    pub local_port: u16,
+    // 从服务器视角解析的转发目标（默认 127.0.0.1 即服务器自身）
+    pub remote_host: String,
+    pub remote_port: u16,
+    pub sort_order: i32,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelStartRequest {
+    pub tunnel_id: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth_method: AuthMethod,
+    pub password: Option<String>,
+    pub private_key_path: Option<String>,
+    pub passphrase: Option<String>,
+    pub local_port: u16,
+    pub remote_host: String,
+    pub remote_port: u16,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelEventPayload {
+    pub tunnel_id: String,
+    pub kind: String,
+    pub error: Option<String>,
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionTestRequest {

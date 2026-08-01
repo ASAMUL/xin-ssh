@@ -20,7 +20,7 @@ defineProps({
   },
 });
 
-const emit = defineEmits(["selectNav", "selectGroup", "openSettings"]);
+const emit = defineEmits(["selectNav", "selectGroup", "openSettings", "openTunnels"]);
 const { t } = useI18n();
 
 // 分组图标的点缀色，按序循环
@@ -72,6 +72,14 @@ function groupColor(index) {
         </span>
         <span>{{ name }}</span>
         <em>{{ count }}</em>
+      </button>
+    </div>
+
+    <div class="home-sidebar-section">
+      <span class="home-sidebar-label">{{ t("home.tools") }}</span>
+      <button type="button" class="home-sidebar-item" @click="emit('openTunnels')">
+        <UIcon name="i-lucide-waypoints" class="nav-icon" />
+        <span>{{ t("tunnel.title") }}</span>
       </button>
     </div>
 

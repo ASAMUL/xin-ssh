@@ -121,7 +121,6 @@ const tableRows = computed(() =>
 
 const recentRow = computed(() => profileStore.recentProfiles.slice(0, RECENT_ROW_LIMIT));
 const showHomeSections = computed(() => activeNav.value === "home" && !normalizedQuery.value);
-const quickConnectTarget = computed(() => profileStore.recentProfiles[0] ?? null);
 
 const sectionTitle = computed(() => {
   if (activeNav.value === "favorites") return t("home.nav.favorites");
@@ -147,15 +146,13 @@ const quickActions = computed(() => [
     run: () => uiStore.openConnectionForm(),
   },
   {
-    id: "quickConnect",
-    icon: "i-lucide-zap",
+    id: "tunnel",
+    icon: "i-lucide-waypoints",
     tone: "green",
-    title: t("home.quick.quickConnect"),
-    description: quickConnectTarget.value
-      ? t("home.quick.quickConnectDesc", { name: quickConnectTarget.value.name })
-      : t("home.quick.quickConnectEmptyDesc"),
-    disabled: !quickConnectTarget.value,
-    run: () => quickConnectTarget.value && openProfile(quickConnectTarget.value),
+    title: t("home.quick.tunnel"),
+    description: t("home.quick.tunnelDesc"),
+    disabled: false,
+    run: () => uiStore.openTunnelPanel(),
   },
   {
     id: "favorites",
@@ -212,6 +209,7 @@ function toggleFavorite(profileId) {
       @select-nav="uiStore.setHomeNav"
       @select-group="uiStore.setHomeGroupFilter"
       @open-settings="uiStore.openSettings"
+      @open-tunnels="uiStore.openTunnelPanel"
     />
 
     <div class="home-main">

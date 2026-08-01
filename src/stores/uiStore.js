@@ -5,6 +5,7 @@ export const useUiStore = defineStore("ui", {
     isConnectionFormOpen: false,
     editingProfileId: null,
     isSettingsOpen: false,
+    isTunnelPanelOpen: false,
     error: null,
     // 首页导航：home | all | favorites | recents；groupFilter 为分组 id 或 null
     homeNav: "home",
@@ -32,6 +33,12 @@ export const useUiStore = defineStore("ui", {
     },
     closeSettings() {
       this.isSettingsOpen = false;
+    },
+    openTunnelPanel() {
+      this.isTunnelPanelOpen = true;
+    },
+    closeTunnelPanel() {
+      this.isTunnelPanelOpen = false;
     },
     setError(error) {
       this.error = error ? String(error) : null;

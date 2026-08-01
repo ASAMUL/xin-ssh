@@ -8,6 +8,7 @@ import { useAppStore } from "./stores/appStore";
 import { useFileExplorerStore } from "./stores/fileExplorerStore";
 import { useSessionStore } from "./stores/sessionStore";
 import { useTransferStore } from "./stores/transferStore";
+import { useTunnelStore } from "./stores/tunnelStore";
 import { useUiStore } from "./stores/uiStore";
 
 const { t } = useI18n();
@@ -15,6 +16,7 @@ const appStore = useAppStore();
 const fileExplorerStore = useFileExplorerStore();
 const sessionStore = useSessionStore();
 const transferStore = useTransferStore();
+const tunnelStore = useTunnelStore();
 const uiStore = useUiStore();
 
 const visibleError = computed(() => appStore.error || uiStore.error);
@@ -25,6 +27,7 @@ onMounted(() => {
   sessionStore.startListening();
   transferStore.startListening();
   fileExplorerStore.startListening();
+  tunnelStore.startListening();
 });
 </script>
 

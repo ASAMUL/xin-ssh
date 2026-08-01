@@ -1,12 +1,17 @@
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use russh::{
     client,
     keys::{load_secret_key, ssh_key, PrivateKeyWithHashAlg, PublicKey},
 };
+use tauri::AppHandle;
 
 use crate::models::AuthMethod;
+use crate::ssh::known_hosts;
 use crate::util::connection_error;
+
+pub(crate) const SSH_KEEPALIVE_INTERVAL_SECS: u64 = 30;
 
 #[derive(Clone, Default)]
 pub(crate) struct ServerKeySnapshot {
@@ -42,6 +47,62 @@ impl client::Handler for ConnectionTestClient {
 
         Ok(true)
     }
+}
+
+// 建立 SSH TCP 连接并做 TOFU 指纹校验：已有记录则校验（不一致报 HOST_KEY_CHANGED），
+// 首次连接成功后记录指纹。终端与隧道共用。
+pub(crate) async fn connect_with_tofu(
+    app: &AppHandle,
+    host: &str,
+    port: u16,
+) -> Result<client::Handle<ConnectionTestClient>, String> {
+    let expected_fingerprint = known_hosts::lookup_fingerprint(app, host, port)?;
+    let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
+    let handler = ConnectionTestClient {
+        server_key: Arc::clone(&server_key),
+        expected_fingerprint: expected_fingerprint.clone(),
+    };
+    let config = Arc::new(client::Config {
+        inactivity_timeout: None,
+        keepalive_interval: Some(Duration::from_secs(SSH_KEEPALIVE_INTERVAL_SECS)),
+        ..Default::default()
+    });
+
+    let session = match client::connect(config, (host, port), handler).await {
+        Ok(session) => session,
+        Err(error) => {
+            let snapshot = server_key
+                .lock()
+                .map(|snapshot| snapshot.clone())
+                .unwrap_or_default();
+
+            if let (Some(expected), Some(actual)) = (&expected_fingerprint, &snapshot.fingerprint) {
+                if expected != actual {
+                    return Err(known_hosts::host_key_changed_error(expected, actual));
+                }
+            }
+
+            return Err(connection_error(error));
+        }
+    };
+
+    if expected_fingerprint.is_none() {
+        let snapshot = server_key
+            .lock()
+            .map(|snapshot| snapshot.clone())
+            .unwrap_or_default();
+        if let Some(fingerprint) = &snapshot.fingerprint {
+            let _ = known_hosts::record_host_key(
+                app,
+                host,
+                port,
+                fingerprint,
+                snapshot.algorithm.as_deref(),
+            );
+        }
+    }
+
+    Ok(session)
 }
 
 pub(crate) async fn authenticate_session(

@@ -28,6 +28,26 @@ export function markProfileConnected(profileId) {
   return invoke("mark_profile_connected", { profileId });
 }
 
+export function listTunnelConfigs() {
+  return invoke("list_tunnel_configs");
+}
+
+export function saveTunnelConfig(tunnel) {
+  return invoke("save_tunnel_config", { tunnel });
+}
+
+export function deleteTunnelConfig(tunnelId) {
+  return invoke("delete_tunnel_config", { tunnelId });
+}
+
+export function startTunnel(request) {
+  return invoke("start_tunnel", { request });
+}
+
+export function stopTunnel(tunnelId) {
+  return invoke("stop_tunnel", { tunnelId });
+}
+
 export function saveGroup(group) {
   return invoke("save_group", { group });
 }
