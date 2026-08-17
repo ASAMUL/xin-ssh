@@ -207,6 +207,7 @@ button {
   height: 100%;
   display: flex;
   align-items: center;
+  gap: 2px;
   padding: 0 4px 0 8px;
 }
 
@@ -220,6 +221,11 @@ button {
 
 .window-tools button:hover {
   background: rgba(137, 148, 166, 0.14);
+}
+
+.window-tools button.transfer-entry-active {
+  color: #0757e6;
+  background: rgba(7, 87, 230, 0.12);
 }
 
 .window-controls {

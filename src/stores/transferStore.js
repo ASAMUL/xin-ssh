@@ -10,17 +10,23 @@ import {
 const TRANSFER_EVENT_NAME = "transfer-event";
 const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
 const ACTIVE_STATUSES = new Set(["queued", "running", "canceling"]);
-// 已结束任务保留的条数上限，超出自动清理最旧的，避免长会话任务无限堆积
-const MAX_FINISHED_TASKS = 20;
+// 已结束任务保留的条数上限：面板兼作跨会话的传输历史，放宽到 100 条
+const MAX_FINISHED_TASKS = 100;
+const HISTORY_STORAGE_KEY = "xin-terminal/transfer-history";
+// 每条记录最多持久化的路径条数，避免大批量传输把 localStorage 撑爆
+const MAX_PERSISTED_PATHS = 20;
 
 export const useTransferStore = defineStore("transfers", {
   state: () => ({
-    tasks: [],
+    tasks: loadPersistedHistory(),
+    panelOpen: false,
+    // 下载完成信号：面板关闭时由 App 层消费并弹出快捷提示
+    downloadReadySignal: null,
     unlistenTransfer: null,
   }),
   getters: {
-    visibleTasks: (state) => state.tasks.slice(0, 4),
-    hasVisibleTasks: (state) => state.tasks.length > 0,
+    hasTasks: (state) => state.tasks.length > 0,
+    hasFinishedTasks: (state) => state.tasks.some((task) => FINISHED_STATUSES.has(task.status)),
     summary: (state) => {
       const activeTasks = state.tasks.filter((task) => !FINISHED_STATUSES.has(task.status));
       const sourceTasks = activeTasks.length ? activeTasks : state.tasks.slice(0, 2);
@@ -51,12 +57,25 @@ export const useTransferStore = defineStore("transfers", {
       this.unlistenTransfer?.();
       this.unlistenTransfer = null;
     },
+    togglePanel() {
+      this.panelOpen = !this.panelOpen;
+    },
+    closePanel() {
+      this.panelOpen = false;
+    },
+    consumeDownloadReadySignal() {
+      const signal = this.downloadReadySignal;
+      this.downloadReadySignal = null;
+      return signal;
+    },
     async uploadPaths(session, localPaths, remoteDir, options = {}) {
       const taskId = options.taskId || crypto.randomUUID();
       const label = transferLabel(localPaths, "transfers.uploadFallback", "transfers.localItems");
+      this.panelOpen = true;
       this.upsertTask({
         id: taskId,
         sessionId: session.id,
+        sessionName: session.name || session.host || null,
         direction: "upload",
         status: "queued",
         label,
@@ -94,9 +113,11 @@ export const useTransferStore = defineStore("transfers", {
         "transfers.downloadFallback",
         "transfers.remoteItems",
       );
+      this.panelOpen = true;
       this.upsertTask({
         id: taskId,
         sessionId: session.id,
+        sessionName: session.name || session.host || null,
         direction: "download",
         status: "queued",
         label,
@@ -136,27 +157,19 @@ export const useTransferStore = defineStore("transfers", {
       const task = this.findTask(taskId);
       if (!task || !conflictPolicy || conflictPolicy === "cancel") return null;
 
-      if (task.direction === "upload") {
-        return this.uploadPaths(
-          { id: task.sessionId },
-          task.localPaths || [],
-          task.remoteDir,
-          {
-            taskId: task.id,
-            conflictPolicy,
-          },
-        );
-      }
+      const sessionRef = { id: task.sessionId, name: task.sessionName };
 
-      return this.downloadEntries(
-        { id: task.sessionId },
-        task.remoteEntries || [],
-        task.localDir,
-        {
+      if (task.direction === "upload") {
+        return this.uploadPaths(sessionRef, task.localPaths || [], task.remoteDir, {
           taskId: task.id,
           conflictPolicy,
-        },
-      );
+        });
+      }
+
+      return this.downloadEntries(sessionRef, task.remoteEntries || [], task.localDir, {
+        taskId: task.id,
+        conflictPolicy,
+      });
     },
     async cancelTask(taskId) {
       const task = this.findTask(taskId);
@@ -225,6 +238,15 @@ export const useTransferStore = defineStore("transfers", {
         createdAt: task?.createdAt ?? now,
         updatedAt: now,
       });
+
+      // 下载刚完成且面板处于关闭状态时，交给 App 层弹出“打开文件夹”快捷提示
+      const justCompleted = event.kind === "completed" && task?.status !== "completed";
+      if (justCompleted && event.direction === "download" && !this.panelOpen) {
+        this.downloadReadySignal = {
+          taskId: event.taskId,
+          at: now,
+        };
+      }
     },
     upsertTask(nextTask) {
       const now = Date.now();
@@ -247,6 +269,10 @@ export const useTransferStore = defineStore("transfers", {
       }
 
       this.pruneFinishedTasks();
+
+      if (FINISHED_STATUSES.has(normalizedTask.status)) {
+        this.persistFinishedTasks();
+      }
     },
     pruneFinishedTasks() {
       const finishedCount = this.tasks.reduce(
@@ -275,8 +301,27 @@ export const useTransferStore = defineStore("transfers", {
         updatedAt: Date.now(),
       });
     },
+    removeTask(taskId) {
+      const task = this.findTask(taskId);
+      if (!task || !FINISHED_STATUSES.has(task.status)) return;
+
+      this.tasks = this.tasks.filter((item) => item.id !== taskId);
+      this.persistFinishedTasks();
+    },
     clearFinished() {
       this.tasks = this.tasks.filter((task) => !FINISHED_STATUSES.has(task.status));
+      this.persistFinishedTasks();
+    },
+    persistFinishedTasks() {
+      try {
+        const finished = this.tasks
+          .filter((task) => FINISHED_STATUSES.has(task.status))
+          .slice(0, MAX_FINISHED_TASKS)
+          .map(slimTaskForStorage);
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(finished));
+      } catch (error) {
+        console.warn("[Xin Terminal] persist transfer history failed", error);
+      }
     },
     canCancelTask(task) {
       return ACTIVE_STATUSES.has(task?.status);
@@ -305,4 +350,58 @@ function transferLabel(items, fallbackKey, multiKey) {
   }
 
   return t(multiKey, { count: items.length });
+}
+
+// 只持久化展示与“打开/复制路径”所需的字段，运行态字段（速度等）不落盘
+function slimTaskForStorage(task) {
+  return {
+    id: task.id,
+    sessionId: task.sessionId ?? null,
+    sessionName: task.sessionName ?? null,
+    direction: task.direction,
+    status: task.status,
+    label: task.label,
+    rootLabel: task.rootLabel ?? task.label,
+    bytesTransferred: task.bytesTransferred ?? 0,
+    bytesTotal: task.bytesTotal ?? 0,
+    filesDone: task.filesDone ?? 0,
+    filesTotal: task.filesTotal ?? 0,
+    error: task.error ?? null,
+    createdAt: task.createdAt ?? Date.now(),
+    updatedAt: task.updatedAt ?? Date.now(),
+    localDir: task.localDir ?? null,
+    remoteDir: task.remoteDir ?? null,
+    localPaths: Array.isArray(task.localPaths) ? task.localPaths.slice(0, MAX_PERSISTED_PATHS) : [],
+    remoteEntries: Array.isArray(task.remoteEntries)
+      ? task.remoteEntries.slice(0, MAX_PERSISTED_PATHS).map((entry) => ({
+          path: entry.path,
+          name: entry.name,
+          isDirectory: Boolean(entry.isDirectory),
+        }))
+      : [],
+  };
+}
+
+function loadPersistedHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((task) => task && task.id && FINISHED_STATUSES.has(task.status))
+      .slice(0, MAX_FINISHED_TASKS)
+      .map((task) => ({
+        ...task,
+        speedBytesPerSecond: 0,
+        currentPath: null,
+        conflictPolicy: null,
+        conflictPrompted: true,
+      }));
+  } catch (error) {
+    console.warn("[Xin Terminal] load transfer history failed", error);
+    return [];
+  }
 }

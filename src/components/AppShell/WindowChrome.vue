@@ -5,11 +5,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import SessionTabs from "../SessionTabs.vue";
 import { useAppStore } from "../../stores/appStore";
 import { useSessionStore } from "../../stores/sessionStore";
+import { useTransferStore } from "../../stores/transferStore";
 import { useUiStore } from "../../stores/uiStore";
 
 const { t } = useI18n();
 const appStore = useAppStore();
 const sessionStore = useSessionStore();
+const transferStore = useTransferStore();
 const uiStore = useUiStore();
 const appWindow = window.__TAURI_INTERNALS__ ? getCurrentWindow() : null;
 const platform = navigator.userAgentData?.platform ?? navigator.platform ?? "";
@@ -67,6 +69,24 @@ async function closeWindow() {
     <div v-else class="window-drag-space"></div>
 
     <div v-if="!appStore.isLoading" class="window-tools" @mousedown.stop>
+      <UChip
+        :show="transferStore.summary.activeCount > 0"
+        :text="transferStore.summary.activeCount"
+        size="3xs"
+        color="primary"
+        inset
+      >
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          icon="i-lucide-arrow-down-up"
+          :class="{ 'transfer-entry-active': transferStore.panelOpen }"
+          :aria-label="t('transfers.togglePanel')"
+          :title="t('transfers.togglePanel')"
+          @click.stop="transferStore.togglePanel"
+        />
+      </UChip>
       <UButton
         color="neutral"
         variant="ghost"
