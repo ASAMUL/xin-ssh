@@ -44,6 +44,9 @@ pub struct WorkspaceSettings {
     // 首页「所有连接」视图模式：grid | list
     #[serde(default = "default_home_view_mode")]
     pub home_view_mode: String,
+    // SSH keepalive 间隔（秒），0 = 禁用；终端与隧道连接共用
+    #[serde(default = "default_ssh_keepalive_seconds")]
+    pub ssh_keepalive_seconds: u64,
 }
 
 pub fn default_terminal_theme() -> String {
@@ -75,6 +78,10 @@ pub fn default_file_tree_size() -> f64 {
 
 pub fn default_home_view_mode() -> String {
     "grid".to_string()
+}
+
+pub fn default_ssh_keepalive_seconds() -> u64 {
+    30
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -131,6 +138,28 @@ pub enum AuthMethod {
     PrivateKey,
 }
 
+// —— 命令片段库（snippets.json，软删除同 profiles）——
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnippetsFile {
+    pub schema_version: u16,
+    pub snippets: Vec<Snippet>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snippet {
+    pub id: String,
+    pub sync_id: String,
+    pub name: String,
+    pub command: String,
+    pub sort_order: i32,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
 // —— SSH 隧道（本地端口转发）——
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -171,6 +200,8 @@ pub struct TunnelStartRequest {
     pub local_port: u16,
     pub remote_host: String,
     pub remote_port: u16,
+    #[serde(default)]
+    pub keepalive_seconds: Option<u64>,
 }
 
 #[derive(Clone, Serialize)]
@@ -218,6 +249,9 @@ pub struct TerminalStartRequest {
     pub default_remote_path: String,
     pub columns: u32,
     pub rows: u32,
+    // 未传时用默认 30s（settings 可调，0 = 禁用）
+    #[serde(default)]
+    pub keepalive_seconds: Option<u64>,
 }
 
 #[derive(Clone, Deserialize)]

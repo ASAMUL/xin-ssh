@@ -3,6 +3,7 @@
 @import "splitpanes/dist/splitpanes.css";
 @import "./splitpanes.css";
 @import "./modal-forms.css";
+@import "./quick-connect.css";
 
 :root {
   --ui-radius: 0.7rem;

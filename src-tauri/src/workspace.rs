@@ -6,8 +6,8 @@ use std::{
 use tauri::{AppHandle, Manager};
 
 use crate::models::{
-    AppStateFile, AppStatus, ConnectionGroup, ConnectionProfile, ProfilesFile, TunnelConfig,
-    TunnelsFile, WorkspaceSettings, WorkspaceSnapshot,
+    AppStateFile, AppStatus, ConnectionGroup, ConnectionProfile, ProfilesFile, Snippet,
+    SnippetsFile, TunnelConfig, TunnelsFile, WorkspaceSettings, WorkspaceSnapshot,
 };
 use crate::util::{error_message, now_stamp, path_to_string};
 
@@ -15,6 +15,7 @@ const APP_STATE_FILE: &str = "app-state.json";
 const PROFILES_FILE: &str = "profiles.json";
 const SETTINGS_FILE: &str = "settings.json";
 const TUNNELS_FILE: &str = "tunnels.json";
+const SNIPPETS_FILE: &str = "snippets.json";
 pub(crate) const CURRENT_SCHEMA_VERSION: u16 = 1;
 
 #[tauri::command]
@@ -271,6 +272,68 @@ fn write_tunnels_file(workspace: &Path, tunnels_file: &TunnelsFile) -> Result<()
     write_json_file(&workspace.join(TUNNELS_FILE), tunnels_file)
 }
 
+// —— 命令片段库（snippets.json，按需创建；软删除同 profiles）——
+
+#[tauri::command]
+pub async fn list_snippets(app: AppHandle) -> Result<Vec<Snippet>, String> {
+    let workspace = active_workspace_dir(&app)?;
+    Ok(read_snippets_file(&workspace)?.snippets)
+}
+
+#[tauri::command]
+pub async fn save_snippet(app: AppHandle, snippet: Snippet) -> Result<Vec<Snippet>, String> {
+    let workspace = active_workspace_dir(&app)?;
+    let mut snippets_file = read_snippets_file(&workspace)?;
+    let mut next_snippet = snippet;
+    next_snippet.updated_at = now_stamp();
+
+    if let Some(existing) = snippets_file
+        .snippets
+        .iter_mut()
+        .find(|item| item.id == next_snippet.id)
+    {
+        *existing = next_snippet;
+    } else {
+        snippets_file.snippets.push(next_snippet);
+    }
+
+    write_snippets_file(&workspace, &snippets_file)?;
+    Ok(snippets_file.snippets)
+}
+
+#[tauri::command]
+pub async fn delete_snippet(app: AppHandle, snippet_id: String) -> Result<Vec<Snippet>, String> {
+    let workspace = active_workspace_dir(&app)?;
+    let mut snippets_file = read_snippets_file(&workspace)?;
+
+    if let Some(snippet) = snippets_file
+        .snippets
+        .iter_mut()
+        .find(|item| item.id == snippet_id)
+    {
+        snippet.deleted_at = Some(now_stamp());
+    }
+
+    write_snippets_file(&workspace, &snippets_file)?;
+    Ok(snippets_file.snippets)
+}
+
+fn read_snippets_file(workspace: &Path) -> Result<SnippetsFile, String> {
+    let path = workspace.join(SNIPPETS_FILE);
+    if !path.exists() {
+        return Ok(SnippetsFile {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            snippets: Vec::new(),
+        });
+    }
+
+    read_json_file(&path)
+}
+
+fn write_snippets_file(workspace: &Path, snippets_file: &SnippetsFile) -> Result<(), String> {
+    write_json_file(&workspace.join(SNIPPETS_FILE), snippets_file)
+}
+
 fn load_workspace_from_dir(workspace: &Path) -> Result<WorkspaceSnapshot, String> {
     ensure_workspace(workspace)?;
     let settings = read_settings_file(workspace)?;
@@ -420,6 +483,7 @@ fn default_settings() -> WorkspaceSettings {
         file_pane_size: crate::models::default_file_pane_size(),
         file_tree_size: crate::models::default_file_tree_size(),
         home_view_mode: crate::models::default_home_view_mode(),
+        ssh_keepalive_seconds: crate::models::default_ssh_keepalive_seconds(),
     }
 }
 

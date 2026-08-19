@@ -51,10 +51,12 @@ impl client::Handler for ConnectionTestClient {
 
 // 建立 SSH TCP 连接并做 TOFU 指纹校验：已有记录则校验（不一致报 HOST_KEY_CHANGED），
 // 首次连接成功后记录指纹。终端与隧道共用。
+// keepalive_seconds: None = 默认 30s，Some(0) = 禁用。
 pub(crate) async fn connect_with_tofu(
     app: &AppHandle,
     host: &str,
     port: u16,
+    keepalive_seconds: Option<u64>,
 ) -> Result<client::Handle<ConnectionTestClient>, String> {
     let expected_fingerprint = known_hosts::lookup_fingerprint(app, host, port)?;
     let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
@@ -62,9 +64,10 @@ pub(crate) async fn connect_with_tofu(
         server_key: Arc::clone(&server_key),
         expected_fingerprint: expected_fingerprint.clone(),
     };
+    let keepalive = keepalive_seconds.unwrap_or(SSH_KEEPALIVE_INTERVAL_SECS);
     let config = Arc::new(client::Config {
         inactivity_timeout: None,
-        keepalive_interval: Some(Duration::from_secs(SSH_KEEPALIVE_INTERVAL_SECS)),
+        keepalive_interval: (keepalive > 0).then(|| Duration::from_secs(keepalive)),
         ..Default::default()
     });
 

@@ -64,7 +64,6 @@ async function closeWindow() {
       @show-connection-hub="sessionStore.showConnectionHub"
       @select="sessionStore.selectSession"
       @close="sessionStore.closeSession"
-      @create="uiStore.openConnectionForm"
     />
     <div v-else class="window-drag-space"></div>
 

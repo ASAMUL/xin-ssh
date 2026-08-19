@@ -9,6 +9,7 @@ import {
 } from "../services/workspaceApi";
 import { useCredentialStore } from "./credentialStore";
 import { useProfileStore } from "./profileStore";
+import { useSettingsStore } from "./settingsStore";
 
 const TUNNEL_EVENT_NAME = "tunnel-event";
 
@@ -98,6 +99,7 @@ export const useTunnelStore = defineStore("tunnels", {
           localPort: Number(tunnel.localPort),
           remoteHost: tunnel.remoteHost || "127.0.0.1",
           remotePort: Number(tunnel.remotePort),
+          keepaliveSeconds: useSettingsStore().sshKeepaliveSeconds,
         });
         return true;
       } catch (error) {

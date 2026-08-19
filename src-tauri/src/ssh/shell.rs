@@ -120,7 +120,7 @@ async fn run_terminal_shell(
     let mut close_reason = TERMINAL_CLOSE_REASON_REMOTE;
     let host = request.host.trim().to_string();
     let username = request.username.trim().to_string();
-    let mut session = connect_with_tofu(&app, &host, request.port).await?;
+    let mut session = connect_with_tofu(&app, &host, request.port, request.keepalive_seconds).await?;
 
     authenticate_session(
         &mut session,

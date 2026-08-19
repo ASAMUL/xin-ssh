@@ -1,0 +1,265 @@
+/* 命令片段侧板（SnippetPanel.vue 专用，scoped 引入）。
+   与外观抽屉同一形态：从终端面板右缘滑入，终端保持可交互；
+   容器用应用玻璃令牌，控件交给 Nuxt UI。 */
+
+.snippet-panel {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: 312px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  color: var(--xin-text);
+  border-left: 1px solid var(--xin-glass-border);
+  border-radius: 0 0 var(--xin-radius-lg) 0;
+  background: var(--xin-glass-strong);
+  box-shadow: -20px 0 48px rgba(15, 23, 42, 0.24);
+  backdrop-filter: var(--xin-glass-blur);
+}
+
+.snippet-slide-enter-active,
+.snippet-slide-leave-active {
+  transition:
+    transform 220ms cubic-bezier(0.32, 0.72, 0.24, 1),
+    opacity 220ms ease;
+}
+
+.snippet-slide-enter-from,
+.snippet-slide-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.snippet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--xin-glass-edge);
+}
+
+.snippet-head strong {
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.snippet-head button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+}
+
+.snippet-head button:hover {
+  color: var(--xin-text);
+  background: rgba(137, 148, 166, 0.16);
+}
+
+.snippet-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.snippet-toolbar {
+  padding: 10px 12px 8px;
+}
+
+.snippet-search {
+  width: 100%;
+}
+
+.snippet-offline-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 12px 6px;
+  padding: 7px 10px;
+  color: var(--xin-text-muted);
+  font-size: 11.5px;
+  border: 1px solid var(--xin-glass-edge);
+  border-radius: var(--xin-radius-sm);
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.snippet-offline-hint svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.snippet-list {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 2px 12px 10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(137, 148, 166, 0.35) transparent;
+}
+
+.snippet-empty {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 34px 16px 20px;
+  color: var(--xin-text-muted);
+  text-align: center;
+}
+
+.snippet-empty svg {
+  width: 26px;
+  height: 26px;
+  opacity: 0.55;
+}
+
+.snippet-empty p {
+  margin: 0;
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.snippet-empty span {
+  max-width: 230px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--xin-text-soft);
+}
+
+.snippet-no-match {
+  margin: 14px 4px;
+  color: var(--xin-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 列表项：主体（名称 + 命令预览）+ 悬停浮现的动作组 */
+.snippet-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--xin-radius);
+  transition:
+    background 130ms ease,
+    border-color 130ms ease;
+}
+
+.snippet-item:hover {
+  border-color: var(--xin-glass-border);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.snippet-item.confirming {
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(254, 242, 242, 0.72);
+}
+
+.snippet-item-main {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+  padding: 8px 4px 8px 10px;
+  color: inherit;
+  text-align: left;
+  border: 0;
+  background: transparent;
+}
+
+.snippet-item-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.snippet-item-name {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 640;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippet-item-command {
+  overflow: hidden;
+  color: var(--xin-text-muted);
+  font-family: "Cascadia Code", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippet-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding-right: 6px;
+  opacity: 0;
+  transition: opacity 130ms ease;
+}
+
+.snippet-item:hover .snippet-item-actions,
+.snippet-item:focus-within .snippet-item-actions {
+  opacity: 1;
+}
+
+.snippet-confirm-text {
+  min-width: 0;
+  overflow: hidden;
+  color: #991b1b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippet-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.snippet-foot {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--xin-glass-edge);
+}
+
+/* 编辑视图 */
+.snippet-form {
+  gap: 13px;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.snippet-command-input :deep(textarea) {
+  font-family: "Cascadia Code", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+}
+
+.snippet-form-error {
+  margin: 0;
+  color: var(--xin-danger);
+  font-size: 12px;
+}
+
+.snippet-form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: auto;
+}

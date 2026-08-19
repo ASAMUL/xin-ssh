@@ -56,7 +56,7 @@ pub async fn start_tunnel(
     let remote_host = request.remote_host.trim().to_string();
     let remote_port = request.remote_port;
 
-    let mut session = connect_with_tofu(&app, &host, request.port).await?;
+    let mut session = connect_with_tofu(&app, &host, request.port, request.keepalive_seconds).await?;
     authenticate_session(
         &mut session,
         username,

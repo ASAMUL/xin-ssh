@@ -1,7 +1,9 @@
 <script setup>
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import QuickConnectMenu from "./AppShell/QuickConnectMenu.vue";
 
-defineProps({
+const props = defineProps({
   sessions: {
     type: Array,
     default: () => [],
@@ -12,8 +14,50 @@ defineProps({
   },
 });
 
-const emit = defineEmits(["showConnectionHub", "select", "close", "create"]);
+const emit = defineEmits(["showConnectionHub", "select", "close"]);
 const { t } = useI18n();
+
+const stripRef = ref(null);
+const fadeStart = ref(false);
+const fadeEnd = ref(false);
+let resizeObserver = null;
+
+// 标签溢出时两端渐隐，提示还能横向滚动
+function updateOverflowFades() {
+  const strip = stripRef.value;
+  if (!strip) return;
+
+  fadeStart.value = strip.scrollLeft > 2;
+  fadeEnd.value = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 2;
+}
+
+function scrollActiveTabIntoView() {
+  if (!props.activeSessionId || !stripRef.value) return;
+
+  const activeTab = stripRef.value.querySelector('[data-active="true"]');
+  activeTab?.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "smooth" });
+}
+
+onMounted(() => {
+  updateOverflowFades();
+  resizeObserver = new ResizeObserver(updateOverflowFades);
+  if (stripRef.value) {
+    resizeObserver.observe(stripRef.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+});
+
+watch(
+  () => [props.sessions.length, props.activeSessionId],
+  async () => {
+    await nextTick();
+    scrollActiveTabIntoView();
+    updateOverflowFades();
+  },
+);
 </script>
 
 <template>
@@ -29,44 +73,45 @@ const { t } = useI18n();
       <span>{{ t("workspace.connectionHub") }}</span>
     </button>
 
-    <div class="tabs-strip">
-      <div
-        v-for="session in sessions"
-        :key="session.id"
-        class="session-tab"
-        :class="{ active: session.id === activeSessionId }"
-      >
-        <button
-          type="button"
-          class="session-tab-main"
-          :aria-label="session.name"
-          :title="session.name"
-          @click.stop="emit('select', session.id)"
+    <div
+      ref="stripRef"
+      class="tabs-strip"
+      :class="{ 'fade-start': fadeStart, 'fade-end': fadeEnd }"
+      @scroll.passive="updateOverflowFades"
+    >
+      <TransitionGroup name="tab">
+        <div
+          v-for="session in sessions"
+          :key="session.id"
+          class="session-tab"
+          :class="{ active: session.id === activeSessionId }"
+          :data-active="session.id === activeSessionId || null"
         >
-          <span class="tab-status" :class="session.status"></span>
-          <span class="tab-title">{{ session.name }}</span>
-        </button>
-        <button
-          type="button"
-          class="tab-close"
-          :aria-label="t('terminal.closeSession')"
-          @click.stop="emit('close', session.id)"
-        >
-          <UIcon name="i-lucide-x" />
-        </button>
-      </div>
+          <button
+            type="button"
+            class="session-tab-main"
+            :aria-label="session.name"
+            :title="session.name"
+            @click.stop="emit('select', session.id)"
+          >
+            <span class="tab-status" :class="session.status"></span>
+            <span class="tab-title">{{ session.name }}</span>
+          </button>
+          <button
+            type="button"
+            class="tab-close"
+            :aria-label="t('terminal.closeSession')"
+            @click.stop="emit('close', session.id)"
+          >
+            <UIcon name="i-lucide-x" />
+          </button>
+        </div>
+      </TransitionGroup>
     </div>
 
-    <UButton
-      class="new-connection-tab"
-      color="neutral"
-      variant="ghost"
-      size="sm"
-      icon="i-lucide-plus"
-      :aria-label="t('sidebar.add')"
-      :title="t('sidebar.add')"
-      @click.stop="emit('create')"
-    />
+    <QuickConnectMenu />
+
+    <div class="tabs-drag-space"></div>
   </nav>
 </template>
 
@@ -74,12 +119,17 @@ const { t } = useI18n();
 .session-tabs {
   min-width: 0;
   height: 100%;
+  /* 首页 | 会话标签 | 加号 | 拖拽空域 —— 加号紧跟最后一个标签（Chrome 模式） */
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, max-content) auto minmax(12px, 1fr);
   align-items: center;
   gap: 6px;
   overflow: hidden;
   padding: 0 6px 0 4px;
+}
+
+.tabs-drag-space {
+  height: 100%;
 }
 
 .home-tab,
@@ -131,6 +181,7 @@ const { t } = useI18n();
 }
 
 .tabs-strip {
+  position: relative;
   min-width: 0;
   height: 100%;
   display: flex;
@@ -144,6 +195,25 @@ const { t } = useI18n();
   display: none;
 }
 
+/* 溢出提示：可继续滚动的一侧渐隐 */
+.tabs-strip.fade-start {
+  mask-image: linear-gradient(to right, transparent 0, black 28px);
+}
+
+.tabs-strip.fade-end {
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+}
+
+.tabs-strip.fade-start.fade-end {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black 28px,
+    black calc(100% - 28px),
+    transparent 100%
+  );
+}
+
 .session-tab {
   width: auto;
   min-width: 128px;
@@ -152,6 +222,34 @@ const { t } = useI18n();
   grid-template-columns: minmax(0, 1fr) 30px;
   align-items: center;
   flex: 0 0 auto;
+}
+
+/* 新标签淡入上浮；关闭后相邻标签平滑补位（FLIP） */
+.tab-enter-active {
+  transition:
+    opacity 170ms ease,
+    transform 170ms ease;
+}
+
+.tab-enter-from {
+  opacity: 0;
+  transform: translateY(5px) scale(0.94);
+}
+
+.tab-move {
+  transition: transform 190ms ease;
+}
+
+.tab-leave-active {
+  position: absolute;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-enter-active,
+  .tab-move {
+    transition: none;
+  }
 }
 
 .session-tab-main {
@@ -189,6 +287,19 @@ const { t } = useI18n();
 .tab-status.connecting {
   background: var(--xin-warning);
   box-shadow: 0 0 0 4px rgba(215, 166, 65, 0.14);
+  animation: tab-status-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes tab-status-pulse {
+  50% {
+    opacity: 0.38;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-status.connecting {
+    animation: none;
+  }
 }
 
 .tab-status.error {
@@ -205,6 +316,7 @@ const { t } = useI18n();
   white-space: nowrap;
 }
 
+/* 关闭按钮悬停/激活/键盘聚焦才现身，平时保持安静 */
 .tab-close {
   width: 24px;
   height: 24px;
@@ -214,29 +326,22 @@ const { t } = useI18n();
   border: 0;
   border-radius: 8px;
   background: transparent;
+  opacity: 0;
+  transition:
+    opacity 130ms ease,
+    background 130ms ease,
+    color 130ms ease;
+}
+
+.session-tab:hover .tab-close,
+.session-tab.active .tab-close,
+.tab-close:focus-visible {
+  opacity: 1;
 }
 
 .tab-close:hover {
   color: #0f172a;
   background: rgba(148, 163, 184, 0.18);
-}
-
-.new-connection-tab {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  justify-content: center;
-  color: var(--xin-text-muted);
-  border: 1px solid var(--xin-glass-border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
-}
-
-.new-connection-tab:hover {
-  color: var(--xin-text);
-  border-color: rgba(47, 109, 246, 0.3);
-  background: rgba(255, 255, 255, 0.85);
 }
 
 @media (max-width: 980px) {

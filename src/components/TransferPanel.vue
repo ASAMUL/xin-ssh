@@ -97,6 +97,13 @@ const contextMenuItems = computed(() => {
       onSelect: () => transferStore.cancelTask(task.id),
     });
   } else {
+    if (transferStore.canResumeTask(task)) {
+      manageGroup.push({
+        label: t("transfers.resume"),
+        icon: "i-lucide-play",
+        onSelect: () => resumeTask(task),
+      });
+    }
     manageGroup.push({
       label: t("transfers.removeRecord"),
       icon: "i-lucide-trash-2",
@@ -130,6 +137,15 @@ async function runOpenAction(action) {
   try {
     await action();
   } catch (error) {
+    uiStore.setError(error);
+  }
+}
+
+async function resumeTask(task) {
+  try {
+    await transferStore.resumeTask(task.id);
+  } catch (error) {
+    // resumeTask 内部已把任务标记为失败并附错误详情，这里提示即可
     uiStore.setError(error);
   }
 }
@@ -277,7 +293,18 @@ function formatTaskTime(timestamp) {
           <small v-else>{{ taskProgress(task) }}%</small>
 
           <UButton
-            v-if="canOpenTaskLocally(task)"
+            v-if="transferStore.canResumeTask(task)"
+            color="primary"
+            variant="ghost"
+            size="xs"
+            icon="i-lucide-play"
+            class="transfer-task-action"
+            :aria-label="t('transfers.resume')"
+            :title="t('transfers.resume')"
+            @click="resumeTask(task)"
+          />
+          <UButton
+            v-else-if="canOpenTaskLocally(task)"
             color="neutral"
             variant="ghost"
             size="xs"

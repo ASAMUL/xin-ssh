@@ -1,0 +1,92 @@
+/* 终端内浮动查找面板（TerminalSearchPanel.vue 专用，scoped 引入）。
+   与编辑器查找面板同一套视觉：应用玻璃 chrome 浮在终端画布上，
+   控件全部交给 Nuxt UI，这里只管容器与布局。 */
+
+.terminal-search-panel {
+  position: absolute;
+  top: 12px;
+  right: 18px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 36px);
+  padding: 7px;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: var(--xin-radius-lg);
+  background: var(--xin-surface-strong);
+  backdrop-filter: var(--xin-glass-blur);
+  -webkit-backdrop-filter: var(--xin-glass-blur);
+  box-shadow:
+    var(--xin-specular),
+    0 0 0 1px var(--xin-glass-edge),
+    var(--xin-shadow-panel);
+  color: var(--xin-text);
+  font-family: var(--xin-font-ui);
+  font-size: 12px;
+  user-select: none;
+}
+
+/* 进出场：从顶部轻微下落 + 缩放，与编辑器查找面板同手感 */
+.terminal-search-pop-enter-active,
+.terminal-search-pop-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1.1);
+}
+
+.terminal-search-pop-enter-from,
+.terminal-search-pop-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.97);
+}
+
+.terminal-search-input {
+  width: 224px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+/* UInput 的 #trailing 插槽：三个查找开关 */
+.terminal-search-flags {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 开关激活态：实心品牌蓝 + 白色图标，选中与否一眼可辨
+   （scoped 规则在 layer 之外，压过 Nuxt UI 按钮的 variant 工具类） */
+.terminal-search-flag {
+  transition:
+    background 130ms ease,
+    color 130ms ease,
+    box-shadow 130ms ease;
+}
+
+.terminal-search-flag.active {
+  color: #ffffff;
+  background: var(--xin-accent);
+  box-shadow: 0 2px 8px rgba(47, 109, 246, 0.35);
+}
+
+.terminal-search-flag.active:hover {
+  background: var(--xin-accent-strong);
+}
+
+.terminal-search-counter {
+  min-width: 44px;
+  padding: 0 2px;
+  flex-shrink: 0;
+  color: var(--xin-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.terminal-search-counter.danger {
+  color: var(--xin-danger);
+}
+
+.terminal-search-divider {
+  height: 16px;
+  flex-shrink: 0;
+}

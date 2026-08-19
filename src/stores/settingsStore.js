@@ -5,6 +5,9 @@ import { DEFAULT_TERMINAL_THEME_ID, TERMINAL_FONTS, TERMINAL_FONT_SIZES } from "
 
 const MONITOR_REFRESH_SECONDS_OPTIONS = [2, 5, 10, 30];
 const DEFAULT_MONITOR_REFRESH_SECONDS = 5;
+// 0 = 禁用 keepalive
+export const SSH_KEEPALIVE_SECONDS_OPTIONS = [0, 15, 30, 60, 120];
+const DEFAULT_SSH_KEEPALIVE_SECONDS = 30;
 const DEFAULT_TERMINAL_FONT_SIZE = 14;
 const DEFAULT_MONITOR_PANE_SIZE = 22;
 const DEFAULT_FILE_PANE_SIZE = 42;
@@ -18,6 +21,8 @@ export const useSettingsStore = defineStore("settings", {
     locale: (state) => state.settings?.locale ?? "zh-CN",
     monitorRefreshSeconds: (state) =>
       normalizeMonitorRefreshSeconds(state.settings?.monitorRefreshSeconds),
+    sshKeepaliveSeconds: (state) =>
+      normalizeSshKeepaliveSeconds(state.settings?.sshKeepaliveSeconds),
     terminalTheme: (state) => state.settings?.terminalTheme ?? DEFAULT_TERMINAL_THEME_ID,
     terminalFontFamily: (state) =>
       normalizeTerminalFontFamily(state.settings?.terminalFontFamily),
@@ -96,6 +101,11 @@ export const useSettingsStore = defineStore("settings", {
         monitorRefreshSeconds: normalizeMonitorRefreshSeconds(seconds),
       });
     },
+    setSshKeepaliveSeconds(seconds) {
+      return this.patchSettings({
+        sshKeepaliveSeconds: normalizeSshKeepaliveSeconds(seconds),
+      });
+    },
     setTerminalTheme(terminalTheme) {
       return this.patchSettings({ terminalTheme });
     },
@@ -119,6 +129,15 @@ function normalizeMonitorRefreshSeconds(value) {
   }
 
   return DEFAULT_MONITOR_REFRESH_SECONDS;
+}
+
+function normalizeSshKeepaliveSeconds(value) {
+  const seconds = Number(value);
+  if (SSH_KEEPALIVE_SECONDS_OPTIONS.includes(seconds)) {
+    return seconds;
+  }
+
+  return DEFAULT_SSH_KEEPALIVE_SECONDS;
 }
 
 function normalizeTerminalFontFamily(value) {

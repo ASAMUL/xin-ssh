@@ -1,0 +1,56 @@
+/* 快速连接弹层（标题栏加号）。
+   内容经 Popover portal 渲染到 body，样式必须全局；
+   浮层遵循应用玻璃 chrome：浅玻璃令牌 + specular + 大阴影。 */
+
+.quick-connect-popover {
+  width: 324px;
+  max-height: min(480px, calc(100vh - 96px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: 18px;
+  background: var(--xin-glass-strong);
+  /* 同时覆盖默认 shadow-lg 与 ring（两者都走 box-shadow） */
+  box-shadow:
+    var(--xin-specular),
+    0 24px 64px rgba(20, 34, 62, 0.24);
+  backdrop-filter: var(--xin-glass-blur);
+}
+
+.quick-connect-empty {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 10px 18px 6px;
+  color: var(--xin-text-muted);
+}
+
+.quick-connect-empty svg {
+  width: 26px;
+  height: 26px;
+  opacity: 0.55;
+}
+
+.quick-connect-empty p {
+  margin: 0;
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.quick-connect-empty span {
+  max-width: 240px;
+  color: var(--xin-text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.quick-connect-create {
+  color: var(--xin-text-muted);
+  border-radius: 10px;
+}
+
+.quick-connect-create:hover {
+  color: var(--xin-accent-strong);
+}

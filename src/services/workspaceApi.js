@@ -48,6 +48,18 @@ export function stopTunnel(tunnelId) {
   return invoke("stop_tunnel", { tunnelId });
 }
 
+export function listSnippets() {
+  return invoke("list_snippets");
+}
+
+export function saveSnippet(snippet) {
+  return invoke("save_snippet", { snippet });
+}
+
+export function deleteSnippet(snippetId) {
+  return invoke("delete_snippet", { snippetId });
+}
+
 export function saveGroup(group) {
   return invoke("save_group", { group });
 }

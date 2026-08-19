@@ -171,6 +171,10 @@ export const useTransferStore = defineStore("transfers", {
         conflictPolicy,
       });
     },
+    // 断点续传：resume 策略重发原任务，两端半成品保留，缺多少补多少
+    resumeTask(taskId) {
+      return this.retryTaskWithConflictPolicy(taskId, "resume");
+    },
     async cancelTask(taskId) {
       const task = this.findTask(taskId);
       if (!task || FINISHED_STATUSES.has(task.status)) return;
@@ -325,6 +329,16 @@ export const useTransferStore = defineStore("transfers", {
     },
     canCancelTask(task) {
       return ACTIVE_STATUSES.has(task?.status);
+    },
+    // 失败/取消且路径信息完整（含从 localStorage 恢复的历史）才能续传
+    canResumeTask(task) {
+      if (!task || !["failed", "canceled"].includes(task.status)) return false;
+
+      if (task.direction === "upload") {
+        return Boolean(task.localPaths?.length && task.remoteDir);
+      }
+
+      return Boolean(task.remoteEntries?.length && task.localDir);
     },
     findTask(taskId) {
       return this.tasks.find((task) => task.id === taskId) ?? null;

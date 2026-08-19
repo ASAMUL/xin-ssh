@@ -26,12 +26,7 @@ const greeting = computed(() => {
   return t("home.greeting.evening");
 });
 
-const profileStatuses = computed(() =>
-  sessionStore.sessions.reduce((statuses, session) => {
-    statuses[session.profileId] = session.status;
-    return statuses;
-  }, {}),
-);
+const profileStatuses = computed(() => sessionStore.statusByProfile);
 
 const activeNav = computed(() => uiStore.homeNav);
 const activeGroupId = computed(() => uiStore.homeGroupFilter);

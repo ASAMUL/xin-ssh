@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "../../stores/appStore";
-import { useSettingsStore } from "../../stores/settingsStore";
+import { useSettingsStore, SSH_KEEPALIVE_SECONDS_OPTIONS } from "../../stores/settingsStore";
 
 const emit = defineEmits(["close"]);
 const { t } = useI18n();
@@ -18,6 +18,21 @@ const localeItems = [
   { label: "中文", value: "zh-CN" },
   { label: "English", value: "en-US" },
 ];
+
+const sshKeepaliveSeconds = computed({
+  get: () => settingsStore.sshKeepaliveSeconds,
+  set: (value) => settingsStore.setSshKeepaliveSeconds(value),
+});
+
+const keepaliveItems = computed(() =>
+  SSH_KEEPALIVE_SECONDS_OPTIONS.map((seconds) => ({
+    label:
+      seconds === 0
+        ? t("settings.keepaliveOff")
+        : t("settings.keepaliveSeconds", { seconds }),
+    value: seconds,
+  })),
+);
 </script>
 
 <template>
@@ -41,6 +56,18 @@ const localeItems = [
             <strong>{{ t("settings.language") }}</strong>
           </div>
           <USelect v-model="locale" class="settings-locale" :items="localeItems" />
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <strong>{{ t("settings.keepalive") }}</strong>
+            <small>{{ t("settings.keepaliveHint") }}</small>
+          </div>
+          <USelect
+            v-model="sshKeepaliveSeconds"
+            class="settings-locale"
+            :items="keepaliveItems"
+          />
         </div>
 
         <div class="settings-row">

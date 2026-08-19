@@ -11,6 +11,7 @@ import {
 import { i18n } from "../i18n";
 import { useCredentialStore } from "./credentialStore";
 import { useProfileStore } from "./profileStore";
+import { useSettingsStore } from "./settingsStore";
 
 const TERMINAL_EVENT_NAME = "terminal-event";
 const INITIAL_TERMINAL_COLUMNS = 120;
@@ -38,6 +39,18 @@ export const useSessionStore = defineStore("sessions", {
   getters: {
     activeSession: (state) =>
       state.sessions.find((session) => session.id === state.activeSessionId) ?? null,
+    // profileId → 聚合状态（同一连接多个终端时取“最好”的一个），给首页/快速连接的状态点用
+    statusByProfile: (state) => {
+      const priority = { connected: 4, connecting: 3, error: 2, authRequired: 1, closed: 1 };
+      const statuses = {};
+      for (const session of state.sessions) {
+        const current = statuses[session.profileId];
+        if (!current || (priority[session.status] ?? 0) > (priority[current] ?? 0)) {
+          statuses[session.profileId] = session.status;
+        }
+      }
+      return statuses;
+    },
   },
   actions: {
     async startListening() {
@@ -62,21 +75,27 @@ export const useSessionStore = defineStore("sessions", {
     getTerminalSnapshot(sessionId) {
       return readTerminalBuffer(sessionId);
     },
-    openProfileSession(profile) {
-      const existingSession = this.sessions.find((session) => session.profileId === profile.id);
-      if (existingSession) {
-        syncSessionFromProfile(existingSession, profile);
-        this.activeSessionId = existingSession.id;
-        if (shouldAutoConnectWithSavedCredential(existingSession)) {
-          this.startSessionWithSavedCredential(existingSession.id);
+    // forceNew: true 跳过复用总是新开终端（加号/快速连接）；默认聚焦已有会话，没有才新建（首页）
+    openProfileSession(profile, { forceNew = false } = {}) {
+      if (!forceNew) {
+        const existingSession = this.sessions.find((session) => session.profileId === profile.id);
+        if (existingSession) {
+          syncSessionFromProfile(existingSession, profile);
+          this.activeSessionId = existingSession.id;
+          if (shouldAutoConnectWithSavedCredential(existingSession)) {
+            this.startSessionWithSavedCredential(existingSession.id);
+          }
+          return existingSession;
         }
-        return existingSession;
       }
 
+      const labelIndex = nextSessionLabelIndex(this.sessions, profile.id);
       const session = {
         id: crypto.randomUUID(),
         profileId: profile.id,
-        name: profile.name,
+        // 同一连接第 2+ 个终端显示 "name (2)"，编号取最小可用值
+        labelIndex,
+        name: sessionDisplayName(profile.name, labelIndex),
         host: profile.host,
         port: profile.port,
         username: profile.username,
@@ -182,6 +201,7 @@ export const useSessionStore = defineStore("sessions", {
           defaultRemotePath: session.remotePath,
           columns: session.terminalColumns,
           rows: session.terminalRows,
+          keepaliveSeconds: useSettingsStore().sshKeepaliveSeconds,
         });
       } catch (error) {
         const latestSession = this.findSession(session.id);
@@ -236,6 +256,7 @@ export const useSessionStore = defineStore("sessions", {
           defaultRemotePath: session.remotePath,
           columns: session.terminalColumns,
           rows: session.terminalRows,
+          keepaliveSeconds: useSettingsStore().sshKeepaliveSeconds,
         });
         return true;
       } catch (error) {
@@ -507,7 +528,8 @@ function parseHostKeyChange(error) {
 }
 
 function syncSessionFromProfile(session, profile) {
-  session.name = profile.name;
+  // 连接配置改名后按会话自身的编号重算显示名，多终端后缀不丢
+  session.name = sessionDisplayName(profile.name, session.labelIndex ?? 1);
   session.host = profile.host;
   session.port = profile.port;
   session.username = profile.username;
@@ -523,6 +545,22 @@ function shouldAutoConnectWithSavedCredential(session) {
     !session.savedCredentialAutoStarted &&
     ["authRequired", "closed", "error"].includes(session.status)
   );
+}
+
+function sessionDisplayName(profileName, labelIndex) {
+  return labelIndex > 1 ? `${profileName} (${labelIndex})` : profileName;
+}
+
+// 最小可用编号：1 号无后缀；关掉的编号可复用，保证同屏不重名
+function nextSessionLabelIndex(sessions, profileId) {
+  const used = new Set(
+    sessions
+      .filter((session) => session.profileId === profileId)
+      .map((session) => session.labelIndex ?? 1),
+  );
+  let index = 1;
+  while (used.has(index)) index += 1;
+  return index;
 }
 
 function createTerminalAttemptId(sessionId) {

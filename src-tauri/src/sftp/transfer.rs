@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    io::SeekFrom,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -14,7 +15,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::time::{Duration, Instant};
 use tokio::{
     fs as async_fs,
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
     sync::Mutex as AsyncMutex,
 };
 
@@ -71,6 +72,8 @@ enum TransferConflictPolicy {
     Overwrite,
     Skip,
     Rename,
+    // 断点续传：目标已存在时从已有字节续，size 已够则整个跳过
+    Resume,
 }
 
 pub(crate) async fn run_upload_transfer(
@@ -145,10 +148,15 @@ async fn upload_transfer_with_sftp(
         &request.session_id,
         "upload",
         plan.bytes_total,
-        plan.files.len() as u64,
+        plan.files.len() as u64 + plan.resumed_files_done,
         transfer_label_from_local_paths(&request.local_paths),
     ));
-    with_progress(&progress, |p| p.emit(app, "started", None, true))?;
+    // 续传起步：进度直接落在已就位的字节/文件数上，不从零跳变
+    with_progress(&progress, |p| {
+        p.bytes_transferred = plan.resumed_bytes;
+        p.files_done = plan.resumed_files_done;
+        p.emit(app, "started", None, true)
+    })?;
 
     for directory in &plan.directories {
         if is_transfer_canceled(cancellation) {
@@ -170,8 +178,8 @@ async fn upload_transfer_with_sftp(
             }
             .await;
 
+            // 失败/取消保留远端半成品，之后可用 resume 策略续传
             if let Err(error) = result {
-                let _ = sftp.remove_file(file.remote_path.clone()).await;
                 return Err((file.label.clone(), error));
             }
 
@@ -214,10 +222,14 @@ async fn download_transfer_with_sftp(
         &request.session_id,
         "download",
         plan.bytes_total,
-        plan.files.len() as u64,
+        plan.files.len() as u64 + plan.resumed_files_done,
         transfer_label_from_remote_entries(&request.remote_entries),
     ));
-    with_progress(&progress, |p| p.emit(app, "started", None, true))?;
+    with_progress(&progress, |p| {
+        p.bytes_transferred = plan.resumed_bytes;
+        p.files_done = plan.resumed_files_done;
+        p.emit(app, "started", None, true)
+    })?;
 
     for directory in &plan.directories {
         if is_transfer_canceled(cancellation) {
@@ -241,8 +253,8 @@ async fn download_transfer_with_sftp(
             }
             .await;
 
+            // 失败/取消保留本地半成品，之后可用 resume 策略续传
             if let Err(error) = result {
-                let _ = async_fs::remove_file(&file.local_path).await;
                 return Err((file.label.clone(), error));
             }
 
@@ -265,13 +277,26 @@ async fn upload_file(
     let mut local_file = async_fs::File::open(&file.local_path)
         .await
         .map_err(error_message)?;
+    // 续传（offset > 0）：不 TRUNCATE，双端 seek 到断点；整传保持覆盖语义
+    let open_flags = if file.offset > 0 {
+        OpenFlags::CREATE | OpenFlags::WRITE
+    } else {
+        OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE
+    };
     let mut remote_file = sftp
-        .open_with_flags(
-            file.remote_path.clone(),
-            OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
-        )
+        .open_with_flags(file.remote_path.clone(), open_flags)
         .await
         .map_err(connection_error)?;
+    if file.offset > 0 {
+        local_file
+            .seek(SeekFrom::Start(file.offset))
+            .await
+            .map_err(error_message)?;
+        remote_file
+            .seek(SeekFrom::Start(file.offset))
+            .await
+            .map_err(error_message)?;
+    }
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
 
     loop {
@@ -316,9 +341,29 @@ async fn download_file(
         .open(file.remote_path.clone())
         .await
         .map_err(connection_error)?;
-    let mut local_file = async_fs::File::create(&file.local_path)
-        .await
-        .map_err(error_message)?;
+    // 续传：本地不截断，双端 seek 到断点；整传保持 create 覆盖语义
+    let mut local_file = if file.offset > 0 {
+        async_fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&file.local_path)
+            .await
+            .map_err(error_message)?
+    } else {
+        async_fs::File::create(&file.local_path)
+            .await
+            .map_err(error_message)?
+    };
+    if file.offset > 0 {
+        remote_file
+            .seek(SeekFrom::Start(file.offset))
+            .await
+            .map_err(error_message)?;
+        local_file
+            .seek(SeekFrom::Start(file.offset))
+            .await
+            .map_err(error_message)?;
+    }
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
 
     loop {
@@ -394,6 +439,9 @@ struct UploadPlan {
     directories: Vec<String>,
     files: Vec<UploadFilePlan>,
     bytes_total: u64,
+    // resume 策略下已就位的部分：进度条从这里起步，不回零
+    resumed_bytes: u64,
+    resumed_files_done: u64,
 }
 
 struct UploadFilePlan {
@@ -401,6 +449,8 @@ struct UploadFilePlan {
     remote_path: String,
     label: String,
     size: u64,
+    // 断点续传起点（远端已有字节数），0 = 从头传
+    offset: u64,
 }
 
 struct DownloadPlan {
@@ -408,6 +458,8 @@ struct DownloadPlan {
     directories: Vec<PathBuf>,
     files: Vec<DownloadFilePlan>,
     bytes_total: u64,
+    resumed_bytes: u64,
+    resumed_files_done: u64,
 }
 
 struct DownloadFilePlan {
@@ -415,6 +467,8 @@ struct DownloadFilePlan {
     local_path: PathBuf,
     label: String,
     size: u64,
+    // 断点续传起点（本地已有字节数），0 = 从头下
+    offset: u64,
 }
 
 async fn apply_remote_conflict_policy(
@@ -422,6 +476,11 @@ async fn apply_remote_conflict_policy(
     plan: &mut UploadPlan,
     policy: TransferConflictPolicy,
 ) -> Result<(), String> {
+    // resume 不看根目标是否存在，而是逐文件比对远端已有字节
+    if policy == TransferConflictPolicy::Resume {
+        return apply_remote_resume(sftp, plan).await;
+    }
+
     let conflicts = existing_remote_targets(sftp, &plan.root_targets).await?;
     if conflicts.is_empty() {
         return Ok(());
@@ -442,6 +501,8 @@ async fn apply_remote_conflict_policy(
             Ok(())
         }
         TransferConflictPolicy::Rename => rename_upload_plan_roots(sftp, plan, &conflicts).await,
+        // 已在函数开头 early return，此分支不可达
+        TransferConflictPolicy::Resume => Ok(()),
     }
 }
 
@@ -449,6 +510,10 @@ fn apply_local_conflict_policy(
     plan: &mut DownloadPlan,
     policy: TransferConflictPolicy,
 ) -> Result<(), String> {
+    if policy == TransferConflictPolicy::Resume {
+        return apply_local_resume(plan);
+    }
+
     let conflicts = existing_local_targets(&plan.root_targets);
     if conflicts.is_empty() {
         return Ok(());
@@ -469,7 +534,62 @@ fn apply_local_conflict_policy(
             Ok(())
         }
         TransferConflictPolicy::Rename => rename_download_plan_roots(plan, &conflicts),
+        // 已在函数开头 early return，此分支不可达
+        TransferConflictPolicy::Resume => Ok(()),
     }
+}
+
+// 上传向续传：远端已有同名文件时，size 已够 → 整个跳过（计入已完成），
+// 不够 → 从远端已有字节续；不存在或非普通文件 → 照常整传
+async fn apply_remote_resume(sftp: &SftpSession, plan: &mut UploadPlan) -> Result<(), String> {
+    let mut kept_files = Vec::with_capacity(plan.files.len());
+
+    for mut file in std::mem::take(&mut plan.files) {
+        match sftp.metadata(file.remote_path.clone()).await {
+            Ok(metadata) if metadata.file_type().is_file() => {
+                let remote_size = metadata.size.unwrap_or(0);
+                if remote_size >= file.size {
+                    plan.resumed_files_done += 1;
+                    plan.resumed_bytes += file.size;
+                    continue;
+                }
+
+                file.offset = remote_size;
+                plan.resumed_bytes += remote_size;
+                kept_files.push(file);
+            }
+            _ => kept_files.push(file),
+        }
+    }
+
+    plan.files = kept_files;
+    Ok(())
+}
+
+// 下载向续传：本地已有同名文件时按其大小续；size 已够 → 跳过
+fn apply_local_resume(plan: &mut DownloadPlan) -> Result<(), String> {
+    let mut kept_files = Vec::with_capacity(plan.files.len());
+
+    for mut file in std::mem::take(&mut plan.files) {
+        match std::fs::metadata(&file.local_path) {
+            Ok(metadata) if metadata.is_file() => {
+                let local_size = metadata.len();
+                if local_size >= file.size {
+                    plan.resumed_files_done += 1;
+                    plan.resumed_bytes += file.size;
+                    continue;
+                }
+
+                file.offset = local_size;
+                plan.resumed_bytes += local_size;
+                kept_files.push(file);
+            }
+            _ => kept_files.push(file),
+        }
+    }
+
+    plan.files = kept_files;
+    Ok(())
 }
 
 async fn existing_remote_targets(
@@ -725,6 +845,7 @@ async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<U
                             local_path: child_path,
                             remote_path: child_remote_path,
                             size,
+                            offset: 0,
                         });
                     }
                 }
@@ -737,6 +858,7 @@ async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<U
                 local_path: root,
                 remote_path,
                 size,
+                offset: 0,
             });
         }
     }
@@ -746,6 +868,8 @@ async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<U
         directories,
         files,
         bytes_total,
+        resumed_bytes: 0,
+        resumed_files_done: 0,
     })
 }
 
@@ -812,6 +936,7 @@ async fn plan_remote_download(
                             remote_path: child_remote_path,
                             local_path: child_local_path,
                             size,
+                            offset: 0,
                         });
                     }
                 }
@@ -824,6 +949,7 @@ async fn plan_remote_download(
                 remote_path,
                 local_path,
                 size,
+                offset: 0,
             });
         }
     }
@@ -833,6 +959,8 @@ async fn plan_remote_download(
         directories,
         files,
         bytes_total,
+        resumed_bytes: 0,
+        resumed_files_done: 0,
     })
 }
 
@@ -1022,6 +1150,7 @@ fn parse_transfer_conflict_policy(
         "overwrite" => Ok(TransferConflictPolicy::Overwrite),
         "skip" => Ok(TransferConflictPolicy::Skip),
         "rename" => Ok(TransferConflictPolicy::Rename),
+        "resume" => Ok(TransferConflictPolicy::Resume),
         value => Err(format!("Unsupported conflict policy: {value}")),
     }
 }

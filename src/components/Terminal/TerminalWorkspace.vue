@@ -1,11 +1,14 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from "vue";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
 import FileExplorer from "../FileExplorer.vue";
+import SnippetPanel from "./SnippetPanel.vue";
+import TerminalSearchPanel from "./TerminalSearchPanel.vue";
 import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -41,8 +44,14 @@ let resizeObserver = null;
 let disposeDataListener = null;
 let disposeResizeListener = null;
 
+// 终端内查找：addon 实例给面板用，面板经 Ctrl+Shift+F / 工具栏按钮开关
+const searchAddon = shallowRef(null);
+const searchPanel = ref(null);
+const isSearchOpen = ref(false);
+
 const activeSession = computed(() => sessionStore.activeSession);
 const isAppearanceOpen = ref(false);
+const isSnippetsOpen = ref(false);
 const hoveredThemeId = ref(null);
 const activeTheme = computed(() => getTerminalTheme(settingsStore.terminalTheme));
 // hovering a card previews the theme live; leaving the panel reverts it
@@ -96,6 +105,7 @@ watch(
       credentials.passphrase = "";
       shouldSaveCredential.value = Boolean(activeSession.value?.credentialRef);
       pendingCredentialSave.value = null;
+      closeTerminalSearch({ refocus: false });
     }
 
     await nextTick();
@@ -162,6 +172,8 @@ onMounted(async () => {
   });
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
+  searchAddon.value = new SearchAddon();
+  terminal.loadAddon(searchAddon.value);
   terminal.open(terminalMount.value);
   setupClipboardShortcuts();
 
@@ -218,7 +230,8 @@ function fitTerminal() {
   fitAddon.fit();
 }
 
-// Ctrl+C 有选区时复制而不发送中断;Ctrl+V 交给原生 paste 事件送入 xterm
+// Ctrl+C 有选区时复制而不发送中断;Ctrl+V 交给原生 paste 事件送入 xterm;
+// Ctrl+Shift+F 打开终端内查找（Ctrl+F 留给 shell 的光标前移）
 function setupClipboardShortcuts() {
   terminal.attachCustomKeyEventHandler((event) => {
     if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) {
@@ -226,6 +239,11 @@ function setupClipboardShortcuts() {
     }
 
     const key = event.key.toLowerCase();
+
+    if (key === "f" && event.shiftKey) {
+      openTerminalSearch();
+      return false;
+    }
 
     if (key === "c" && terminal.hasSelection()) {
       copyTerminalSelection();
@@ -247,6 +265,36 @@ function copyTerminalSelection() {
   navigator.clipboard?.writeText(selection).catch(() => { });
   // 清掉选区作为“已复制”的视觉反馈，下一次 Ctrl+C 恢复为中断信号
   terminal.clearSelection();
+}
+
+async function openTerminalSearch() {
+  // 单行短选区作为搜索词预填，贴近编辑器查找的手感
+  const selection = terminal?.getSelection()?.trim() ?? "";
+  const seed = selection && !selection.includes("\n") && selection.length <= 200 ? selection : "";
+
+  isSearchOpen.value = true;
+  await nextTick();
+  searchPanel.value?.activate(seed);
+}
+
+function closeTerminalSearch({ refocus = true } = {}) {
+  if (!isSearchOpen.value) {
+    if (!refocus) searchAddon.value?.clearDecorations();
+    return;
+  }
+
+  isSearchOpen.value = false;
+  searchAddon.value?.clearDecorations();
+  if (refocus) focusTerminal();
+}
+
+function toggleTerminalSearch() {
+  if (isSearchOpen.value) {
+    closeTerminalSearch();
+    return;
+  }
+
+  openTerminalSearch();
 }
 
 // 会话切换 / 清屏 / 重连时全量重建：回放有界缓冲快照，然后注册直写通道，
@@ -327,9 +375,16 @@ function applyAppearance(partial) {
   settingsStore.patchSettings(partial);
 }
 
+// 外观与片段共用右缘滑入位，互斥打开
 function toggleAppearance() {
   isAppearanceOpen.value = !isAppearanceOpen.value;
+  if (isAppearanceOpen.value) isSnippetsOpen.value = false;
   hoveredThemeId.value = null;
+}
+
+function toggleSnippets() {
+  isSnippetsOpen.value = !isSnippetsOpen.value;
+  if (isSnippetsOpen.value) isAppearanceOpen.value = false;
 }
 
 // 文件面板拖拽结束后持久化高度占比（xterm 的 ResizeObserver 会自动 refit）
@@ -410,6 +465,15 @@ async function savePendingCredential() {
           <span class="terminal-state-label">{{ terminalStatusText }}</span>
           <button
             type="button"
+            :class="{ active: isSearchOpen }"
+            :aria-label="t('terminal.search.toggle')"
+            :title="`${t('terminal.search.toggle')} (Ctrl+Shift+F)`"
+            @click="toggleTerminalSearch"
+          >
+            <UIcon name="i-lucide-search" />
+          </button>
+          <button
+            type="button"
             :class="{ active: !settingsStore.showMonitorSidebar }"
             :aria-label="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
             :title="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
@@ -425,6 +489,15 @@ async function savePendingCredential() {
             @click="settingsStore.toggleFileExplorer()"
           >
             <UIcon :name="settingsStore.showFileExplorer ? 'i-lucide-panel-bottom-close' : 'i-lucide-panel-bottom-open'" />
+          </button>
+          <button
+            type="button"
+            :class="{ active: isSnippetsOpen }"
+            :aria-label="t('snippets.title')"
+            :title="t('snippets.title')"
+            @click="toggleSnippets"
+          >
+            <UIcon name="i-lucide-scroll-text" />
           </button>
           <button
             type="button"
@@ -446,6 +519,16 @@ async function savePendingCredential() {
 
       <div class="terminal-screen" @click="focusTerminal">
         <div ref="terminalMount" class="terminal-xterm"></div>
+
+        <Transition name="terminal-search-pop">
+          <TerminalSearchPanel
+            v-if="isSearchOpen"
+            ref="searchPanel"
+            :search-addon="searchAddon"
+            @click.stop
+            @close="closeTerminalSearch"
+          />
+        </Transition>
 
         <form v-if="needsCredentials" class="terminal-auth-panel" @click.stop @submit.prevent="startTerminal">
           <div class="auth-panel-copy">
@@ -534,6 +617,10 @@ async function savePendingCredential() {
           <span>{{ activeSession.error }}</span>
         </div>
       </div>
+
+      <Transition name="snippet-slide">
+        <SnippetPanel v-if="isSnippetsOpen" @close="isSnippetsOpen = false" />
+      </Transition>
 
       <Transition name="appearance-slide">
         <aside

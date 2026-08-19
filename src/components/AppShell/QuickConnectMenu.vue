@@ -1,0 +1,169 @@
+<script setup>
+import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { useProfileStore } from "../../stores/profileStore";
+import { useSessionStore } from "../../stores/sessionStore";
+import { useUiStore } from "../../stores/uiStore";
+
+const RECENT_LIMIT = 5;
+
+const { t } = useI18n();
+const profileStore = useProfileStore();
+const sessionStore = useSessionStore();
+const uiStore = useUiStore();
+
+const open = ref(false);
+
+// profileId -> 聚合会话状态（多终端时取“最好”的一个），给列表项的状态点上色
+const sessionStatusByProfile = computed(() => sessionStore.statusByProfile);
+
+const hasProfiles = computed(() => profileStore.activeProfiles.length > 0);
+
+const groups = computed(() => {
+  const sections = [];
+  const recentProfiles = profileStore.recentProfiles.slice(0, RECENT_LIMIT);
+  if (recentProfiles.length > 0) {
+    sections.push({
+      id: "recent",
+      label: t("quickConnect.recent"),
+      items: recentProfiles.map(profileToItem),
+    });
+  }
+
+  for (const { group, profiles } of profileStore.profilesByGroup) {
+    if (profiles.length === 0) continue;
+
+    sections.push({
+      id: group.id,
+      label: groupLabel(group),
+      items: profiles.map(profileToItem),
+    });
+  }
+
+  return sections;
+});
+
+function groupLabel(group) {
+  if (group.name !== "Ungrouped") return group.name;
+
+  // 用户没有自建分组时，默认组直接叫“全部连接”更符合直觉
+  const visibleGroups = profileStore.profilesByGroup.filter((entry) => entry.profiles.length > 0);
+  return visibleGroups.length > 1 ? t("sidebar.ungrouped") : t("quickConnect.all");
+}
+
+function profileToItem(profile) {
+  return {
+    label: profile.name,
+    suffix: profileAddress(profile),
+    chip: { color: statusColor(sessionStatusByProfile.value[profile.id]) },
+    onSelect: () => openProfile(profile),
+  };
+}
+
+function profileAddress(profile) {
+  const address = `${profile.username}@${profile.host}`;
+  return Number(profile.port) === 22 ? address : `${address}:${profile.port}`;
+}
+
+// 未打开=灰点；已打开会话沿用状态色（绿=已连接、黄=连接中、红=出错、蓝=待认证/已断开）
+function statusColor(status) {
+  if (!status) return "neutral";
+  if (status === "connected") return "success";
+  if (status === "connecting") return "warning";
+  if (status === "error") return "error";
+  return "info";
+}
+
+function openProfile(profile) {
+  open.value = false;
+  // 加号 = 总是新开一个终端（Windows Terminal 心理模型）；切换已有会话用顶栏 tab
+  sessionStore.openProfileSession(profile, { forceNew: true });
+}
+
+function createConnection() {
+  open.value = false;
+  uiStore.openConnectionForm();
+}
+</script>
+
+<template>
+  <UPopover
+    v-model:open="open"
+    :content="{ side: 'bottom', align: 'start', sideOffset: 10, collisionPadding: 12 }"
+    :ui="{ content: 'quick-connect-popover' }"
+  >
+    <UButton
+      class="quick-connect-trigger"
+      :class="{ open }"
+      color="neutral"
+      variant="ghost"
+      size="sm"
+      icon="i-lucide-plus"
+      :aria-label="t('quickConnect.open')"
+      :title="t('quickConnect.open')"
+    />
+
+    <template #content>
+      <UCommandPalette
+        size="sm"
+        :groups="groups"
+        :placeholder="t('quickConnect.placeholder')"
+      >
+        <template #empty>
+          <div class="quick-connect-empty">
+            <UIcon :name="hasProfiles ? 'i-lucide-search-x' : 'i-lucide-server-off'" />
+            <p>{{ hasProfiles ? t("quickConnect.noMatches") : t("quickConnect.empty") }}</p>
+            <span v-if="!hasProfiles">{{ t("quickConnect.emptyHint") }}</span>
+          </div>
+        </template>
+
+        <template #footer>
+          <UButton
+            class="quick-connect-create"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-plus"
+            block
+            :ui="{ base: 'justify-start' }"
+            @click="createConnection"
+          >
+            {{ t("quickConnect.create") }}
+          </UButton>
+        </template>
+      </UCommandPalette>
+    </template>
+  </UPopover>
+</template>
+
+<style scoped>
+/* 加号：平时安静的幽灵按钮，悬停浮出玻璃，弹层打开时保持“按下”状态 */
+.quick-connect-trigger {
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  color: var(--xin-text-muted);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.quick-connect-trigger:hover {
+  color: var(--xin-text);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.quick-connect-trigger.open {
+  color: var(--xin-accent-strong);
+  border-color: var(--xin-glass-border);
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow:
+    var(--xin-specular),
+    0 8px 22px rgba(20, 34, 62, 0.1);
+  backdrop-filter: var(--xin-glass-blur);
+}
+</style>

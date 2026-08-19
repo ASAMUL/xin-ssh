@@ -1499,6 +1499,14 @@ function fileTypeLabel(entry) {
         />
         <UButton
           color="primary"
+          variant="soft"
+          icon="i-lucide-play"
+          :disabled="conflictDialog.isSubmitting"
+          :label="t('files.resumeConflicts')"
+          @click="resolveTransferConflict('resume')"
+        />
+        <UButton
+          color="primary"
           icon="i-lucide-copy-check"
           :loading="conflictDialog.isSubmitting"
           :label="t('files.overwriteConflicts')"
