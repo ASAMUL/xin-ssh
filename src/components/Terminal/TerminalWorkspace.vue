@@ -160,7 +160,8 @@ watch(
 
 onMounted(async () => {
   terminal = new Terminal({
-    allowProposedApi: false,
+    // addon-search 的匹配高亮依赖 registerDecoration（experimental API，受此开关拦截）
+    allowProposedApi: true,
     allowTransparency: true,
     cursorBlink: true,
     cursorStyle: "bar",
@@ -304,13 +305,19 @@ function resyncTerminal() {
 
   sessionStore.detachTerminalSink();
   terminal.reset();
+  // 装饰随 buffer 重置失效，但引擎的缓存词与结果集仍在——一并清掉，
+  // 否则切会话后面板会显示旧会话的计数，且同词重搜不会重建高亮
+  searchAddon.value?.clearDecorations();
 
   const session = activeSession.value;
   if (!session) return;
 
   const snapshot = sessionStore.getTerminalSnapshot(session.id);
   if (snapshot) {
-    terminal.write(snapshot);
+    // 回放分片解析，写完回调里再重算搜索，避免只搜到部分回放内容
+    terminal.write(snapshot, () => {
+      if (isSearchOpen.value) searchPanel.value?.refresh();
+    });
   }
 
   sessionStore.attachTerminalSink(session.id, (data) => {

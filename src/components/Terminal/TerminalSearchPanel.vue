@@ -77,11 +77,24 @@ watch(
   { immediate: true },
 );
 
-// 输入或开关变化都就近重新定位；0.16 引擎按 cachedSearchTerm 自行处理增量扩展
-watch(searchText, () => runSearch());
+// 每次搜索都是 scrollback 全扫 + 重建全部匹配装饰，逐键触发会卡输入并让视口连续跳转；
+// 输入停顿 150ms 后再执行。开关切换是单次操作，立即执行
+const SEARCH_INPUT_DEBOUNCE_MS = 150;
+let searchDebounceTimer = null;
+
+function cancelPendingSearch() {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = null;
+}
+
+watch(searchText, () => {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(runSearch, SEARCH_INPUT_DEBOUNCE_MS);
+});
 watch([caseSensitive, wholeWord, useRegex], () => runSearch());
 
 onBeforeUnmount(() => {
+  cancelPendingSearch();
   disposeResultsListener?.dispose();
 });
 
@@ -95,6 +108,7 @@ function searchOptions() {
 }
 
 function runSearch() {
+  cancelPendingSearch();
   const addon = props.searchAddon;
   if (!addon) return;
 
@@ -110,12 +124,14 @@ function runSearch() {
 }
 
 function goNext() {
+  cancelPendingSearch();
   if (!hasQuery.value || regexInvalid.value) return;
 
   props.searchAddon?.findNext(searchText.value, searchOptions());
 }
 
 function goPrev() {
+  cancelPendingSearch();
   if (!hasQuery.value || regexInvalid.value) return;
 
   props.searchAddon?.findPrevious(searchText.value, searchOptions());
@@ -126,6 +142,13 @@ function onSearchKeydown(event) {
 
   if (event.key === "Enter" || event.key === "F3") {
     event.preventDefault();
+    // 打完字立刻回车：先执行挂起的搜索（就地定位最近匹配），之后的回车才逐个向下；
+    // 无论走哪条路都要取消挂起计时器，否则它会在导航后再次移动活跃匹配
+    if (searchDebounceTimer && !event.shiftKey) {
+      runSearch();
+      return;
+    }
+    cancelPendingSearch();
     if (event.shiftKey) goPrev();
     else goNext();
   }
@@ -146,7 +169,12 @@ function focusField() {
   searchInput.value?.inputRef?.select();
 }
 
-defineExpose({ activate });
+// 会话切换后由父组件调用：在新会话的内容上重算匹配（不抢焦点）
+function refresh() {
+  runSearch();
+}
+
+defineExpose({ activate, refresh });
 </script>
 
 <template>
