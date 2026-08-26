@@ -30,7 +30,7 @@ tokio = { version = "1.52.3", features = ["fs", "io-util", "macros", "net", "syn
 ring = "0.17.14"
 
 [profile.release]
-codegen-units = 1
+codegen-units = 4
 lto = true
 opt-level = 3
 panic = "abort"
