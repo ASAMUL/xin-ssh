@@ -141,27 +141,46 @@ watch(
   box-shadow: none;
   color: var(--xin-text-muted);
   transition:
-    background 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease,
-    box-shadow 140ms ease;
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 240ms cubic-bezier(0.32, 0.72, 0.24, 1);
 }
 
 .home-tab:hover,
 .session-tab:hover {
   color: var(--xin-text);
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.42);
 }
 
+/* iOS 的选中态靠「发丝描边 + 顶部高光 + 极紧的两层投影」立起来，
+   不是一团大扩散阴影：偏移 ≤2px、模糊 ≤6px。药丸这么小的尺寸下，
+   大模糊阴影只会糊成一片灰、显廉价，边缘必须由描边来交代。 */
 .home-tab.active,
 .session-tab.active {
   color: var(--xin-text);
-  border-color: var(--xin-glass-border);
-  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(16, 26, 44, 0.07);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.8) 100%);
   box-shadow:
-    var(--xin-specular),
-    0 8px 22px rgba(20, 34, 62, 0.1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 1px 1px rgba(20, 34, 62, 0.05),
+    0 2px 6px -2px rgba(20, 34, 62, 0.12);
   backdrop-filter: var(--xin-glass-blur);
+  -webkit-backdrop-filter: var(--xin-glass-blur);
+}
+
+/* 按下去要有回弹，这是 iOS 手感里最省事也最像的一处 */
+.home-tab:active,
+.session-tab:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-tab:active,
+  .session-tab:active {
+    transform: none;
+  }
 }
 
 .home-tab {
@@ -318,19 +337,22 @@ watch(
 
 /* 关闭按钮悬停/激活/键盘聚焦才现身，平时保持安静 */
 .tab-close {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
+  justify-self: center;
   display: grid;
   place-items: center;
-  color: #64748b;
+  color: #7c8798;
+  font-size: 13px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 50%;
   background: transparent;
   opacity: 0;
   transition:
     opacity 130ms ease,
     background 130ms ease,
-    color 130ms ease;
+    color 130ms ease,
+    transform 200ms cubic-bezier(0.32, 0.72, 0.24, 1);
 }
 
 .session-tab:hover .tab-close,
@@ -341,7 +363,11 @@ watch(
 
 .tab-close:hover {
   color: #0f172a;
-  background: rgba(148, 163, 184, 0.18);
+  background: rgba(16, 26, 44, 0.09);
+}
+
+.tab-close:active {
+  transform: scale(0.88);
 }
 
 @media (max-width: 980px) {

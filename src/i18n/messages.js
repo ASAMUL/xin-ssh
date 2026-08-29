@@ -227,6 +227,23 @@ export const messages = {
         hacker: "黑客",
         classic: "经典",
       },
+      background: {
+        title: "背景图片",
+        pick: "选择背景图片",
+        choose: "选择图片",
+        replace: "更换图片",
+        remove: "移除背景",
+        scopeGlobal: "全局",
+        scopeProfile: "仅此连接",
+        overriddenHint: "此连接已单独设置背景，全局设置对它不生效。",
+        opacity: "不透明度",
+        blur: "模糊",
+        fit: {
+          cover: "填满",
+          contain: "适应",
+          tile: "平铺",
+        },
+      },
       more: "更多终端操作",
       closeSession: "关闭会话",
       authTitle: "输入连接凭据",
@@ -515,6 +532,10 @@ export const messages = {
         "workspace.dirMissing": "未配置工作区目录",
         "workspace.fileCorrupt": "配置文件已损坏：{path}",
 
+        "background.unsupportedFormat": "不支持的图片格式，仅支持 {formats}",
+        "background.tooLarge": "图片太大，请控制在 {limitMb} MB 以内",
+        "background.missing": "背景图片已丢失：{file}",
+
         "credential.encryptFailed": "凭据加密失败",
         "credential.decryptFailed": "凭据解密失败，可能是本机密钥已变更",
         "credential.keyFailed": "本机凭据密钥不可用",
@@ -793,6 +814,24 @@ export const messages = {
         scene: "Scenes",
         hacker: "Hacker",
         classic: "Classic",
+      },
+      background: {
+        title: "Background image",
+        pick: "Choose a background image",
+        choose: "Choose image",
+        replace: "Replace image",
+        remove: "Remove background",
+        scopeGlobal: "Global",
+        scopeProfile: "This connection",
+        overriddenHint:
+          "This connection has its own background, so the global one does not apply to it.",
+        opacity: "Opacity",
+        blur: "Blur",
+        fit: {
+          cover: "Cover",
+          contain: "Contain",
+          tile: "Tile",
+        },
       },
       more: "More terminal actions",
       closeSession: "Close session",
@@ -1082,6 +1121,10 @@ export const messages = {
         "workspace.notInitialized": "Workspace is not initialized",
         "workspace.dirMissing": "Workspace directory is not configured",
         "workspace.fileCorrupt": "Config file is corrupt: {path}",
+
+        "background.unsupportedFormat": "Unsupported image format — only {formats} are supported",
+        "background.tooLarge": "Image is too large — keep it under {limitMb} MB",
+        "background.missing": "Background image is missing: {file}",
 
         "credential.encryptFailed": "Could not encrypt the credential",
         "credential.decryptFailed":

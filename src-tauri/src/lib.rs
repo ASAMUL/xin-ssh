@@ -1,3 +1,4 @@
+mod background;
 mod credentials;
 mod error;
 mod models;
@@ -28,6 +29,7 @@ pub fn run() {
             workspace::get_app_status,
             workspace::init_workspace,
             system_info::get_remote_system_info,
+            background::import_terminal_background,
             sftp::ops::list_remote_directory,
             workspace::list_snippets,
             workspace::list_tunnel_configs,
@@ -36,6 +38,7 @@ pub fn run() {
             workspace::load_workspace,
             credentials::read_credential,
             sftp::ops::read_remote_file_text,
+            background::read_terminal_background,
             credentials::remove_credential,
             sftp::ops::rename_remote_path,
             ssh::shell::resize_terminal,

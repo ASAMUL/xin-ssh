@@ -157,6 +157,50 @@
 .terminal-xterm {
   width: 100%;
   height: 100%;
+  /* 定位 + z-index：把文字抬到自定义背景图之上、显像管纹理之下 */
+  position: relative;
+  z-index: 1;
+}
+
+/* 磷光辉光：靠 CSS text-shadow 打在字上。xterm 这里跑的是 DOM renderer
+   （没挂 canvas / webgl addon），所以 CSS 能直接作用到字符上；哪天换渲染器
+   这行会静默失效，主题的 text.glow 也就一并没了效果。 */
+.terminal-xterm :deep(.xterm-rows) {
+  text-shadow: var(--term-text-glow, none);
+}
+
+/* —— 自定义背景图 ——
+   图片层与压暗层都垫在 xterm 之下。模糊会把layer 边缘吸成半透明，所以按
+   模糊半径向外扩一圈（父级 overflow: hidden 兜住溢出）。 */
+.terminal-screen-image {
+  position: absolute;
+  z-index: 0;
+  inset: calc(-2 * var(--term-image-blur, 0px));
+  background-image: var(--term-image);
+  background-position: center;
+  background-repeat: var(--term-image-repeat, no-repeat);
+  background-size: var(--term-image-size, cover);
+  opacity: var(--term-image-opacity, 0.35);
+  filter: blur(var(--term-image-blur, 0px));
+  pointer-events: none;
+}
+
+.terminal-screen-scrim {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: var(--term-image-scrim, transparent);
+  pointer-events: none;
+}
+
+/* 显像管纹理层：扫描线 / 暗角要压在**字之上**才有 CRT 的味道，所以单独浮一层。
+   pointer-events 必须关掉，否则会吃掉终端的点击聚焦和鼠标选区。 */
+.terminal-screen-overlay {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background: var(--term-screen-overlay, none);
+  pointer-events: none;
 }
 
 /* 内边距放在 xterm 自身而不是外层挂载点：FitAddon 会读取并扣除 .xterm 的

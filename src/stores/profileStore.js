@@ -67,6 +67,13 @@ export const useProfileStore = defineStore("profiles", {
 
       return this.saveProfile({ ...profile, favorite: !profile.favorite });
     },
+    // 该连接专属的终端背景图；null = 取消覆盖，回到全局设置那张
+    async setTerminalBackground(profileId, terminalBackground) {
+      const profile = this.profiles.find((item) => item.id === profileId);
+      if (!profile) return null;
+
+      return this.saveProfile({ ...profile, terminalBackground });
+    },
     // 连接成功后打点最近连接时间；失败静默（浏览器 dev 无后端）
     async markConnected(profileId) {
       try {

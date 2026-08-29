@@ -58,6 +58,9 @@ pub struct WorkspaceSettings {
     // 首页「所有连接」视图模式：grid | list
     #[serde(default = "default_home_view_mode")]
     pub home_view_mode: String,
+    // 全局终端背景图；单个连接可用 ConnectionProfile::terminal_background 覆盖
+    #[serde(default)]
+    pub terminal_background: Option<TerminalBackground>,
     // SSH keepalive 间隔（秒），0 = 禁用；终端与隧道连接共用
     #[serde(default = "default_ssh_keepalive_seconds")]
     pub ssh_keepalive_seconds: u64,
@@ -82,8 +85,49 @@ impl Default for WorkspaceSettings {
             file_tree_size: default_file_tree_size(),
             home_view_mode: default_home_view_mode(),
             ssh_keepalive_seconds: default_ssh_keepalive_seconds(),
+            terminal_background: None,
         }
     }
+}
+
+/// 终端背景图。图片本体统一存放在 `<workspace>/backgrounds/`，这里只记文件名——
+/// 绝对路径会在换机器 / 同步工作区后失效，而工作区目录本来就是可同步的整体。
+///
+/// `WorkspaceSettings` 持有全局一张，`ConnectionProfile` 可以覆盖成自己的一张
+/// （生产机配红底、测试机配蓝底，切 tab 时背景直接变，误操作概率会明显下降）。
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TerminalBackground {
+    /// 文件名（不含目录），实际文件在 `<workspace>/backgrounds/` 下
+    pub file: String,
+    /// 图片可见度 0.04~1
+    #[serde(default = "default_background_opacity")]
+    pub opacity: f64,
+    /// 高斯模糊半径 px，0 = 不模糊
+    #[serde(default)]
+    pub blur: u16,
+    /// cover | contain | tile
+    #[serde(default = "default_background_fit")]
+    pub fit: String,
+}
+
+impl Default for TerminalBackground {
+    fn default() -> Self {
+        Self {
+            file: String::new(),
+            opacity: default_background_opacity(),
+            blur: 0,
+            fit: default_background_fit(),
+        }
+    }
+}
+
+pub fn default_background_opacity() -> f64 {
+    0.35
+}
+
+pub fn default_background_fit() -> String {
+    "cover".to_string()
 }
 
 pub fn default_locale() -> String {
@@ -174,6 +218,9 @@ pub struct ConnectionProfile {
     pub favorite: bool,
     #[serde(default)]
     pub last_connected_at: Option<String>,
+    // 该连接专属的终端背景图；None = 跟随全局设置
+    #[serde(default)]
+    pub terminal_background: Option<TerminalBackground>,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,

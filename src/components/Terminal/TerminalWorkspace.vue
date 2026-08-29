@@ -22,8 +22,17 @@ import {
   TERMINAL_THEME_GROUPS,
   buildXtermTheme,
   getTerminalTheme,
+  getThemePreviewBackground,
+  getThemeTypography,
   resolveTerminalFontStack,
 } from "../../config/terminalThemes";
+import {
+  TERMINAL_BACKGROUND_FITS,
+  importTerminalBackground,
+  normalizeTerminalBackground,
+  pickBackgroundImage,
+  resolveTerminalBackgroundUrl,
+} from "../../services/backgroundApi";
 
 const { t } = useI18n();
 const profileStore = useProfileStore();
@@ -44,6 +53,7 @@ let fitAddon = null;
 let resizeObserver = null;
 let disposeDataListener = null;
 let disposeResizeListener = null;
+let persistBackgroundTimer = null;
 
 // 终端内查找：addon 实例给面板用，面板经 Ctrl+Shift+F / 工具栏按钮开关
 const searchAddon = shallowRef(null);
@@ -76,11 +86,49 @@ const themeStyleVars = computed(() => {
     "--term-toolbar-bg": ui.toolbarBg,
     "--term-divider": ui.divider,
     "--term-screen-bg": ui.screenBg,
+    "--term-screen-overlay": ui.screenOverlay ?? "none",
+    "--term-text-glow": getThemeTypography(displayTheme.value).glow ?? "none",
     "--term-glow": ui.glow,
     "--term-accent": displayTheme.value.accent,
     "--term-text": ui.text,
     "--term-text-muted": ui.textMuted,
     "--term-soft": ui.soft,
+  };
+});
+
+// —— 终端背景图 ——
+// 优先级：当前连接自己的那张 > 全局设置那张。生产机 / 测试机各配一张图，
+// 切 tab 时背景直接变，比只看 tab 标题更难认错机器。
+const activeProfile = computed(() =>
+  profileStore.profiles.find((profile) => profile.id === activeSession.value?.profileId),
+);
+const profileBackground = computed(() =>
+  normalizeTerminalBackground(activeProfile.value?.terminalBackground),
+);
+const globalBackground = computed(() => settingsStore.terminalBackground);
+const activeBackground = computed(() => profileBackground.value ?? globalBackground.value);
+// 面板里正在编辑的是哪一档；没有连接上下文时只能编辑全局
+const backgroundScope = ref("global");
+const editingBackground = computed(() =>
+  backgroundScope.value === "profile" ? profileBackground.value : globalBackground.value,
+);
+const backgroundUrl = ref(null);
+const backgroundStyleVars = computed(() => {
+  const background = activeBackground.value;
+  if (!background || !backgroundUrl.value) return null;
+
+  return {
+    "--term-image": `url("${backgroundUrl.value}")`,
+    "--term-image-opacity": background.opacity,
+    "--term-image-blur": `${background.blur}px`,
+    "--term-image-size": background.fit === "tile" ? "auto" : background.fit,
+    "--term-image-repeat": background.fit === "tile" ? "repeat" : "no-repeat",
+    // 压暗层随图片可见度一起走：图越显眼，越需要压一层底才读得清字。
+    // 浅色主题反过来铺白，否则深色照片会把深色文字吃掉。
+    "--term-image-scrim":
+      displayTheme.value.mode === "light"
+        ? `rgba(255, 255, 255, ${(background.opacity * 0.45).toFixed(3)})`
+        : `rgba(0, 0, 0, ${(background.opacity * 0.42).toFixed(3)})`,
   };
 });
 const isPasswordAuth = computed(() => activeSession.value?.authMethod === "password");
@@ -139,7 +187,38 @@ watch(
 watch(displayTheme, (theme) => {
   if (!terminal) return;
 
+  const text = getThemeTypography(theme);
   terminal.options.theme = buildXtermTheme(theme);
+  // 字重与光标形状都不改变 xterm 的字符测量结果，所以切主题不必 refit
+  terminal.options.fontWeight = text.weight;
+  terminal.options.cursorStyle = text.cursorStyle;
+});
+
+// 背景图字节走 IPC 读一次转 Blob URL，之后由 backgroundApi 缓存；
+// 换图 / 换连接 / 清除都只是换 file 字段，这里跟着解析即可。
+watch(
+  () => activeBackground.value?.file ?? null,
+  async (file) => {
+    if (!file) {
+      backgroundUrl.value = null;
+      return;
+    }
+
+    try {
+      backgroundUrl.value = await resolveTerminalBackgroundUrl(file);
+    } catch (error) {
+      console.warn("[Xin Terminal] terminal background load failed", error);
+      backgroundUrl.value = null;
+    }
+  },
+  { immediate: true },
+);
+
+// 打开面板时默认停在「更具体」的那一档：本连接已单独设过就编辑本连接
+watch(isAppearanceOpen, (open) => {
+  if (!open) return;
+
+  backgroundScope.value = profileBackground.value && activeProfile.value ? "profile" : "global";
 });
 
 watch(terminalFontStack, (stack) => {
@@ -165,9 +244,10 @@ onMounted(async () => {
     allowProposedApi: true,
     allowTransparency: true,
     cursorBlink: true,
-    cursorStyle: "bar",
+    cursorStyle: getThemeTypography(displayTheme.value).cursorStyle,
     fontFamily: terminalFontStack.value,
     fontSize: settingsStore.terminalFontSize,
+    fontWeight: getThemeTypography(displayTheme.value).weight,
     lineHeight: 1.18,
     scrollback: 8000,
     theme: buildXtermTheme(displayTheme.value),
@@ -205,6 +285,11 @@ onBeforeUnmount(() => {
   disposeDataListener?.dispose();
   disposeResizeListener?.dispose();
   terminal?.dispose();
+  // 拖完滑块立刻切走时，防抖里那一次还没落盘——补写，别丢用户刚调的值
+  if (persistBackgroundTimer) {
+    clearTimeout(persistBackgroundTimer);
+    writeBackground(editingBackground.value);
+  }
 });
 
 function focusTerminal() {
@@ -370,6 +455,70 @@ function selectFontSize(fontSize) {
   applyAppearance({ terminalFontSize: fontSize });
 }
 
+// —— 背景图操作 ——
+// 全局档写 settings.json，连接档写 profiles.json；两条链路都已有乐观更新，
+// 这里只负责组装完整的 background 对象（后端字段有 serde default，但前端
+// 传半个对象会让 opacity/fit 悄悄回落到默认值，不如每次写全）。
+async function chooseBackgroundImage() {
+  try {
+    const sourcePath = await pickBackgroundImage(t("terminal.background.pick"));
+    if (!sourcePath) return;
+
+    const file = await importTerminalBackground(sourcePath);
+    const current = editingBackground.value;
+    await writeBackground({
+      file,
+      opacity: current?.opacity ?? 0.35,
+      blur: current?.blur ?? 0,
+      fit: current?.fit ?? "cover",
+    });
+  } catch (error) {
+    uiStore.setError(error);
+  }
+}
+
+function patchBackground(partial) {
+  const current = editingBackground.value;
+  if (!current) return;
+
+  const next = { ...current, ...partial };
+  // 先就地改内存让终端立刻跟着变，落盘防抖 250ms——拖滑块每一格都写一次
+  // settings.json / profiles.json 是没必要的磁盘与 IPC 开销
+  applyBackgroundLocally(next);
+  clearTimeout(persistBackgroundTimer);
+  persistBackgroundTimer = setTimeout(() => writeBackground(next), 250);
+}
+
+function clearBackground() {
+  clearTimeout(persistBackgroundTimer);
+  applyBackgroundLocally(null);
+  writeBackground(null);
+}
+
+function applyBackgroundLocally(background) {
+  if (backgroundScope.value === "profile" && activeProfile.value) {
+    activeProfile.value.terminalBackground = background;
+    return;
+  }
+
+  if (settingsStore.settings) {
+    settingsStore.settings.terminalBackground = background;
+  }
+}
+
+async function writeBackground(background) {
+  try {
+    if (backgroundScope.value === "profile" && activeProfile.value) {
+      await profileStore.setTerminalBackground(activeProfile.value.id, background);
+      return;
+    }
+
+    await settingsStore.setTerminalBackground(background);
+  } catch (error) {
+    uiStore.setError(error);
+  }
+}
+
 function applyAppearance(partial) {
   if (settingsStore.settings) {
     // optimistic: re-skin immediately, persistence follows
@@ -525,8 +674,21 @@ async function savePendingCredential() {
         </div>
       </header>
 
-      <div class="terminal-screen" @click="focusTerminal">
+      <div class="terminal-screen" :style="backgroundStyleVars" @click="focusTerminal">
+        <!-- 自定义背景图：图片层 + 压暗层，都垫在 xterm 之下 -->
+        <template v-if="backgroundStyleVars">
+          <div class="terminal-screen-image" aria-hidden="true"></div>
+          <div class="terminal-screen-scrim" aria-hidden="true"></div>
+        </template>
+
         <div ref="terminalMount" class="terminal-xterm"></div>
+
+        <!-- 扫描线 / 暗角这类「显像管」纹理必须压在字之上才有味道，故单独一层 -->
+        <div
+          v-if="displayTheme.ui.screenOverlay"
+          class="terminal-screen-overlay"
+          aria-hidden="true"
+        ></div>
 
         <Transition name="terminal-search-pop">
           <TerminalSearchPanel
@@ -663,11 +825,27 @@ async function savePendingCredential() {
                   @focus="hoveredThemeId = theme.id"
                   @click="selectTheme(theme.id)"
                 >
-                  <span class="theme-swatch" :style="{ background: theme.preview }">
+                  <span
+                    class="theme-swatch"
+                    :style="{ background: getThemePreviewBackground(theme) }"
+                  >
+                    <span
+                      v-if="theme.ui.screenOverlay"
+                      class="swatch-overlay"
+                      :style="{ background: theme.ui.screenOverlay }"
+                    ></span>
                     <span class="swatch-line">
                       <i :style="{ color: theme.xterm.green }">➜</i>
-                      <em :style="{ color: theme.xterm.foreground }">~ ssh</em>
+                      <em :style="{ color: theme.xterm.blue }">~</em>
+                      <em :style="{ color: theme.xterm.foreground }">ls</em>
                       <b :style="{ background: theme.xterm.cursor }"></b>
+                    </span>
+                    <!-- ls 把语义压在固定槽位上：蓝=目录 绿=可执行 青=符号链接。
+                         预览卡照着摆，配色好不好用一眼就知道，比 6 个抽象色点实在 -->
+                    <span class="swatch-line ls">
+                      <em :style="{ color: theme.xterm.blue }">docs/</em>
+                      <em :style="{ color: theme.xterm.green }">run.sh</em>
+                      <em :style="{ color: theme.xterm.cyan }">link@</em>
                     </span>
                     <span class="swatch-dots">
                       <i
@@ -718,6 +896,112 @@ async function savePendingCredential() {
                   {{ size }}
                 </button>
               </div>
+            </section>
+            <section class="appearance-section">
+              <h4>{{ t("terminal.background.title") }}</h4>
+
+              <!-- 作用范围。没有连接上下文时只剩全局一档，整条不显示 -->
+              <div v-if="activeProfile" class="size-row">
+                <button
+                  type="button"
+                  :class="{ active: backgroundScope === 'global' }"
+                  @click="backgroundScope = 'global'"
+                >
+                  {{ t("terminal.background.scopeGlobal") }}
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: backgroundScope === 'profile' }"
+                  @click="backgroundScope = 'profile'"
+                >
+                  {{ t("terminal.background.scopeProfile") }}
+                </button>
+              </div>
+
+              <!-- 编辑全局但本连接已有覆盖时，改了看不到效果，必须说清楚 -->
+              <p
+                v-if="backgroundScope === 'global' && profileBackground"
+                class="background-note"
+              >
+                {{ t("terminal.background.overriddenHint") }}
+              </p>
+
+              <div
+                v-if="editingBackground && backgroundUrl"
+                class="background-preview"
+                :style="{
+                  backgroundImage: `url('${backgroundUrl}')`,
+                  backgroundSize: editingBackground.fit === 'tile' ? 'auto' : editingBackground.fit,
+                  backgroundRepeat: editingBackground.fit === 'tile' ? 'repeat' : 'no-repeat',
+                }"
+              ></div>
+
+              <div class="background-actions">
+                <UButton
+                  color="neutral"
+                  variant="outline"
+                  size="sm"
+                  icon="i-lucide-image"
+                  :label="
+                    editingBackground
+                      ? t('terminal.background.replace')
+                      : t('terminal.background.choose')
+                  "
+                  @click="chooseBackgroundImage"
+                />
+                <UButton
+                  v-if="editingBackground"
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  icon="i-lucide-trash-2"
+                  :aria-label="t('terminal.background.remove')"
+                  :title="t('terminal.background.remove')"
+                  @click="clearBackground"
+                />
+              </div>
+
+              <template v-if="editingBackground">
+                <div class="background-slider">
+                  <span>
+                    {{ t("terminal.background.opacity") }}
+                    <em>{{ Math.round(editingBackground.opacity * 100) }}%</em>
+                  </span>
+                  <USlider
+                    :model-value="Math.round(editingBackground.opacity * 100)"
+                    :min="4"
+                    :max="100"
+                    size="sm"
+                    @update:model-value="patchBackground({ opacity: $event / 100 })"
+                  />
+                </div>
+
+                <div class="background-slider">
+                  <span>
+                    {{ t("terminal.background.blur") }}
+                    <em>{{ editingBackground.blur }}px</em>
+                  </span>
+                  <USlider
+                    :model-value="editingBackground.blur"
+                    :min="0"
+                    :max="30"
+                    size="sm"
+                    @update:model-value="patchBackground({ blur: $event })"
+                  />
+                </div>
+
+                <div class="size-row">
+                  <button
+                    v-for="fit in TERMINAL_BACKGROUND_FITS"
+                    :key="fit"
+                    type="button"
+                    :class="{ active: fit === editingBackground.fit }"
+                    @click="patchBackground({ fit })"
+                  >
+                    {{ t(`terminal.background.fit.${fit}`) }}
+                  </button>
+                </div>
+              </template>
             </section>
           </div>
         </aside>

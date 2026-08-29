@@ -87,6 +87,10 @@ pub mod codes {
     pub const WORKSPACE_DIR_MISSING: &str = "workspace.dirMissing";
     pub const WORKSPACE_FILE_CORRUPT: &str = "workspace.fileCorrupt";
 
+    pub const BACKGROUND_UNSUPPORTED_FORMAT: &str = "background.unsupportedFormat";
+    pub const BACKGROUND_TOO_LARGE: &str = "background.tooLarge";
+    pub const BACKGROUND_MISSING: &str = "background.missing";
+
     pub const CREDENTIAL_ENCRYPT_FAILED: &str = "credential.encryptFailed";
     pub const CREDENTIAL_DECRYPT_FAILED: &str = "credential.decryptFailed";
     pub const CREDENTIAL_KEY_FAILED: &str = "credential.keyFailed";

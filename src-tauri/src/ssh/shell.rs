@@ -153,6 +153,11 @@ async fn run_terminal_shell(
         )
         .await
         .map_err(connection_error)?;
+    // 告诉远端我们支持真彩色。多数 sshd 的 AcceptEnv 只放行 LANG / LC_*，这条会被
+    // 直接忽略——所以 want_reply = false，被拒不影响连接；能过的话 bat / delta /
+    // neovim 这类工具会从 256 色近似切到 24 位真彩。TERM 已经是 xterm-256color，
+    // 所以即使这条被吞，ls / vim 的 16 色与 256 色一样正常。
+    let _ = channel.set_env(false, "COLORTERM", "truecolor").await;
     channel
         .request_shell(true)
         .await

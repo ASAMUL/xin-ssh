@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { saveSettings } from "../services/workspaceApi";
+import { normalizeTerminalBackground } from "../services/backgroundApi";
 import { i18n } from "../i18n";
 import { DEFAULT_TERMINAL_THEME_ID, TERMINAL_FONTS, TERMINAL_FONT_SIZES } from "../config/terminalThemes";
 
@@ -39,6 +40,7 @@ export const useSettingsStore = defineStore("settings", {
       normalizePaneSize(state.settings?.fileTreeSize, DEFAULT_FILE_TREE_SIZE),
     homeViewMode: (state) =>
       state.settings?.homeViewMode === "list" ? "list" : "grid",
+    terminalBackground: (state) => normalizeTerminalBackground(state.settings?.terminalBackground),
   },
   actions: {
     hydrate(settings) {
@@ -118,6 +120,10 @@ export const useSettingsStore = defineStore("settings", {
       return this.patchSettings({
         terminalFontSize: normalizeTerminalFontSize(terminalFontSize),
       });
+    },
+    // 全局终端背景图；单个连接可在外观面板里覆盖成自己的一张
+    setTerminalBackground(terminalBackground) {
+      return this.applySettingsPatch({ terminalBackground });
     },
   },
 });

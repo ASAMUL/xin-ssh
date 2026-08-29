@@ -137,7 +137,8 @@ function createConnection() {
 </template>
 
 <style scoped>
-/* 加号：平时安静的幽灵按钮，悬停浮出玻璃，弹层打开时保持“按下”状态 */
+/* 加号：平时安静的幽灵按钮，悬停浮出玻璃，弹层打开时保持“按下”状态。
+   选中/打开态的描边与投影必须和 SessionTabs 的药丸完全一致，两者是并排的。 */
 .quick-connect-trigger {
   width: 36px;
   height: 36px;
@@ -146,24 +147,37 @@ function createConnection() {
   border: 1px solid transparent;
   border-radius: 12px;
   transition:
-    background 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease,
-    box-shadow 140ms ease;
+    background 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 240ms cubic-bezier(0.32, 0.72, 0.24, 1);
 }
 
 .quick-connect-trigger:hover {
   color: var(--xin-text);
-  background: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.quick-connect-trigger:active {
+  transform: scale(0.94);
 }
 
 .quick-connect-trigger.open {
   color: var(--xin-accent-strong);
-  border-color: var(--xin-glass-border);
-  background: rgba(255, 255, 255, 0.66);
+  border-color: rgba(16, 26, 44, 0.07);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.8) 100%);
   box-shadow:
-    var(--xin-specular),
-    0 8px 22px rgba(20, 34, 62, 0.1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 1px 1px rgba(20, 34, 62, 0.05),
+    0 2px 6px -2px rgba(20, 34, 62, 0.12);
   backdrop-filter: var(--xin-glass-blur);
+  -webkit-backdrop-filter: var(--xin-glass-blur);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-connect-trigger:active {
+    transform: none;
+  }
 }
 </style>
