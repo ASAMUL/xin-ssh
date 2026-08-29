@@ -1,16 +1,14 @@
 import { defineStore } from "pinia";
 import { readRemoteFileText, writeRemoteFileText } from "../services/workspaceApi";
+import { ERROR_CODES, errorCode } from "../utils/appError";
 import { useFileExplorerStore } from "./fileExplorerStore";
 import { useSessionStore } from "./sessionStore";
 
 // 与后端 MAX_EDITABLE_FILE_BYTES 保持一致
 export const EDITOR_MAX_FILE_BYTES = 5 * 1024 * 1024;
 
-// 错误文案与后端保持同一措辞，前端展示时统一按关键词映射为 i18n 文案
-const FILE_TOO_LARGE_ERROR = "File is too large to edit (limit 5 MB)";
-const FILE_BINARY_ERROR = "File appears to be binary and cannot be edited as text";
-
-// 常见二进制扩展名：双击时直接提示，避免整份拉取后才失败
+// 常见二进制扩展名：双击时直接提示，避免整份拉取后才失败。
+// 这里构造的错误与后端 AppError 同形（code/message/params），组件按同一套逻辑本地化。
 const BINARY_FILE_EXTENSIONS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "svgz", "heic",
   "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
@@ -87,13 +85,13 @@ export const useEditorStore = defineStore("editor", {
         if (this.requestToken !== token) return;
 
         // 双击到指向目录的软链接：退回为目录导航
-        if (String(error).includes("is a directory")) {
+        if (errorCode(error) === ERROR_CODES.remoteIsDirectory) {
           this.close();
           useFileExplorerStore().loadDirectory(session, entry.path);
           return;
         }
 
-        this.loadError = String(error);
+        this.loadError = error;
         this.isLoading = false;
         useSessionStore().handleConnectionOperationError(session.id, error);
       }
@@ -114,7 +112,7 @@ export const useEditorStore = defineStore("editor", {
 
       const session = this.session;
       if (!session || session.status !== "connected") {
-        this.saveError = "Terminal session is not running";
+        this.saveError = { code: ERROR_CODES.sessionNotRunning, message: "", params: {} };
         return;
       }
 
@@ -140,7 +138,7 @@ export const useEditorStore = defineStore("editor", {
           this.close();
         }
       } catch (error) {
-        this.saveError = String(error);
+        this.saveError = error;
         useSessionStore().handleConnectionOperationError(this.sessionId, error);
       } finally {
         this.isSaving = false;
@@ -180,14 +178,18 @@ export const useEditorStore = defineStore("editor", {
 
 function quickEditGuardError(entry) {
   if (Number(entry.size ?? 0) > EDITOR_MAX_FILE_BYTES) {
-    return FILE_TOO_LARGE_ERROR;
+    return {
+      code: ERROR_CODES.fileTooLarge,
+      message: "",
+      params: { limitMb: String(EDITOR_MAX_FILE_BYTES / (1024 * 1024)) },
+    };
   }
 
   const name = String(entry.name || "");
   const dotIndex = name.lastIndexOf(".");
   const extension = dotIndex > 0 ? name.slice(dotIndex + 1).toLowerCase() : "";
   if (extension && BINARY_FILE_EXTENSIONS.has(extension)) {
-    return FILE_BINARY_ERROR;
+    return { code: ERROR_CODES.fileBinary, message: "", params: {} };
   }
 
   return null;

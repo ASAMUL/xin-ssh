@@ -9,6 +9,13 @@ import {
   trustHostKey,
 } from "../services/workspaceApi";
 import { i18n } from "../i18n";
+import {
+  CONNECTION_LOST_CODES,
+  ERROR_CODES,
+  hasErrorCode,
+  localizeError,
+  toAppError,
+} from "../utils/appError";
 import { useCredentialStore } from "./credentialStore";
 import { useProfileStore } from "./profileStore";
 import { useSettingsStore } from "./settingsStore";
@@ -20,7 +27,6 @@ const NETWORK_HISTORY_LIMIT = 30;
 const MAX_AUTO_RECONNECT_ATTEMPTS = 1;
 const STABLE_CONNECTION_RESET_MS = 30_000;
 const TERMINAL_CLOSE_REASON_CLIENT = "client";
-const HOST_KEY_CHANGED_PREFIX = "HOST_KEY_CHANGED|";
 // 回放缓冲上限（字符数），与 xterm scrollback 8000 行同一量级；超限裁剪到低水位，避免频繁触发
 const TERMINAL_BUFFER_MAX_CHARS = 2_000_000;
 const TERMINAL_BUFFER_TRIM_TO_CHARS = 1_500_000;
@@ -207,7 +213,7 @@ export const useSessionStore = defineStore("sessions", {
         const latestSession = this.findSession(session.id);
         if (latestSession && latestSession.currentAttemptId === attemptId) {
           latestSession.status = options.fallbackStatus ?? "authRequired";
-          latestSession.error = String(error);
+          latestSession.error = localizeError(error);
           latestSession.lastDisconnectReason = "error";
         }
       }
@@ -263,7 +269,7 @@ export const useSessionStore = defineStore("sessions", {
         const latestSession = this.findSession(session.id);
         if (latestSession && latestSession.currentAttemptId === attemptId) {
           latestSession.status = options.fallbackStatus ?? "authRequired";
-          latestSession.error = String(error);
+          latestSession.error = localizeError(error);
           latestSession.lastDisconnectReason = "error";
         }
         return false;
@@ -360,12 +366,11 @@ export const useSessionStore = defineStore("sessions", {
 
       if (event.kind === "error") {
         const wasConnected = session.status === "connected";
-        const rawError = event.error ?? event.data ?? "Terminal error";
         session.status = "error";
-        session.hostKeyChange = parseHostKeyChange(rawError);
+        session.hostKeyChange = parseHostKeyChange(event.error);
         session.error = session.hostKeyChange
           ? i18n.global.t("terminal.hostKeyChangedTitle")
-          : rawError;
+          : localizeError(event.error) || i18n.global.t("terminal.genericError");
         session.lastDisconnectReason = event.reason ?? "error";
         if (wasConnected) {
           this.maybeAutoReconnect(session, session.lastDisconnectReason);
@@ -385,7 +390,7 @@ export const useSessionStore = defineStore("sessions", {
           algorithm: null,
         });
       } catch (error) {
-        session.error = String(error);
+        session.error = localizeError(error);
         return false;
       }
 
@@ -394,14 +399,13 @@ export const useSessionStore = defineStore("sessions", {
       return this.reconnectSession(session.id);
     },
     handleConnectionOperationError(sessionId, error) {
-      const message = String(error);
-      if (!isConnectionLostError(message)) return false;
+      if (!hasErrorCode(error, CONNECTION_LOST_CODES)) return false;
 
       const session = this.findSession(sessionId);
       if (!session) return false;
 
       session.status = "closed";
-      session.error = message;
+      session.error = localizeError(error);
       session.lastDisconnectReason = "remote";
       return this.maybeAutoReconnect(session, "remote");
     },
@@ -446,9 +450,8 @@ export const useSessionStore = defineStore("sessions", {
       } catch (error) {
         const latestSession = this.findSession(session.id);
         if (latestSession) {
-          const message = String(error);
-          latestSession.systemInfoError = message;
-          this.handleConnectionOperationError(latestSession.id, message);
+          latestSession.systemInfoError = localizeError(error);
+          this.handleConnectionOperationError(latestSession.id, error);
         }
         return null;
       } finally {
@@ -515,16 +518,16 @@ function resetTerminalBuffer(session) {
   session.terminalRevision += 1;
 }
 
+// 主机密钥变更：后端用 hostKey.changed + params.expected/actual 上报，
+// 不再靠 "HOST_KEY_CHANGED|a|b" 拼字符串。
 function parseHostKeyChange(error) {
-  const message = String(error || "");
-  if (!message.startsWith(HOST_KEY_CHANGED_PREFIX)) return null;
+  const { code, params } = toAppError(error);
+  if (code !== ERROR_CODES.hostKeyChanged) return null;
 
-  const [expectedFingerprint, actualFingerprint] = message
-    .slice(HOST_KEY_CHANGED_PREFIX.length)
-    .split("|");
-  if (!expectedFingerprint || !actualFingerprint) return null;
+  const { expected, actual } = params;
+  if (!expected || !actual) return null;
 
-  return { expectedFingerprint, actualFingerprint };
+  return { expectedFingerprint: expected, actualFingerprint: actual };
 }
 
 function syncSessionFromProfile(session, profile) {
@@ -573,23 +576,6 @@ function isStaleTerminalEvent(session, event) {
       session.currentAttemptId &&
       event.attemptId !== session.currentAttemptId,
   );
-}
-
-function isConnectionLostError(error) {
-  const message = String(error || "").toLowerCase();
-  return [
-    "terminal session is not running",
-    "terminal session is not accepting",
-    "request was canceled",
-    "connection closed",
-    "connection reset",
-    "connection aborted",
-    "broken pipe",
-    "lost connection",
-    "disconnected",
-    "disconnect",
-    "eof",
-  ].some((signature) => message.includes(signature));
 }
 
 async function readSavedCredentials(credentialStore, session) {

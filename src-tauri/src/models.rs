@@ -1,8 +1,21 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+use crate::error::AppError;
+
+pub const CURRENT_SCHEMA_VERSION: u16 = 1;
+
+pub fn default_schema_version() -> u16 {
+    CURRENT_SCHEMA_VERSION
+}
+
+// 所有落盘结构都开 `#[serde(default)]`：缺字段 / 旧版本 / 新版本写回的文件
+// 都能反序列化成功，不会因为一个字段就让整个 workspace 加载失败。
+// 记录级结构缺 id 时视为损坏，由 workspace.rs 在加载后过滤掉。
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct AppStateFile {
+    #[serde(default = "default_schema_version")]
     pub schema_version: u16,
     pub workspace_dir: Option<String>,
 }
@@ -15,8 +28,9 @@ pub struct AppStatus {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct WorkspaceSettings {
+    #[serde(default = "default_schema_version")]
     pub schema_version: u16,
     pub locale: String,
     pub terminal_font_family: String,
@@ -47,6 +61,37 @@ pub struct WorkspaceSettings {
     // SSH keepalive 间隔（秒），0 = 禁用；终端与隧道连接共用
     #[serde(default = "default_ssh_keepalive_seconds")]
     pub ssh_keepalive_seconds: u64,
+}
+
+// 新装、settings.json 缺字段、以及文件损坏回退，都落到这一份默认值上
+impl Default for WorkspaceSettings {
+    fn default() -> Self {
+        Self {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            locale: default_locale(),
+            terminal_font_family: default_terminal_font_family(),
+            monitor_refresh_seconds: default_monitor_refresh_seconds(),
+            terminal_theme: default_terminal_theme(),
+            terminal_font_size: default_terminal_font_size(),
+            show_monitor_sidebar: true,
+            show_file_explorer: true,
+            show_file_tree: true,
+            show_hidden_files: true,
+            monitor_pane_size: default_monitor_pane_size(),
+            file_pane_size: default_file_pane_size(),
+            file_tree_size: default_file_tree_size(),
+            home_view_mode: default_home_view_mode(),
+            ssh_keepalive_seconds: default_ssh_keepalive_seconds(),
+        }
+    }
+}
+
+pub fn default_locale() -> String {
+    "zh-CN".to_string()
+}
+
+pub fn default_terminal_font_family() -> String {
+    "Cascadia Code".to_string()
 }
 
 pub fn default_terminal_theme() -> String {
@@ -84,16 +129,17 @@ pub fn default_ssh_keepalive_seconds() -> u64 {
     30
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct ProfilesFile {
+    #[serde(default = "default_schema_version")]
     pub schema_version: u16,
     pub groups: Vec<ConnectionGroup>,
     pub profiles: Vec<ConnectionProfile>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct ConnectionGroup {
     pub id: String,
     pub sync_id: String,
@@ -105,19 +151,21 @@ pub struct ConnectionGroup {
     pub deleted_at: Option<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct ConnectionProfile {
     pub id: String,
     pub sync_id: String,
     pub group_id: String,
     pub name: String,
     pub host: String,
+    #[serde(default = "default_ssh_port")]
     pub port: u16,
     pub username: String,
     pub auth_method: AuthMethod,
     pub private_key_path: Option<String>,
     pub credential_ref: Option<String>,
+    #[serde(default = "default_remote_path")]
     pub default_remote_path: String,
     pub sort_order: i32,
     // 首页 Dashboard 字段：收藏走 save_profile 正常同步；最后连接时间由
@@ -131,24 +179,34 @@ pub struct ConnectionProfile {
     pub deleted_at: Option<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+pub fn default_ssh_port() -> u16 {
+    22
+}
+
+pub fn default_remote_path() -> String {
+    "/".to_string()
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AuthMethod {
+    #[default]
     Password,
     PrivateKey,
 }
 
 // —— 命令片段库（snippets.json，软删除同 profiles）——
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct SnippetsFile {
+    #[serde(default = "default_schema_version")]
     pub schema_version: u16,
     pub snippets: Vec<Snippet>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct Snippet {
     pub id: String,
     pub sync_id: String,
@@ -162,15 +220,16 @@ pub struct Snippet {
 
 // —— SSH 隧道（本地端口转发）——
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct TunnelsFile {
+    #[serde(default = "default_schema_version")]
     pub schema_version: u16,
     pub tunnels: Vec<TunnelConfig>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct TunnelConfig {
     pub id: String,
     pub sync_id: String,
@@ -178,12 +237,17 @@ pub struct TunnelConfig {
     pub name: String,
     pub local_port: u16,
     // 从服务器视角解析的转发目标（默认 127.0.0.1 即服务器自身）
+    #[serde(default = "default_tunnel_remote_host")]
     pub remote_host: String,
     pub remote_port: u16,
     pub sort_order: i32,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
+}
+
+pub fn default_tunnel_remote_host() -> String {
+    "127.0.0.1".to_string()
 }
 
 #[derive(Clone, Deserialize)]
@@ -209,7 +273,7 @@ pub struct TunnelStartRequest {
 pub struct TunnelEventPayload {
     pub tunnel_id: String,
     pub kind: String,
-    pub error: Option<String>,
+    pub error: Option<AppError>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -456,7 +520,7 @@ pub struct DirectoryEventPayload {
     pub path: String,
     pub entries: Vec<RemoteFileEntry>,
     pub total: Option<u64>,
-    pub error: Option<String>,
+    pub error: Option<AppError>,
 }
 
 #[derive(Clone, Serialize)]
@@ -519,7 +583,7 @@ pub struct TransferEventPayload {
     pub bytes_total: u64,
     pub files_done: u64,
     pub files_total: u64,
-    pub error: Option<String>,
+    pub error: Option<AppError>,
 }
 
 #[derive(Clone, Serialize)]
@@ -529,7 +593,7 @@ pub struct TerminalEventPayload {
     pub attempt_id: Option<String>,
     pub kind: String,
     pub data: Option<String>,
-    pub error: Option<String>,
+    pub error: Option<AppError>,
     pub reason: Option<String>,
 }
 

@@ -5,6 +5,7 @@ import CodeMirrorEditor from "./CodeMirrorEditor.vue";
 import { TERMINAL_FONTS } from "../../config/terminalThemes";
 import { useEditorStore } from "../../stores/editorStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { errorCode, localizeError } from "../../utils/appError";
 
 const { t, locale } = useI18n();
 const editorStore = useEditorStore();
@@ -26,20 +27,20 @@ const editorFontStack = computed(() => {
   return (font ?? TERMINAL_FONTS[0]).stack;
 });
 
-const loadErrorText = computed(() => localizeEditorError(editorStore.loadError));
-const saveErrorText = computed(() => localizeEditorError(editorStore.saveError));
-// 大小/编码类错误重试也不会成功，只有连接类错误才给重试按钮
+const loadErrorText = computed(() => localizeError(editorStore.loadError));
+const saveErrorText = computed(() => localizeError(editorStore.saveError));
+// 大小/编码/类型类错误重试也不会成功，只有连接类错误才给重试按钮
+const UNRETRYABLE_LOAD_CODES = [
+  "file.tooLarge",
+  "file.binary",
+  "file.notUtf8",
+  "remote.isDirectory",
+  "remote.notRegularFile",
+];
 const isLoadRetryable = computed(() => {
-  const message = String(editorStore.loadError || "");
-  if (!message) return false;
+  if (!editorStore.loadError) return false;
 
-  return !(
-    message.includes("too large") ||
-    message.includes("binary") ||
-    message.includes("UTF-8") ||
-    message.includes("is a directory") ||
-    message.includes("not a regular file")
-  );
+  return !UNRETRYABLE_LOAD_CODES.includes(errorCode(editorStore.loadError));
 });
 const savedAtFormatter = computed(
   () =>
@@ -78,19 +79,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", handleWindowKeydown);
 });
-
-function localizeEditorError(error) {
-  if (!error) return "";
-
-  const message = String(error);
-  if (message.includes("too large")) return t("editor.fileTooLarge");
-  if (message.includes("binary") || message.includes("UTF-8")) return t("editor.fileNotText");
-  if (message.includes("is a directory")) return t("editor.isDirectory");
-  if (message.includes("not a regular file")) return t("editor.notRegularFile");
-  if (message.includes("not running")) return t("editor.sessionDisconnected");
-
-  return message;
-}
 
 function save(options = {}) {
   if (!editorStore.hasDocument || editorStore.isSaving) return;

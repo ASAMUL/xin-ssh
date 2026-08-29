@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { localizeError } from "../utils/appError";
 
 export const useUiStore = defineStore("ui", {
   state: () => ({
@@ -41,7 +42,7 @@ export const useUiStore = defineStore("ui", {
       this.isTunnelPanelOpen = false;
     },
     setError(error) {
-      this.error = error ? String(error) : null;
+      this.error = error ? localizeError(error) : null;
     },
     clearError() {
       this.error = null;

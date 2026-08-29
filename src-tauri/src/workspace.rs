@@ -1,25 +1,29 @@
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
 };
 
 use tauri::{AppHandle, Manager};
+use tempfile::NamedTempFile;
 
+use crate::error::{codes, io_error, AppError};
 use crate::models::{
     AppStateFile, AppStatus, ConnectionGroup, ConnectionProfile, ProfilesFile, Snippet,
     SnippetsFile, TunnelConfig, TunnelsFile, WorkspaceSettings, WorkspaceSnapshot,
 };
-use crate::util::{error_message, now_stamp, path_to_string};
+use crate::util::{now_stamp, path_to_string};
 
 const APP_STATE_FILE: &str = "app-state.json";
 const PROFILES_FILE: &str = "profiles.json";
 const SETTINGS_FILE: &str = "settings.json";
 const TUNNELS_FILE: &str = "tunnels.json";
 const SNIPPETS_FILE: &str = "snippets.json";
-pub(crate) const CURRENT_SCHEMA_VERSION: u16 = 1;
+
+pub(crate) use crate::models::CURRENT_SCHEMA_VERSION;
 
 #[tauri::command]
-pub async fn get_app_status(app: AppHandle) -> Result<AppStatus, String> {
+pub async fn get_app_status(app: AppHandle) -> Result<AppStatus, AppError> {
     let state = read_app_state(&app)?;
     let workspace_dir = state.and_then(|state_file| state_file.workspace_dir);
     let initialized = workspace_dir
@@ -37,7 +41,7 @@ pub async fn get_app_status(app: AppHandle) -> Result<AppStatus, String> {
 pub async fn init_workspace(
     app: AppHandle,
     workspace_dir: Option<String>,
-) -> Result<WorkspaceSnapshot, String> {
+) -> Result<WorkspaceSnapshot, AppError> {
     let workspace = match workspace_dir {
         Some(dir) if !dir.trim().is_empty() => PathBuf::from(dir),
         _ => default_workspace_dir(&app)?,
@@ -49,7 +53,7 @@ pub async fn init_workspace(
 }
 
 #[tauri::command]
-pub async fn load_workspace(app: AppHandle) -> Result<Option<WorkspaceSnapshot>, String> {
+pub async fn load_workspace(app: AppHandle) -> Result<Option<WorkspaceSnapshot>, AppError> {
     let Some(state) = read_app_state(&app)? else {
         return Ok(None);
     };
@@ -70,13 +74,8 @@ pub async fn load_workspace(app: AppHandle) -> Result<Option<WorkspaceSnapshot>,
 pub async fn change_workspace_dir(
     app: AppHandle,
     workspace_dir: String,
-) -> Result<WorkspaceSnapshot, String> {
+) -> Result<WorkspaceSnapshot, AppError> {
     let workspace = PathBuf::from(workspace_dir);
-
-    if workspace_files_exist(&workspace) {
-        write_app_state(&app, &workspace)?;
-        return load_workspace_from_dir(&workspace);
-    }
 
     ensure_workspace(&workspace)?;
     write_app_state(&app, &workspace)?;
@@ -87,7 +86,7 @@ pub async fn change_workspace_dir(
 pub async fn save_profile(
     app: AppHandle,
     profile: ConnectionProfile,
-) -> Result<WorkspaceSnapshot, String> {
+) -> Result<WorkspaceSnapshot, AppError> {
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut next_profile = profile;
@@ -112,7 +111,7 @@ pub async fn save_profile(
 pub async fn mark_profile_connected(
     app: AppHandle,
     profile_id: String,
-) -> Result<WorkspaceSnapshot, String> {
+) -> Result<WorkspaceSnapshot, AppError> {
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
 
@@ -129,7 +128,10 @@ pub async fn mark_profile_connected(
 }
 
 #[tauri::command]
-pub async fn delete_profile(app: AppHandle, profile_id: String) -> Result<WorkspaceSnapshot, String> {
+pub async fn delete_profile(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<WorkspaceSnapshot, AppError> {
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let deleted_at = now_stamp();
@@ -147,7 +149,10 @@ pub async fn delete_profile(app: AppHandle, profile_id: String) -> Result<Worksp
 }
 
 #[tauri::command]
-pub async fn save_group(app: AppHandle, group: ConnectionGroup) -> Result<WorkspaceSnapshot, String> {
+pub async fn save_group(
+    app: AppHandle,
+    group: ConnectionGroup,
+) -> Result<WorkspaceSnapshot, AppError> {
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut next_group = group;
@@ -168,7 +173,7 @@ pub async fn save_group(app: AppHandle, group: ConnectionGroup) -> Result<Worksp
 }
 
 #[tauri::command]
-pub async fn delete_group(app: AppHandle, group_id: String) -> Result<WorkspaceSnapshot, String> {
+pub async fn delete_group(app: AppHandle, group_id: String) -> Result<WorkspaceSnapshot, AppError> {
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let deleted_at = now_stamp();
@@ -198,7 +203,7 @@ pub async fn delete_group(app: AppHandle, group_id: String) -> Result<WorkspaceS
 pub async fn save_settings(
     app: AppHandle,
     settings: WorkspaceSettings,
-) -> Result<WorkspaceSnapshot, String> {
+) -> Result<WorkspaceSnapshot, AppError> {
     let workspace = active_workspace_dir(&app)?;
     write_settings_file(&workspace, &settings)?;
     load_workspace_from_dir(&workspace)
@@ -207,16 +212,18 @@ pub async fn save_settings(
 // —— SSH 隧道配置（tunnels.json，按需创建；软删除同 profiles）——
 
 #[tauri::command]
-pub async fn list_tunnel_configs(app: AppHandle) -> Result<Vec<TunnelConfig>, String> {
+pub async fn list_tunnel_configs(app: AppHandle) -> Result<Vec<TunnelConfig>, AppError> {
     let workspace = active_workspace_dir(&app)?;
-    Ok(read_tunnels_file(&workspace)?.tunnels)
+    Ok(valid_records(read_tunnels_file(&workspace)?.tunnels, |tunnel| {
+        &tunnel.id
+    }))
 }
 
 #[tauri::command]
 pub async fn save_tunnel_config(
     app: AppHandle,
     tunnel: TunnelConfig,
-) -> Result<Vec<TunnelConfig>, String> {
+) -> Result<Vec<TunnelConfig>, AppError> {
     let workspace = active_workspace_dir(&app)?;
     let mut tunnels_file = read_tunnels_file(&workspace)?;
     let mut next_tunnel = tunnel;
@@ -233,14 +240,14 @@ pub async fn save_tunnel_config(
     }
 
     write_tunnels_file(&workspace, &tunnels_file)?;
-    Ok(tunnels_file.tunnels)
+    Ok(valid_records(tunnels_file.tunnels, |tunnel| &tunnel.id))
 }
 
 #[tauri::command]
 pub async fn delete_tunnel_config(
     app: AppHandle,
     tunnel_id: String,
-) -> Result<Vec<TunnelConfig>, String> {
+) -> Result<Vec<TunnelConfig>, AppError> {
     let workspace = active_workspace_dir(&app)?;
     let mut tunnels_file = read_tunnels_file(&workspace)?;
 
@@ -253,35 +260,29 @@ pub async fn delete_tunnel_config(
     }
 
     write_tunnels_file(&workspace, &tunnels_file)?;
-    Ok(tunnels_file.tunnels)
+    Ok(valid_records(tunnels_file.tunnels, |tunnel| &tunnel.id))
 }
 
-fn read_tunnels_file(workspace: &Path) -> Result<TunnelsFile, String> {
-    let path = workspace.join(TUNNELS_FILE);
-    if !path.exists() {
-        return Ok(TunnelsFile {
-            schema_version: CURRENT_SCHEMA_VERSION,
-            tunnels: Vec::new(),
-        });
-    }
-
-    read_json_file(&path)
+fn read_tunnels_file(workspace: &Path) -> Result<TunnelsFile, AppError> {
+    read_json_file_or_recover(&workspace.join(TUNNELS_FILE), TunnelsFile::default)
 }
 
-fn write_tunnels_file(workspace: &Path, tunnels_file: &TunnelsFile) -> Result<(), String> {
+fn write_tunnels_file(workspace: &Path, tunnels_file: &TunnelsFile) -> Result<(), AppError> {
     write_json_file(&workspace.join(TUNNELS_FILE), tunnels_file)
 }
 
 // —— 命令片段库（snippets.json，按需创建；软删除同 profiles）——
 
 #[tauri::command]
-pub async fn list_snippets(app: AppHandle) -> Result<Vec<Snippet>, String> {
+pub async fn list_snippets(app: AppHandle) -> Result<Vec<Snippet>, AppError> {
     let workspace = active_workspace_dir(&app)?;
-    Ok(read_snippets_file(&workspace)?.snippets)
+    Ok(valid_records(read_snippets_file(&workspace)?.snippets, |snippet| {
+        &snippet.id
+    }))
 }
 
 #[tauri::command]
-pub async fn save_snippet(app: AppHandle, snippet: Snippet) -> Result<Vec<Snippet>, String> {
+pub async fn save_snippet(app: AppHandle, snippet: Snippet) -> Result<Vec<Snippet>, AppError> {
     let workspace = active_workspace_dir(&app)?;
     let mut snippets_file = read_snippets_file(&workspace)?;
     let mut next_snippet = snippet;
@@ -298,11 +299,11 @@ pub async fn save_snippet(app: AppHandle, snippet: Snippet) -> Result<Vec<Snippe
     }
 
     write_snippets_file(&workspace, &snippets_file)?;
-    Ok(snippets_file.snippets)
+    Ok(valid_records(snippets_file.snippets, |snippet| &snippet.id))
 }
 
 #[tauri::command]
-pub async fn delete_snippet(app: AppHandle, snippet_id: String) -> Result<Vec<Snippet>, String> {
+pub async fn delete_snippet(app: AppHandle, snippet_id: String) -> Result<Vec<Snippet>, AppError> {
     let workspace = active_workspace_dir(&app)?;
     let mut snippets_file = read_snippets_file(&workspace)?;
 
@@ -315,26 +316,18 @@ pub async fn delete_snippet(app: AppHandle, snippet_id: String) -> Result<Vec<Sn
     }
 
     write_snippets_file(&workspace, &snippets_file)?;
-    Ok(snippets_file.snippets)
+    Ok(valid_records(snippets_file.snippets, |snippet| &snippet.id))
 }
 
-fn read_snippets_file(workspace: &Path) -> Result<SnippetsFile, String> {
-    let path = workspace.join(SNIPPETS_FILE);
-    if !path.exists() {
-        return Ok(SnippetsFile {
-            schema_version: CURRENT_SCHEMA_VERSION,
-            snippets: Vec::new(),
-        });
-    }
-
-    read_json_file(&path)
+fn read_snippets_file(workspace: &Path) -> Result<SnippetsFile, AppError> {
+    read_json_file_or_recover(&workspace.join(SNIPPETS_FILE), SnippetsFile::default)
 }
 
-fn write_snippets_file(workspace: &Path, snippets_file: &SnippetsFile) -> Result<(), String> {
+fn write_snippets_file(workspace: &Path, snippets_file: &SnippetsFile) -> Result<(), AppError> {
     write_json_file(&workspace.join(SNIPPETS_FILE), snippets_file)
 }
 
-fn load_workspace_from_dir(workspace: &Path) -> Result<WorkspaceSnapshot, String> {
+fn load_workspace_from_dir(workspace: &Path) -> Result<WorkspaceSnapshot, AppError> {
     ensure_workspace(workspace)?;
     let settings = read_settings_file(workspace)?;
     let profiles_file = read_profiles_file(workspace)?;
@@ -342,23 +335,24 @@ fn load_workspace_from_dir(workspace: &Path) -> Result<WorkspaceSnapshot, String
     Ok(WorkspaceSnapshot {
         workspace_dir: path_to_string(workspace),
         settings,
-        groups: profiles_file.groups,
-        profiles: profiles_file.profiles,
+        groups: valid_records(profiles_file.groups, |group| &group.id),
+        profiles: valid_records(profiles_file.profiles, |profile| &profile.id),
     })
 }
 
-fn ensure_workspace(workspace: &Path) -> Result<(), String> {
-    fs::create_dir_all(workspace).map_err(error_message)?;
+// 单条记录缺 id 说明这条已经损坏（或被外部工具写坏），丢掉它而不是让整个文件失效
+fn valid_records<T>(records: Vec<T>, id_of: impl Fn(&T) -> &String) -> Vec<T> {
+    records
+        .into_iter()
+        .filter(|record| !id_of(record).trim().is_empty())
+        .collect()
+}
 
-    let profiles_path = workspace.join(PROFILES_FILE);
-    if !profiles_path.exists() {
-        write_profiles_file(workspace, &default_profiles_file())?;
-    }
-
-    let settings_path = workspace.join(SETTINGS_FILE);
-    if !settings_path.exists() {
-        write_settings_file(workspace, &default_settings())?;
-    }
+fn ensure_workspace(workspace: &Path) -> Result<(), AppError> {
+    fs::create_dir_all(workspace).map_err(io_error)?;
+    // 读一次即可：文件缺失或损坏都会在这里被重建为合法默认值
+    read_profiles_file(workspace)?;
+    read_settings_file(workspace)?;
 
     Ok(())
 }
@@ -367,23 +361,24 @@ fn workspace_files_exist(workspace: &Path) -> bool {
     workspace.join(PROFILES_FILE).exists() && workspace.join(SETTINGS_FILE).exists()
 }
 
-fn read_app_state(app: &AppHandle) -> Result<Option<AppStateFile>, String> {
+fn read_app_state(app: &AppHandle) -> Result<Option<AppStateFile>, AppError> {
     let path = app_state_path(app)?;
     if !path.exists() {
         return Ok(None);
     }
 
-    read_json_file(&path).map(Some)
+    match read_json_file::<AppStateFile>(&path) {
+        Ok(state) => Ok(Some(state)),
+        Err(error) => {
+            backup_corrupt_file(&path, &error);
+            Ok(None)
+        }
+    }
 }
 
-fn write_app_state(app: &AppHandle, workspace: &Path) -> Result<(), String> {
-    let path = app_state_path(app)?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(error_message)?;
-    }
-
+fn write_app_state(app: &AppHandle, workspace: &Path) -> Result<(), AppError> {
     write_json_file(
-        &path,
+        &app_state_path(app)?,
         &AppStateFile {
             schema_version: CURRENT_SCHEMA_VERSION,
             workspace_dir: Some(path_to_string(workspace)),
@@ -391,62 +386,127 @@ fn write_app_state(app: &AppHandle, workspace: &Path) -> Result<(), String> {
     )
 }
 
-pub(crate) fn active_workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let state = read_app_state(app)?.ok_or_else(|| "Workspace is not initialized".to_string())?;
-    let workspace_dir = state
-        .workspace_dir
-        .ok_or_else(|| "Workspace directory is not configured".to_string())?;
+pub(crate) fn active_workspace_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
+    let state = read_app_state(app)?.ok_or_else(|| {
+        AppError::new(
+            codes::WORKSPACE_NOT_INITIALIZED,
+            "Workspace is not initialized",
+        )
+    })?;
+    let workspace_dir = state.workspace_dir.ok_or_else(|| {
+        AppError::new(
+            codes::WORKSPACE_DIR_MISSING,
+            "Workspace directory is not configured",
+        )
+    })?;
 
     Ok(PathBuf::from(workspace_dir))
 }
 
-fn app_state_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app.path().app_data_dir().map_err(error_message)?;
+fn app_state_path(app: &AppHandle) -> Result<PathBuf, AppError> {
+    let dir = app.path().app_data_dir().map_err(io_error)?;
     Ok(dir.join(APP_STATE_FILE))
 }
 
-fn default_workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app.path().app_data_dir().map_err(error_message)?;
+fn default_workspace_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
+    let dir = app.path().app_data_dir().map_err(io_error)?;
     Ok(dir.join("workspace"))
 }
 
-fn read_profiles_file(workspace: &Path) -> Result<ProfilesFile, String> {
-    read_json_file(&workspace.join(PROFILES_FILE))
+fn read_profiles_file(workspace: &Path) -> Result<ProfilesFile, AppError> {
+    read_json_file_or_recover(&workspace.join(PROFILES_FILE), default_profiles_file)
 }
 
-fn write_profiles_file(workspace: &Path, profiles_file: &ProfilesFile) -> Result<(), String> {
+fn write_profiles_file(workspace: &Path, profiles_file: &ProfilesFile) -> Result<(), AppError> {
     write_json_file(&workspace.join(PROFILES_FILE), profiles_file)
 }
 
-fn read_settings_file(workspace: &Path) -> Result<WorkspaceSettings, String> {
-    read_json_file(&workspace.join(SETTINGS_FILE))
+fn read_settings_file(workspace: &Path) -> Result<WorkspaceSettings, AppError> {
+    read_json_file_or_recover(&workspace.join(SETTINGS_FILE), WorkspaceSettings::default)
 }
 
-fn write_settings_file(workspace: &Path, settings: &WorkspaceSettings) -> Result<(), String> {
+fn write_settings_file(workspace: &Path, settings: &WorkspaceSettings) -> Result<(), AppError> {
     write_json_file(&workspace.join(SETTINGS_FILE), settings)
 }
 
-pub(crate) fn read_json_file<T>(path: &Path) -> Result<T, String>
+pub(crate) fn read_json_file<T>(path: &Path) -> Result<T, AppError>
 where
     T: serde::de::DeserializeOwned,
 {
-    let content = fs::read_to_string(path).map_err(error_message)?;
-    serde_json::from_str(&content).map_err(error_message)
+    let content = fs::read_to_string(path).map_err(io_error)?;
+    serde_json::from_str(&content).map_err(|error| {
+        AppError::new(codes::WORKSPACE_FILE_CORRUPT, error.to_string())
+            .with("path", path_to_string(path))
+            .with("detail", error)
+    })
 }
 
-pub(crate) fn write_json_file<T>(path: &Path, value: &T) -> Result<(), String>
+/// 读配置文件；文件缺失或内容损坏时写回一份合法默认值，保证磁盘上永远是可加载状态。
+/// 损坏的原文件不会被删除，而是改名保留成 `<name>.corrupt-<时间戳>` 供人工找回。
+pub(crate) fn read_json_file_or_recover<T>(
+    path: &Path,
+    make_default: impl FnOnce() -> T,
+) -> Result<T, AppError>
+where
+    T: serde::de::DeserializeOwned + serde::Serialize,
+{
+    if path.exists() {
+        match read_json_file::<T>(path) {
+            Ok(value) => return Ok(value),
+            Err(error) => backup_corrupt_file(path, &error),
+        }
+    }
+
+    let value = make_default();
+    write_json_file(path, &value)?;
+    Ok(value)
+}
+
+fn backup_corrupt_file(path: &Path, error: &AppError) {
+    // 保留原扩展名再追加后缀，损坏文件在目录里一眼可见：profiles.json.corrupt-<ms>
+    let backup = match path.file_name() {
+        Some(name) => path.with_file_name(format!(
+            "{}.corrupt-{}",
+            name.to_string_lossy(),
+            now_stamp()
+        )),
+        None => return,
+    };
+    let renamed = fs::rename(path, &backup).is_ok();
+
+    eprintln!(
+        "[xin-terminal] {} is unreadable ({error}); {}",
+        path_to_string(path),
+        if renamed {
+            format!("kept a copy at {}", path_to_string(&backup))
+        } else {
+            "could not keep a backup copy".to_string()
+        }
+    );
+}
+
+/// 原子落盘：同目录写临时文件 → fsync → 原子 rename 覆盖目标。
+///
+/// 旧实现是「写 tmp → 删目标 → rename」，删和 rename 之间崩溃会直接丢掉整份配置。
+/// `NamedTempFile::persist` 在 Windows 走 MoveFileEx(REPLACE_EXISTING)、
+/// 在 Unix 走 rename(2)，两边都是原子替换，不存在目标文件消失的窗口。
+pub(crate) fn write_json_file<T>(path: &Path, value: &T) -> Result<(), AppError>
 where
     T: serde::Serialize,
 {
-    let content = serde_json::to_string_pretty(value).map_err(error_message)?;
-    let temp_path = path.with_extension("tmp");
-    fs::write(&temp_path, content).map_err(error_message)?;
+    let content = serde_json::to_vec_pretty(value).map_err(io_error)?;
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent).map_err(io_error)?;
 
-    if path.exists() {
-        fs::remove_file(path).map_err(error_message)?;
-    }
+    let mut temp_file = NamedTempFile::new_in(parent).map_err(io_error)?;
+    temp_file.write_all(&content).map_err(io_error)?;
+    // rename 之前先把数据刷到盘上，否则断电后可能 rename 成功但文件是空的
+    temp_file.as_file().sync_all().map_err(io_error)?;
+    temp_file
+        .persist(path)
+        .map_err(|error| io_error(error.error))?;
 
-    fs::rename(temp_path, path).map_err(error_message)
+    Ok(())
 }
 
 fn default_profiles_file() -> ProfilesFile {
@@ -464,26 +524,6 @@ fn default_profiles_file() -> ProfilesFile {
             deleted_at: None,
         }],
         profiles: Vec::new(),
-    }
-}
-
-fn default_settings() -> WorkspaceSettings {
-    WorkspaceSettings {
-        schema_version: CURRENT_SCHEMA_VERSION,
-        locale: "zh-CN".to_string(),
-        terminal_font_family: "Cascadia Code".to_string(),
-        monitor_refresh_seconds: 5,
-        terminal_theme: crate::models::default_terminal_theme(),
-        terminal_font_size: crate::models::default_terminal_font_size(),
-        show_monitor_sidebar: true,
-        show_file_explorer: true,
-        show_file_tree: true,
-        show_hidden_files: true,
-        monitor_pane_size: crate::models::default_monitor_pane_size(),
-        file_pane_size: crate::models::default_file_pane_size(),
-        file_tree_size: crate::models::default_file_tree_size(),
-        home_view_mode: crate::models::default_home_view_mode(),
-        ssh_keepalive_seconds: crate::models::default_ssh_keepalive_seconds(),
     }
 }
 

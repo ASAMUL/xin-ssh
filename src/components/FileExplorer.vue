@@ -11,6 +11,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
 import { useSessionStore } from "../stores/sessionStore";
+import { TRANSFER_CONFLICT_CODES, hasErrorCode, localizeError } from "../utils/appError";
 import { joinRemotePath, parentRemotePath, quoteRemotePathForShell } from "../utils/remotePath";
 
 const props = defineProps({
@@ -339,7 +340,7 @@ const conflictTask = computed(() => transferStore.findTask(conflictDialog.taskId
 const conflictDialogTitle = computed(() =>
   t(conflictTask.value?.direction === "download" ? "files.downloadConflictTitle" : "files.uploadConflictTitle"),
 );
-const conflictDialogDescription = computed(() => conflictTask.value?.error || "");
+const conflictDialogDescription = computed(() => localizeError(conflictTask.value?.error));
 const emptyState = computed(() => {
   if (!isConnected.value) {
     return {
@@ -785,7 +786,7 @@ async function submitNameDialog() {
     nameDialog.value = "";
     nameDialog.error = "";
   } catch (error) {
-    nameDialog.error = String(error);
+    nameDialog.error = localizeError(error);
   } finally {
     nameDialog.isSubmitting = false;
   }
@@ -828,7 +829,7 @@ async function submitDeleteDialog() {
     deleteDialog.recursive = false;
     deleteDialog.error = "";
   } catch (error) {
-    deleteDialog.error = String(error);
+    deleteDialog.error = localizeError(error);
   } finally {
     deleteDialog.isSubmitting = false;
   }
@@ -868,7 +869,7 @@ async function resolveTransferConflict(policy) {
     conflictDialog.taskId = null;
     conflictDialog.error = "";
   } catch (error) {
-    conflictDialog.error = String(error);
+    conflictDialog.error = localizeError(error);
   } finally {
     conflictDialog.isSubmitting = false;
   }
@@ -1048,12 +1049,7 @@ function isEditableElement(target) {
 }
 
 function isTransferConflictError(error) {
-  const message = String(error || "");
-  return (
-    message.includes("Remote target already exists") ||
-    message.includes("Local target already exists") ||
-    message.includes("Duplicate download target")
-  );
+  return hasErrorCode(error, TRANSFER_CONFLICT_CODES);
 }
 
 function contextEntryFromEvent(event) {

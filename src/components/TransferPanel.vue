@@ -9,6 +9,7 @@ import {
 } from "../services/localOpener";
 import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
+import { localizeError } from "../utils/appError";
 
 const { t } = useI18n();
 const transferStore = useTransferStore();
@@ -190,7 +191,7 @@ function formatBytes(value) {
 }
 
 function taskMeta(task) {
-  if (task.status === "failed") return task.error || t("transfers.failed");
+  if (task.status === "failed") return localizeError(task.error) || t("transfers.failed");
 
   if (isFinished(task)) {
     const statusText =

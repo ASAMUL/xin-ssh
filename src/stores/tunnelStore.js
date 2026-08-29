@@ -10,6 +10,8 @@ import {
 import { useCredentialStore } from "./credentialStore";
 import { useProfileStore } from "./profileStore";
 import { useSettingsStore } from "./settingsStore";
+import { i18n } from "../i18n";
+import { localizeError } from "../utils/appError";
 
 const TUNNEL_EVENT_NAME = "tunnel-event";
 
@@ -51,7 +53,7 @@ export const useTunnelStore = defineStore("tunnels", {
       } else if (event.kind === "error") {
         this.runtime[event.tunnelId] = {
           status: "error",
-          error: event.error ?? "Tunnel error",
+          error: localizeError(event.error) || i18n.global.t("tunnel.genericError"),
         };
       }
     },
@@ -78,7 +80,10 @@ export const useTunnelStore = defineStore("tunnels", {
         (item) => item.id === tunnel.profileId,
       );
       if (!profile) {
-        this.runtime[tunnel.id] = { status: "error", error: "Connection profile missing" };
+        this.runtime[tunnel.id] = {
+          status: "error",
+          error: i18n.global.t("tunnel.profileMissing"),
+        };
         return false;
       }
 
@@ -103,7 +108,7 @@ export const useTunnelStore = defineStore("tunnels", {
         });
         return true;
       } catch (error) {
-        this.runtime[tunnel.id] = { status: "error", error: String(error) };
+        this.runtime[tunnel.id] = { status: "error", error: localizeError(error) };
         return false;
       }
     },
@@ -114,7 +119,7 @@ export const useTunnelStore = defineStore("tunnels", {
       try {
         await stopTunnel(tunnelId);
       } catch (error) {
-        this.runtime[tunnelId] = { status: "error", error: String(error) };
+        this.runtime[tunnelId] = { status: "error", error: localizeError(error) };
       }
     },
   },

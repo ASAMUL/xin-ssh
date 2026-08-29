@@ -8,29 +8,32 @@ use tauri::State;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::{timeout, Duration};
 
+use crate::error::{codes, connection_error, required, timeout as timeout_error, AppError};
 use crate::models::{
     RemoteCpuInfo, RemoteDiskInfo, RemoteMemoryInfo, RemoteNetworkInfo, RemoteProcessInfo,
     RemoteSystemInfoRequest, RemoteSystemSnapshot,
 };
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
-use crate::util::{connection_error, now_millis, shell_quote};
+use crate::util::{now_millis, shell_quote};
 
 const SYSTEM_INFO_SECTION_MARKER: &str = "__XIN_SYSTEM_INFO__";
+const SYSTEM_INFO_REQUEST_TIMEOUT_SECONDS: u64 = 8;
+const SYSTEM_INFO_COMMAND_TIMEOUT_SECONDS: u64 = 7;
 
 #[tauri::command]
 pub async fn get_remote_system_info(
     registry: State<'_, TerminalRegistry>,
     request: RemoteSystemInfoRequest,
-) -> Result<RemoteSystemSnapshot, String> {
+) -> Result<RemoteSystemSnapshot, AppError> {
     validate_system_info_request(&request)?;
 
     timeout(
-        Duration::from_secs(8),
+        Duration::from_secs(SYSTEM_INFO_REQUEST_TIMEOUT_SECONDS),
         registry.get_system_info(&request.session_id),
     )
     .await
-    .map_err(|_| "System info request timed out after 8 seconds".to_string())?
+    .map_err(|_| timeout_error("systemInfo", SYSTEM_INFO_REQUEST_TIMEOUT_SECONDS))?
 }
 
 struct RemoteCommandOutput {
@@ -42,21 +45,31 @@ struct RemoteCommandOutput {
 pub(crate) async fn collect_system_info_on_session(
     session_id: &str,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
-) -> Result<RemoteSystemSnapshot, String> {
+) -> Result<RemoteSystemSnapshot, AppError> {
     let output = timeout(
-        Duration::from_secs(7),
+        Duration::from_secs(SYSTEM_INFO_COMMAND_TIMEOUT_SECONDS),
         execute_remote_command(session, remote_system_info_command()),
     )
     .await
-    .map_err(|_| "Remote system info command timed out after 7 seconds".to_string())??;
+    .map_err(|_| {
+        timeout_error(
+            "remoteSystemInfoCommand",
+            SYSTEM_INFO_COMMAND_TIMEOUT_SECONDS,
+        )
+    })??;
 
     if output.exit_status.unwrap_or(0) != 0 && output.stdout.trim().is_empty() {
         let detail = output.stderr.trim();
-        if detail.is_empty() {
-            return Err("Remote system info command failed".to_string());
-        }
 
-        return Err(detail.to_string());
+        return Err(AppError::new(
+            codes::REMOTE_COMMAND_FAILED,
+            if detail.is_empty() {
+                "Remote system info command failed".to_string()
+            } else {
+                detail.to_string()
+            },
+        )
+        .with("detail", detail));
     }
 
     Ok(parse_system_snapshot(session_id, &output.stdout))
@@ -65,7 +78,7 @@ pub(crate) async fn collect_system_info_on_session(
 async fn execute_remote_command(
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     command: String,
-) -> Result<RemoteCommandOutput, String> {
+) -> Result<RemoteCommandOutput, AppError> {
     let mut channel = {
         let session_handle = session.lock().await;
         session_handle
@@ -541,9 +554,9 @@ fn round_two_decimals(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
 }
 
-fn validate_system_info_request(request: &RemoteSystemInfoRequest) -> Result<(), String> {
+fn validate_system_info_request(request: &RemoteSystemInfoRequest) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     Ok(())

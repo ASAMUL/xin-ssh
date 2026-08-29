@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::error::{codes, AppError};
 use crate::util::path_to_string;
 
 pub(crate) fn normalize_remote_path(path: &str) -> String {
@@ -61,37 +62,57 @@ pub(crate) fn remote_parent_path(path: &str) -> String {
     }
 }
 
-pub(crate) fn local_file_name(path: &Path) -> Result<String, String> {
+pub(crate) fn local_file_name(path: &Path) -> Result<String, AppError> {
     let name = path
         .file_name()
-        .ok_or_else(|| format!("Could not determine file name: {}", path_to_string(path)))?
+        .ok_or_else(|| file_name_unknown(path))?
         .to_string_lossy()
         .trim()
         .to_string();
 
     if name.is_empty() {
-        Err(format!("Could not determine file name: {}", path_to_string(path)))
+        Err(file_name_unknown(path))
     } else {
         Ok(name)
     }
 }
 
+fn file_name_unknown(path: &Path) -> AppError {
+    AppError::new(
+        codes::LOCAL_FILE_NAME_UNKNOWN,
+        format!("Could not determine file name: {}", path_to_string(path)),
+    )
+    .with("path", path_to_string(path))
+}
+
+/// 把远端文件名安全化成本地文件名。
+///
+/// 只处理**当前平台真正非法**的字符：Windows 的保留字符集 + 结尾的点/空格，
+/// 其它平台只挡路径分隔符和控制字符。
+/// 注意结尾的点才是 Windows 的限制，前导点是合法的 —— 之前用 `trim_matches('.')`
+/// 会把 `.bashrc` 存成 `bashrc`、`.ssh` 存成 `ssh`，dotfile 全被改名。
 pub(crate) fn safe_local_name(name: &str) -> String {
     let sanitized: String = name
         .chars()
         .map(|character| match character {
-            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            '/' | '\\' => '_',
+            '<' | '>' | ':' | '"' | '|' | '?' | '*' if cfg!(windows) => '_',
             value if value.is_control() => '_',
             value => value,
         })
-        .collect::<String>()
-        .trim()
-        .trim_matches('.')
-        .to_string();
+        .collect();
+
+    let sanitized = sanitized.trim();
+    let sanitized = if cfg!(windows) {
+        // Windows 会静默丢掉结尾的点和空格，先剪掉避免落地成不同的名字
+        sanitized.trim_end_matches(['.', ' '])
+    } else {
+        sanitized
+    };
 
     if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
         "remote-item".to_string()
     } else {
-        sanitized
+        sanitized.to_string()
     }
 }

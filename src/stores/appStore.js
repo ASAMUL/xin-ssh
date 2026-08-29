@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { getAppStatus, initWorkspace, loadWorkspace } from "../services/workspaceApi";
+import { localizeError } from "../utils/appError";
 import { useProfileStore } from "./profileStore";
 import { useSettingsStore } from "./settingsStore";
 
@@ -27,7 +28,7 @@ export const useAppStore = defineStore("app", {
           this.consumeSnapshot(snapshot);
         }
       } catch (error) {
-        this.error = String(error);
+        this.error = localizeError(error);
       } finally {
         this.isLoading = false;
       }

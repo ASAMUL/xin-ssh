@@ -11,6 +11,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::{timeout, Duration};
 
+use crate::error::{
+    codes, connection_error, io_error, remote_target_exists, required, root_forbidden,
+    timeout as timeout_error, AppError,
+};
 use crate::models::{
     DirectoryEventPayload, RemoteCreateDirectoryRequest, RemoteCreateFileRequest,
     RemoteDeleteRequest, RemoteDirectoryStreamRequest, RemoteFileContent, RemoteFileEntry,
@@ -21,7 +25,7 @@ use crate::sftp::path::normalize_remote_path;
 use crate::sftp::{open_raw_sftp_session, remote_file_entry, remote_file_entry_from_attrs};
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
-use crate::util::{connection_error, error_message, summarize_transfer_errors};
+use crate::util::summarize_entry_errors;
 
 const DIRECTORY_EVENT: &str = "directory-event";
 // 内置编辑器单文件上限：内容走内存与 IPC 字符串往返，超限引导用户下载后编辑
@@ -29,18 +33,20 @@ const MAX_EDITABLE_FILE_BYTES: u64 = 5 * 1024 * 1024;
 // 与 transfer.rs 的传输缓冲一致，分块写避免单次 SFTP 包过大
 const EDITOR_WRITE_CHUNK_BYTES: usize = 256 * 1024;
 
-fn editable_file_too_large_error() -> String {
-    format!(
-        "File is too large to edit (limit {} MB)",
-        MAX_EDITABLE_FILE_BYTES / (1024 * 1024)
+fn editable_file_too_large_error() -> AppError {
+    let limit_mb = MAX_EDITABLE_FILE_BYTES / (1024 * 1024);
+    AppError::new(
+        codes::FILE_TOO_LARGE,
+        format!("File is too large to edit (limit {limit_mb} MB)"),
     )
+    .with("limitMb", limit_mb)
 }
 
 #[tauri::command]
 pub fn stream_remote_directory(
     registry: State<'_, TerminalRegistry>,
     request: RemoteDirectoryStreamRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_directory_stream_request(&request)?;
 
     registry.stream_directory(
@@ -54,7 +60,7 @@ pub fn stream_remote_directory(
 pub async fn create_remote_directory(
     registry: State<'_, TerminalRegistry>,
     request: RemoteCreateDirectoryRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_create_directory_request(&request)?;
 
     timeout(
@@ -62,14 +68,14 @@ pub async fn create_remote_directory(
         registry.create_directory(&request.session_id, normalize_remote_path(&request.path)),
     )
     .await
-    .map_err(|_| "Create directory request timed out after 12 seconds".to_string())?
+    .map_err(|_| timeout_error("createDirectory", 12))?
 }
 
 #[tauri::command]
 pub async fn create_remote_file(
     registry: State<'_, TerminalRegistry>,
     request: RemoteCreateFileRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_create_file_request(&request)?;
 
     timeout(
@@ -77,14 +83,14 @@ pub async fn create_remote_file(
         registry.create_file(&request.session_id, normalize_remote_path(&request.path)),
     )
     .await
-    .map_err(|_| "Create file request timed out after 12 seconds".to_string())?
+    .map_err(|_| timeout_error("createFile", 12))?
 }
 
 #[tauri::command]
 pub async fn list_remote_directory(
     registry: State<'_, TerminalRegistry>,
     request: RemoteListDirectoryRequest,
-) -> Result<Vec<RemoteFileEntry>, String> {
+) -> Result<Vec<RemoteFileEntry>, AppError> {
     validate_list_directory_request(&request)?;
 
     timeout(
@@ -92,14 +98,14 @@ pub async fn list_remote_directory(
         registry.list_directory(&request.session_id, normalize_remote_path(&request.path)),
     )
     .await
-    .map_err(|_| "List directory request timed out after 20 seconds".to_string())?
+    .map_err(|_| timeout_error("listDirectory", 20))?
 }
 
 #[tauri::command]
 pub async fn read_remote_file_text(
     registry: State<'_, TerminalRegistry>,
     request: RemoteReadFileRequest,
-) -> Result<RemoteFileContent, String> {
+) -> Result<RemoteFileContent, AppError> {
     validate_read_file_request(&request)?;
 
     timeout(
@@ -107,14 +113,14 @@ pub async fn read_remote_file_text(
         registry.read_file_text(&request.session_id, normalize_remote_path(&request.path)),
     )
     .await
-    .map_err(|_| "Read file request timed out after 60 seconds".to_string())?
+    .map_err(|_| timeout_error("readFile", 60))?
 }
 
 #[tauri::command]
 pub async fn write_remote_file_text(
     registry: State<'_, TerminalRegistry>,
     request: RemoteWriteFileRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_write_file_request(&request)?;
 
     timeout(
@@ -126,14 +132,14 @@ pub async fn write_remote_file_text(
         ),
     )
     .await
-    .map_err(|_| "Write file request timed out after 60 seconds".to_string())?
+    .map_err(|_| timeout_error("writeFile", 60))?
 }
 
 #[tauri::command]
 pub async fn rename_remote_path(
     registry: State<'_, TerminalRegistry>,
     request: RemoteRenameRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_rename_request(&request)?;
 
     timeout(
@@ -145,14 +151,14 @@ pub async fn rename_remote_path(
         ),
     )
     .await
-    .map_err(|_| "Rename request timed out after 12 seconds".to_string())?
+    .map_err(|_| timeout_error("rename", 12))?
 }
 
 #[tauri::command]
 pub async fn delete_remote_entries(
     registry: State<'_, TerminalRegistry>,
     request: RemoteDeleteRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_delete_request(&request)?;
 
     timeout(
@@ -160,7 +166,7 @@ pub async fn delete_remote_entries(
         registry.delete_paths(&request.session_id, request.entries, request.recursive),
     )
     .await
-    .map_err(|_| "Delete request timed out after 30 seconds".to_string())?
+    .map_err(|_| timeout_error("delete", 30))?
 }
 
 pub(crate) async fn stream_directory_on_session(
@@ -195,12 +201,12 @@ async fn run_directory_stream(
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     path: &str,
     cancellation: &Arc<AtomicBool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     ensure_stream_active(cancellation)?;
 
     let raw = timeout(Duration::from_secs(12), open_raw_sftp_session(session))
         .await
-        .map_err(|_| "Opening SFTP channel timed out after 12 seconds".to_string())??;
+        .map_err(|_| timeout_error("openSftpChannel", 12))??;
 
     let result =
         stream_directory_entries(app, session_id, request_id, &raw, path, cancellation).await;
@@ -215,7 +221,7 @@ async fn stream_directory_entries(
     raw: &RawSftpSession,
     requested_path: &str,
     cancellation: &Arc<AtomicBool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let listing_path = match raw.realpath(requested_path.to_string()).await {
         Ok(name) => name
             .files
@@ -284,11 +290,11 @@ async fn stream_directory_entries(
 pub(crate) async fn create_directory_on_session(
     sftp: &SftpSession,
     path: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let path = normalize_remote_path(path);
 
     if path == "/" {
-        return Err("Cannot create the root directory".to_string());
+        return Err(root_forbidden("createDirectory"));
     }
 
     if sftp
@@ -296,17 +302,20 @@ pub(crate) async fn create_directory_on_session(
         .await
         .map_err(connection_error)?
     {
-        return Err(format!("Remote target already exists: {path}"));
+        return Err(remote_target_exists(&path));
     }
 
     sftp.create_dir(path).await.map_err(connection_error)
 }
 
-pub(crate) async fn create_file_on_session(sftp: &SftpSession, path: &str) -> Result<(), String> {
+pub(crate) async fn create_file_on_session(
+    sftp: &SftpSession,
+    path: &str,
+) -> Result<(), AppError> {
     let path = normalize_remote_path(path);
 
     if path == "/" {
-        return Err("Cannot create a file at the root path".to_string());
+        return Err(root_forbidden("createFile"));
     }
 
     if sftp
@@ -314,7 +323,7 @@ pub(crate) async fn create_file_on_session(sftp: &SftpSession, path: &str) -> Re
         .await
         .map_err(connection_error)?
     {
-        return Err(format!("Remote target already exists: {path}"));
+        return Err(remote_target_exists(&path));
     }
 
     let mut file = sftp
@@ -325,27 +334,35 @@ pub(crate) async fn create_file_on_session(sftp: &SftpSession, path: &str) -> Re
         .await
         .map_err(connection_error)?;
 
-    file.shutdown().await.map_err(error_message)
+    file.shutdown().await.map_err(io_error)
 }
 
 pub(crate) async fn read_file_text_on_session(
     sftp: &SftpSession,
     path: &str,
-) -> Result<RemoteFileContent, String> {
+) -> Result<RemoteFileContent, AppError> {
     let path = normalize_remote_path(path);
-    // metadata 跟随软链接：双击指向目录的软链接时报 "is a directory"，前端据此回退为目录导航
+    // metadata 跟随软链接：双击指向目录的软链接时报 isDirectory，前端据此回退为目录导航
     let metadata = sftp
         .metadata(path.clone())
         .await
         .map_err(connection_error)?;
 
     if metadata.file_type().is_dir() {
-        return Err(format!("Remote path is a directory: {path}"));
+        return Err(AppError::new(
+            codes::REMOTE_IS_DIRECTORY,
+            format!("Remote path is a directory: {path}"),
+        )
+        .with("path", &path));
     }
 
     // FIFO/设备文件读取可能永久阻塞并占死共享 SFTP 通道，仅允许常规文件
     if !metadata.file_type().is_file() {
-        return Err(format!("Remote path is not a regular file: {path}"));
+        return Err(AppError::new(
+            codes::REMOTE_NOT_REGULAR_FILE,
+            format!("Remote path is not a regular file: {path}"),
+        )
+        .with("path", &path));
     }
 
     let size = metadata.size.unwrap_or(0);
@@ -357,7 +374,7 @@ pub(crate) async fn read_file_text_on_session(
     let mut bytes = Vec::with_capacity(size as usize);
     let read_result = file.read_to_end(&mut bytes).await;
     let _ = file.shutdown().await;
-    read_result.map_err(error_message)?;
+    read_result.map_err(io_error)?;
 
     // /proc 等虚拟文件 metadata 报 0，按实际读到的字节数兜底校验
     if bytes.len() as u64 > MAX_EDITABLE_FILE_BYTES {
@@ -365,11 +382,14 @@ pub(crate) async fn read_file_text_on_session(
     }
 
     if bytes.contains(&0) {
-        return Err("File appears to be binary and cannot be edited as text".to_string());
+        return Err(AppError::new(
+            codes::FILE_BINARY,
+            "File appears to be binary and cannot be edited as text",
+        ));
     }
 
-    let content =
-        String::from_utf8(bytes).map_err(|_| "File is not valid UTF-8 text".to_string())?;
+    let content = String::from_utf8(bytes)
+        .map_err(|_| AppError::new(codes::FILE_NOT_UTF8, "File is not valid UTF-8 text"))?;
 
     Ok(RemoteFileContent {
         path,
@@ -382,11 +402,11 @@ pub(crate) async fn write_file_text_on_session(
     sftp: &SftpSession,
     path: &str,
     content: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let path = normalize_remote_path(path);
 
     if path == "/" {
-        return Err("Cannot write to the root path".to_string());
+        return Err(root_forbidden("writeFile"));
     }
 
     // 就地截断重写以保留权限与属主；不走“临时文件+改名”，SFTP rename 无法覆盖且会重置属主
@@ -399,18 +419,18 @@ pub(crate) async fn write_file_text_on_session(
         .map_err(connection_error)?;
 
     for chunk in content.as_bytes().chunks(EDITOR_WRITE_CHUNK_BYTES) {
-        file.write_all(chunk).await.map_err(error_message)?;
+        file.write_all(chunk).await.map_err(io_error)?;
     }
 
-    file.flush().await.map_err(error_message)?;
-    file.shutdown().await.map_err(error_message)
+    file.flush().await.map_err(io_error)?;
+    file.shutdown().await.map_err(io_error)
 }
 
 // 目录树用的一次性列目录：走会话内缓存 SFTP 子通道，与流式面板列表互不影响
 pub(crate) async fn list_directory_on_session(
     sftp: &SftpSession,
     path: &str,
-) -> Result<Vec<RemoteFileEntry>, String> {
+) -> Result<Vec<RemoteFileEntry>, AppError> {
     let listing_path = normalize_remote_path(path);
     let read_dir = sftp
         .read_dir(listing_path.clone())
@@ -435,12 +455,12 @@ pub(crate) async fn rename_path_on_session(
     sftp: &SftpSession,
     from_path: &str,
     to_path: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let from_path = normalize_remote_path(from_path);
     let to_path = normalize_remote_path(to_path);
 
     if from_path == "/" {
-        return Err("Cannot rename the root directory".to_string());
+        return Err(root_forbidden("rename"));
     }
 
     if from_path == to_path {
@@ -452,7 +472,7 @@ pub(crate) async fn rename_path_on_session(
         .await
         .map_err(connection_error)?
     {
-        return Err(format!("Remote target already exists: {to_path}"));
+        return Err(remote_target_exists(&to_path));
     }
 
     sftp.rename(from_path, to_path)
@@ -464,20 +484,20 @@ pub(crate) async fn delete_paths_on_session(
     sftp: &SftpSession,
     entries: &[RemoteTransferEntry],
     recursive: bool,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut errors = Vec::new();
 
     for entry in entries {
         let path = normalize_remote_path(&entry.path);
         if let Err(error) = delete_remote_path(sftp, &path, recursive).await {
-            errors.push(format!("{}: {error}", entry.name));
+            errors.push((entry.name.clone(), error));
         }
     }
 
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(summarize_transfer_errors(errors))
+        Err(summarize_entry_errors(errors))
     }
 }
 
@@ -485,9 +505,9 @@ async fn delete_remote_path(
     sftp: &SftpSession,
     path: &str,
     recursive: bool,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if path == "/" {
-        return Err("Cannot delete the root directory".to_string());
+        return Err(root_forbidden("delete"));
     }
 
     let metadata = sftp
@@ -513,7 +533,7 @@ async fn delete_remote_path(
 async fn delete_remote_directory_recursive(
     sftp: &SftpSession,
     root_path: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut pending_dirs = vec![normalize_remote_path(root_path)];
     let mut dirs_to_remove = Vec::new();
 
@@ -568,9 +588,12 @@ fn is_stream_canceled(cancellation: &Arc<AtomicBool>) -> bool {
     cancellation.load(Ordering::SeqCst)
 }
 
-fn ensure_stream_active(cancellation: &Arc<AtomicBool>) -> Result<(), String> {
+fn ensure_stream_active(cancellation: &Arc<AtomicBool>) -> Result<(), AppError> {
     if is_stream_canceled(cancellation) {
-        Err("Directory listing canceled".to_string())
+        Err(AppError::new(
+            codes::DIRECTORY_LISTING_CANCELED,
+            "Directory listing canceled",
+        ))
     } else {
         Ok(())
     }
@@ -578,13 +601,13 @@ fn ensure_stream_active(cancellation: &Arc<AtomicBool>) -> Result<(), String> {
 
 fn validate_directory_stream_request(
     request: &RemoteDirectoryStreamRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.request_id.trim().is_empty() {
-        return Err("Request id is required".to_string());
+        return Err(required("requestId"));
     }
 
     Ok(())
@@ -592,73 +615,73 @@ fn validate_directory_stream_request(
 
 fn validate_create_directory_request(
     request: &RemoteCreateDirectoryRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.path.trim().is_empty() {
-        return Err("Remote folder path is required".to_string());
+        return Err(required("remotePath"));
     }
 
     if normalize_remote_path(&request.path) == "/" {
-        return Err("Cannot create the root directory".to_string());
+        return Err(root_forbidden("createDirectory"));
     }
 
     Ok(())
 }
 
-fn validate_create_file_request(request: &RemoteCreateFileRequest) -> Result<(), String> {
+fn validate_create_file_request(request: &RemoteCreateFileRequest) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.path.trim().is_empty() {
-        return Err("Remote file path is required".to_string());
+        return Err(required("remotePath"));
     }
 
     if normalize_remote_path(&request.path) == "/" {
-        return Err("Cannot create a file at the root path".to_string());
+        return Err(root_forbidden("createFile"));
     }
 
     Ok(())
 }
 
-fn validate_list_directory_request(request: &RemoteListDirectoryRequest) -> Result<(), String> {
+fn validate_list_directory_request(request: &RemoteListDirectoryRequest) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.path.trim().is_empty() {
-        return Err("Remote directory path is required".to_string());
+        return Err(required("remotePath"));
     }
 
     Ok(())
 }
 
-fn validate_read_file_request(request: &RemoteReadFileRequest) -> Result<(), String> {
+fn validate_read_file_request(request: &RemoteReadFileRequest) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.path.trim().is_empty() {
-        return Err("Remote file path is required".to_string());
+        return Err(required("remotePath"));
     }
 
     Ok(())
 }
 
-fn validate_write_file_request(request: &RemoteWriteFileRequest) -> Result<(), String> {
+fn validate_write_file_request(request: &RemoteWriteFileRequest) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.path.trim().is_empty() {
-        return Err("Remote file path is required".to_string());
+        return Err(required("remotePath"));
     }
 
     if normalize_remote_path(&request.path) == "/" {
-        return Err("Cannot write to the root path".to_string());
+        return Err(root_forbidden("writeFile"));
     }
 
     if request.content.len() as u64 > MAX_EDITABLE_FILE_BYTES {
@@ -668,29 +691,32 @@ fn validate_write_file_request(request: &RemoteWriteFileRequest) -> Result<(), S
     Ok(())
 }
 
-fn validate_rename_request(request: &RemoteRenameRequest) -> Result<(), String> {
+fn validate_rename_request(request: &RemoteRenameRequest) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.from_path.trim().is_empty() || request.to_path.trim().is_empty() {
-        return Err("Remote path is required".to_string());
+        return Err(required("remotePath"));
     }
 
     if normalize_remote_path(&request.from_path) == "/" {
-        return Err("Cannot rename the root directory".to_string());
+        return Err(root_forbidden("rename"));
     }
 
     Ok(())
 }
 
-fn validate_delete_request(request: &RemoteDeleteRequest) -> Result<(), String> {
+fn validate_delete_request(request: &RemoteDeleteRequest) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.entries.is_empty() {
-        return Err("Choose at least one remote item".to_string());
+        return Err(AppError::new(
+            codes::VALIDATION_SELECT_REMOTE_ITEM,
+            "Choose at least one remote item",
+        ));
     }
 
     if request
@@ -698,7 +724,7 @@ fn validate_delete_request(request: &RemoteDeleteRequest) -> Result<(), String> 
         .iter()
         .any(|entry| normalize_remote_path(&entry.path) == "/")
     {
-        return Err("Cannot delete the root directory".to_string());
+        return Err(root_forbidden("delete"));
     }
 
     Ok(())

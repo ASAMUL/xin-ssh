@@ -8,11 +8,11 @@ use std::{
 
 use tokio::sync::{mpsc, oneshot};
 
+use crate::error::{lock_poisoned, not_accepting, request_canceled, session_not_running, AppError};
 use crate::models::{
     RemoteDownloadRequest, RemoteFileContent, RemoteFileEntry, RemoteSystemSnapshot,
     RemoteTransferEntry, RemoteUploadRequest,
 };
-use crate::util::error_message;
 
 #[derive(Clone, Default)]
 pub struct TerminalRegistry {
@@ -23,45 +23,48 @@ pub struct TerminalRegistry {
 
 pub(crate) enum TerminalControl {
     Input(Vec<u8>),
-    Resize { columns: u32, rows: u32 },
+    Resize {
+        columns: u32,
+        rows: u32,
+    },
     StreamDirectory {
         request_id: String,
         path: String,
         cancellation: Arc<AtomicBool>,
     },
     GetSystemInfo {
-        responder: oneshot::Sender<Result<RemoteSystemSnapshot, String>>,
+        responder: oneshot::Sender<Result<RemoteSystemSnapshot, AppError>>,
     },
     CreateDirectory {
         path: String,
-        responder: oneshot::Sender<Result<(), String>>,
+        responder: oneshot::Sender<Result<(), AppError>>,
     },
     CreateFile {
         path: String,
-        responder: oneshot::Sender<Result<(), String>>,
+        responder: oneshot::Sender<Result<(), AppError>>,
     },
     ListDirectory {
         path: String,
-        responder: oneshot::Sender<Result<Vec<RemoteFileEntry>, String>>,
+        responder: oneshot::Sender<Result<Vec<RemoteFileEntry>, AppError>>,
     },
     ReadFileText {
         path: String,
-        responder: oneshot::Sender<Result<RemoteFileContent, String>>,
+        responder: oneshot::Sender<Result<RemoteFileContent, AppError>>,
     },
     WriteFileText {
         path: String,
         content: String,
-        responder: oneshot::Sender<Result<(), String>>,
+        responder: oneshot::Sender<Result<(), AppError>>,
     },
     RenamePath {
         from_path: String,
         to_path: String,
-        responder: oneshot::Sender<Result<(), String>>,
+        responder: oneshot::Sender<Result<(), AppError>>,
     },
     DeletePaths {
         entries: Vec<RemoteTransferEntry>,
         recursive: bool,
-        responder: oneshot::Sender<Result<(), String>>,
+        responder: oneshot::Sender<Result<(), AppError>>,
     },
     StartUpload {
         request: RemoteUploadRequest,
@@ -79,10 +82,10 @@ impl TerminalRegistry {
         &self,
         session_id: String,
         sender: mpsc::UnboundedSender<TerminalControl>,
-    ) -> Result<(), String> {
+    ) -> Result<(), AppError> {
         self.cancel_directory_stream(&session_id);
 
-        let mut sessions = self.sessions.lock().map_err(error_message)?;
+        let mut sessions = self.sessions.lock().map_err(|_| lock_poisoned())?;
         if let Some(existing) = sessions.insert(session_id, sender) {
             let _ = existing.send(TerminalControl::Close);
         }
@@ -90,24 +93,20 @@ impl TerminalRegistry {
         Ok(())
     }
 
-    pub(crate) fn send(&self, session_id: &str, control: TerminalControl) -> Result<(), String> {
-        let sessions = self.sessions.lock().map_err(error_message)?;
-        let sender = sessions
-            .get(session_id)
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    pub(crate) fn send(&self, session_id: &str, control: TerminalControl) -> Result<(), AppError> {
+        let sessions = self.sessions.lock().map_err(|_| lock_poisoned())?;
+        let sender = sessions.get(session_id).ok_or_else(session_not_running)?;
 
-        sender
-            .send(control)
-            .map_err(|_| "Terminal session is not accepting input".to_string())
+        sender.send(control).map_err(|_| not_accepting("input"))
     }
 
-    pub(crate) fn close(&self, session_id: &str) -> Result<(), String> {
+    pub(crate) fn close(&self, session_id: &str) -> Result<(), AppError> {
         self.cancel_directory_stream(session_id);
 
         let sender = self
             .sessions
             .lock()
-            .map_err(error_message)?
+            .map_err(|_| lock_poisoned())?
             .remove(session_id);
 
         if let Some(sender) = sender {
@@ -117,25 +116,32 @@ impl TerminalRegistry {
         Ok(())
     }
 
+    /// 取一份会话控制通道的克隆；会话不存在时报 `session.notRunning`。
+    fn sender_for(
+        &self,
+        session_id: &str,
+    ) -> Result<mpsc::UnboundedSender<TerminalControl>, AppError> {
+        self.sessions
+            .lock()
+            .map_err(|_| lock_poisoned())?
+            .get(session_id)
+            .cloned()
+            .ok_or_else(session_not_running)
+    }
+
     pub(crate) fn stream_directory(
         &self,
         session_id: &str,
         request_id: String,
         path: String,
-    ) -> Result<(), String> {
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    ) -> Result<(), AppError> {
+        let sender = self.sender_for(session_id)?;
         let cancellation = Arc::new(AtomicBool::new(false));
 
         if let Some((_, previous)) = self
             .directory_streams
             .lock()
-            .map_err(error_message)?
+            .map_err(|_| lock_poisoned())?
             .insert(
                 session_id.to_string(),
                 (request_id.clone(), Arc::clone(&cancellation)),
@@ -150,7 +156,7 @@ impl TerminalRegistry {
                 path,
                 cancellation,
             })
-            .map_err(|_| "Terminal session is not accepting SFTP requests".to_string());
+            .map_err(|_| not_accepting("sftp"));
 
         if send_result.is_err() {
             self.finish_directory_stream(session_id, &request_id);
@@ -180,107 +186,84 @@ impl TerminalRegistry {
         }
     }
 
-    pub(crate) async fn get_system_info(&self, session_id: &str) -> Result<RemoteSystemSnapshot, String> {
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    pub(crate) async fn get_system_info(
+        &self,
+        session_id: &str,
+    ) -> Result<RemoteSystemSnapshot, AppError> {
+        let sender = self.sender_for(session_id)?;
         let (responder, receiver) = oneshot::channel();
 
         sender
             .send(TerminalControl::GetSystemInfo { responder })
-            .map_err(|_| "Terminal session is not accepting system info requests".to_string())?;
+            .map_err(|_| not_accepting("systemInfo"))?;
 
         receiver
             .await
-            .map_err(|_| "System info request was canceled".to_string())?
+            .map_err(|_| request_canceled("systemInfo"))?
     }
 
-    pub(crate) async fn create_directory(&self, session_id: &str, path: String) -> Result<(), String> {
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    pub(crate) async fn create_directory(
+        &self,
+        session_id: &str,
+        path: String,
+    ) -> Result<(), AppError> {
+        let sender = self.sender_for(session_id)?;
         let (responder, receiver) = oneshot::channel();
 
         sender
             .send(TerminalControl::CreateDirectory { path, responder })
-            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+            .map_err(|_| not_accepting("file"))?;
 
         receiver
             .await
-            .map_err(|_| "Create directory request was canceled".to_string())?
+            .map_err(|_| request_canceled("createDirectory"))?
     }
 
-    pub(crate) async fn create_file(&self, session_id: &str, path: String) -> Result<(), String> {
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    pub(crate) async fn create_file(
+        &self,
+        session_id: &str,
+        path: String,
+    ) -> Result<(), AppError> {
+        let sender = self.sender_for(session_id)?;
         let (responder, receiver) = oneshot::channel();
 
         sender
             .send(TerminalControl::CreateFile { path, responder })
-            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+            .map_err(|_| not_accepting("file"))?;
 
-        receiver
-            .await
-            .map_err(|_| "Create file request was canceled".to_string())?
+        receiver.await.map_err(|_| request_canceled("createFile"))?
     }
 
     pub(crate) async fn list_directory(
         &self,
         session_id: &str,
         path: String,
-    ) -> Result<Vec<RemoteFileEntry>, String> {
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    ) -> Result<Vec<RemoteFileEntry>, AppError> {
+        let sender = self.sender_for(session_id)?;
         let (responder, receiver) = oneshot::channel();
 
         sender
             .send(TerminalControl::ListDirectory { path, responder })
-            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+            .map_err(|_| not_accepting("file"))?;
 
         receiver
             .await
-            .map_err(|_| "List directory request was canceled".to_string())?
+            .map_err(|_| request_canceled("listDirectory"))?
     }
 
     pub(crate) async fn read_file_text(
         &self,
         session_id: &str,
         path: String,
-    ) -> Result<RemoteFileContent, String> {
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    ) -> Result<RemoteFileContent, AppError> {
+        let sender = self.sender_for(session_id)?;
         let (responder, receiver) = oneshot::channel();
 
         sender
             .send(TerminalControl::ReadFileText { path, responder })
-            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+            .map_err(|_| not_accepting("file"))?;
 
-        receiver
-            .await
-            .map_err(|_| "Read file request was canceled".to_string())?
+        receiver.await.map_err(|_| request_canceled("readFile"))?
     }
 
     pub(crate) async fn write_file_text(
@@ -288,14 +271,8 @@ impl TerminalRegistry {
         session_id: &str,
         path: String,
         content: String,
-    ) -> Result<(), String> {
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    ) -> Result<(), AppError> {
+        let sender = self.sender_for(session_id)?;
         let (responder, receiver) = oneshot::channel();
 
         sender
@@ -304,11 +281,9 @@ impl TerminalRegistry {
                 content,
                 responder,
             })
-            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+            .map_err(|_| not_accepting("file"))?;
 
-        receiver
-            .await
-            .map_err(|_| "Write file request was canceled".to_string())?
+        receiver.await.map_err(|_| request_canceled("writeFile"))?
     }
 
     pub(crate) async fn rename_path(
@@ -316,14 +291,8 @@ impl TerminalRegistry {
         session_id: &str,
         from_path: String,
         to_path: String,
-    ) -> Result<(), String> {
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    ) -> Result<(), AppError> {
+        let sender = self.sender_for(session_id)?;
         let (responder, receiver) = oneshot::channel();
 
         sender
@@ -332,11 +301,9 @@ impl TerminalRegistry {
                 to_path,
                 responder,
             })
-            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+            .map_err(|_| not_accepting("file"))?;
 
-        receiver
-            .await
-            .map_err(|_| "Rename request was canceled".to_string())?
+        receiver.await.map_err(|_| request_canceled("rename"))?
     }
 
     pub(crate) async fn delete_paths(
@@ -344,14 +311,8 @@ impl TerminalRegistry {
         session_id: &str,
         entries: Vec<RemoteTransferEntry>,
         recursive: bool,
-    ) -> Result<(), String> {
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+    ) -> Result<(), AppError> {
+        let sender = self.sender_for(session_id)?;
         let (responder, receiver) = oneshot::channel();
 
         sender
@@ -360,27 +321,19 @@ impl TerminalRegistry {
                 recursive,
                 responder,
             })
-            .map_err(|_| "Terminal session is not accepting file requests".to_string())?;
+            .map_err(|_| not_accepting("file"))?;
 
-        receiver
-            .await
-            .map_err(|_| "Delete request was canceled".to_string())?
+        receiver.await.map_err(|_| request_canceled("delete"))?
     }
 
-    pub(crate) fn start_upload(&self, request: RemoteUploadRequest) -> Result<(), String> {
+    pub(crate) fn start_upload(&self, request: RemoteUploadRequest) -> Result<(), AppError> {
         let cancellation = Arc::new(AtomicBool::new(false));
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(&request.session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let sender = self.sender_for(&request.session_id)?;
         let task_id = request.task_id.clone();
 
         self.transfer_cancellations
             .lock()
-            .map_err(error_message)?
+            .map_err(|_| lock_poisoned())?
             .insert(task_id.clone(), Arc::clone(&cancellation));
 
         let send_result = sender
@@ -388,32 +341,26 @@ impl TerminalRegistry {
                 request,
                 cancellation,
             })
-            .map_err(|_| "Terminal session is not accepting upload requests".to_string());
+            .map_err(|_| not_accepting("upload"));
 
         if send_result.is_err() {
             self.transfer_cancellations
                 .lock()
-                .map_err(error_message)?
+                .map_err(|_| lock_poisoned())?
                 .remove(&task_id);
         }
 
         send_result
     }
 
-    pub(crate) fn start_download(&self, request: RemoteDownloadRequest) -> Result<(), String> {
+    pub(crate) fn start_download(&self, request: RemoteDownloadRequest) -> Result<(), AppError> {
         let cancellation = Arc::new(AtomicBool::new(false));
-        let sender = self
-            .sessions
-            .lock()
-            .map_err(error_message)?
-            .get(&request.session_id)
-            .cloned()
-            .ok_or_else(|| "Terminal session is not running".to_string())?;
+        let sender = self.sender_for(&request.session_id)?;
         let task_id = request.task_id.clone();
 
         self.transfer_cancellations
             .lock()
-            .map_err(error_message)?
+            .map_err(|_| lock_poisoned())?
             .insert(task_id.clone(), Arc::clone(&cancellation));
 
         let send_result = sender
@@ -421,20 +368,23 @@ impl TerminalRegistry {
                 request,
                 cancellation,
             })
-            .map_err(|_| "Terminal session is not accepting download requests".to_string());
+            .map_err(|_| not_accepting("download"));
 
         if send_result.is_err() {
             self.transfer_cancellations
                 .lock()
-                .map_err(error_message)?
+                .map_err(|_| lock_poisoned())?
                 .remove(&task_id);
         }
 
         send_result
     }
 
-    pub(crate) fn cancel_transfer(&self, task_id: &str) -> Result<(), String> {
-        let cancellations = self.transfer_cancellations.lock().map_err(error_message)?;
+    pub(crate) fn cancel_transfer(&self, task_id: &str) -> Result<(), AppError> {
+        let cancellations = self
+            .transfer_cancellations
+            .lock()
+            .map_err(|_| lock_poisoned())?;
         if let Some(cancellation) = cancellations.get(task_id) {
             cancellation.store(true, Ordering::SeqCst);
         }

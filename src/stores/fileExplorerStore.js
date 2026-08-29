@@ -15,6 +15,7 @@ import {
 } from "../utils/remotePath";
 import { useEditorStore } from "./editorStore";
 import { useSessionStore } from "./sessionStore";
+import { localizeError } from "../utils/appError";
 
 const DIRECTORY_EVENT_NAME = "directory-event";
 const EMPTY_FILE_STATE = createFileState(DEFAULT_REMOTE_PATH);
@@ -119,7 +120,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
 
         state.isLoading = false;
         state.entries = [];
-        state.error = String(error);
+        state.error = localizeError(error);
         state.hasLoaded = false;
         useSessionStore().handleConnectionOperationError(session.id, error);
       }
@@ -162,10 +163,10 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
 
       if (event.kind === "failed") {
         state.entries = [];
-        state.error = event.error || "Directory listing failed";
+        state.error = localizeError(event.error);
         state.isLoading = false;
         state.hasLoaded = false;
-        useSessionStore().handleConnectionOperationError(event.sessionId, state.error);
+        useSessionStore().handleConnectionOperationError(event.sessionId, event.error);
       }
     },
     refreshDirectory(session) {
@@ -283,7 +284,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
 
         node.loaded = true;
       } catch (error) {
-        node.error = String(error);
+        node.error = localizeError(error);
         useSessionStore().handleConnectionOperationError(session.id, error);
       } finally {
         node.loading = false;

@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { listen } from "@tauri-apps/api/event";
 import { i18n } from "../i18n";
+import { toAppError } from "../utils/appError";
 import {
   cancelTransfer,
   startDownloadTransfer,
@@ -100,7 +101,7 @@ export const useTransferStore = defineStore("transfers", {
           conflictPolicy: options.conflictPolicy ?? null,
         });
       } catch (error) {
-        this.failTask(taskId, String(error));
+        this.failTask(taskId, error);
         throw error;
       }
 
@@ -147,7 +148,7 @@ export const useTransferStore = defineStore("transfers", {
           conflictPolicy: options.conflictPolicy ?? null,
         });
       } catch (error) {
-        this.failTask(taskId, String(error));
+        this.failTask(taskId, error);
         throw error;
       }
 
@@ -189,7 +190,7 @@ export const useTransferStore = defineStore("transfers", {
       try {
         await cancelTransfer(taskId);
       } catch (error) {
-        this.failTask(taskId, String(error));
+        this.failTask(taskId, error);
       }
     },
     markTaskCanceled(taskId) {
@@ -301,7 +302,8 @@ export const useTransferStore = defineStore("transfers", {
       this.upsertTask({
         ...task,
         status: "failed",
-        error,
+        // 保留结构化错误对象：面板据 code 判断是否是冲突、是否可续传
+        error: toAppError(error),
         updatedAt: Date.now(),
       });
     },

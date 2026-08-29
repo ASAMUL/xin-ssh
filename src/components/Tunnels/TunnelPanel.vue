@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useProfileStore } from "../../stores/profileStore";
 import { useTunnelStore } from "../../stores/tunnelStore";
+import { localizeError } from "../../utils/appError";
 
 const emit = defineEmits(["close"]);
 const { t } = useI18n();
@@ -119,7 +120,7 @@ async function submitForm() {
     });
     mode.value = "list";
   } catch (error) {
-    formError.value = String(error);
+    formError.value = localizeError(error);
   } finally {
     isSaving.value = false;
   }

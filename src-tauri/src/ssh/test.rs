@@ -7,24 +7,29 @@ use russh::{
 };
 use tokio::time::{timeout, Duration, Instant};
 
+use crate::error::{codes, connection_error, port_invalid, required, timeout as timeout_error, AppError};
 use crate::models::{AuthMethod, ConnectionTestRequest, ConnectionTestResult};
 use crate::ssh::client::{ConnectionTestClient, ServerKeySnapshot};
-use crate::util::connection_error;
+
+const CONNECTION_TEST_TIMEOUT_SECONDS: u64 = 12;
 
 #[tauri::command]
 pub async fn test_connection(
     request: ConnectionTestRequest,
-) -> Result<ConnectionTestResult, String> {
+) -> Result<ConnectionTestResult, AppError> {
     validate_connection_test_request(&request)?;
 
-    timeout(Duration::from_secs(12), run_connection_test(request))
-        .await
-        .map_err(|_| "Connection test timed out after 12 seconds".to_string())?
+    timeout(
+        Duration::from_secs(CONNECTION_TEST_TIMEOUT_SECONDS),
+        run_connection_test(request),
+    )
+    .await
+    .map_err(|_| timeout_error("testConnection", CONNECTION_TEST_TIMEOUT_SECONDS))?
 }
 
 async fn run_connection_test(
     request: ConnectionTestRequest,
-) -> Result<ConnectionTestResult, String> {
+) -> Result<ConnectionTestResult, AppError> {
     let auth_method = request.auth_method.clone();
     let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
     let handler = ConnectionTestClient {
@@ -49,7 +54,7 @@ async fn run_connection_test(
             let password = request
                 .password
                 .filter(|value| !value.is_empty())
-                .ok_or_else(|| "Password is required".to_string())?;
+                .ok_or_else(|| required("password"))?;
 
             session
                 .authenticate_password(username, password)
@@ -60,7 +65,7 @@ async fn run_connection_test(
             let private_key_path = request
                 .private_key_path
                 .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| "Private key path is required".to_string())?;
+                .ok_or_else(|| required("privateKeyPath"))?;
             let passphrase = request
                 .passphrase
                 .as_deref()
@@ -84,7 +89,7 @@ async fn run_connection_test(
     };
 
     if !auth_result.success() {
-        return Err("Authentication failed".to_string());
+        return Err(AppError::new(codes::AUTH_FAILED, "Authentication failed"));
     }
 
     let _ = session
@@ -105,17 +110,17 @@ async fn run_connection_test(
     })
 }
 
-fn validate_connection_test_request(request: &ConnectionTestRequest) -> Result<(), String> {
+fn validate_connection_test_request(request: &ConnectionTestRequest) -> Result<(), AppError> {
     if request.host.trim().is_empty() {
-        return Err("Host is required".to_string());
+        return Err(required("host"));
     }
 
     if request.username.trim().is_empty() {
-        return Err("Username is required".to_string());
+        return Err(required("username"));
     }
 
     if request.port == 0 {
-        return Err("Port must be greater than 0".to_string());
+        return Err(port_invalid());
     }
 
     Ok(())

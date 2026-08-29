@@ -11,14 +11,14 @@ use russh_sftp::{
 };
 use tokio::sync::Mutex as AsyncMutex;
 
+use crate::error::{connection_error, AppError};
 use crate::models::RemoteFileEntry;
 use crate::sftp::path::normalize_remote_path;
 use crate::ssh::client::ConnectionTestClient;
-use crate::util::connection_error;
 
 pub(crate) async fn open_sftp_session(
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
-) -> Result<SftpSession, String> {
+) -> Result<SftpSession, AppError> {
     let channel = {
         let session_handle = session.lock().await;
         session_handle
@@ -39,7 +39,7 @@ pub(crate) async fn open_sftp_session(
 
 pub(crate) async fn open_raw_sftp_session(
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
-) -> Result<RawSftpSession, String> {
+) -> Result<RawSftpSession, AppError> {
     let channel = {
         let session_handle = session.lock().await;
         session_handle
@@ -62,7 +62,7 @@ pub(crate) async fn open_raw_sftp_session(
 pub(crate) async fn ensure_sftp_session<'a>(
     cached: &'a mut Option<SftpSession>,
     session: &Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
-) -> Result<&'a SftpSession, String> {
+) -> Result<&'a SftpSession, AppError> {
     Ok(match cached {
         Some(sftp) => sftp,
         None => {

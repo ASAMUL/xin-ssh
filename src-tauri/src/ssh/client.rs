@@ -7,9 +7,9 @@ use russh::{
 };
 use tauri::AppHandle;
 
+use crate::error::{codes, connection_error, required, AppError};
 use crate::models::AuthMethod;
 use crate::ssh::known_hosts;
-use crate::util::connection_error;
 
 pub(crate) const SSH_KEEPALIVE_INTERVAL_SECS: u64 = 30;
 
@@ -57,7 +57,7 @@ pub(crate) async fn connect_with_tofu(
     host: &str,
     port: u16,
     keepalive_seconds: Option<u64>,
-) -> Result<client::Handle<ConnectionTestClient>, String> {
+) -> Result<client::Handle<ConnectionTestClient>, AppError> {
     let expected_fingerprint = known_hosts::lookup_fingerprint(app, host, port)?;
     let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
     let handler = ConnectionTestClient {
@@ -115,12 +115,12 @@ pub(crate) async fn authenticate_session(
     password: Option<String>,
     private_key_path: Option<String>,
     passphrase: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let auth_result = match auth_method {
         AuthMethod::Password => {
             let password = password
                 .filter(|value| !value.is_empty())
-                .ok_or_else(|| "Password is required".to_string())?;
+                .ok_or_else(|| required("password"))?;
 
             session
                 .authenticate_password(username, password)
@@ -130,7 +130,7 @@ pub(crate) async fn authenticate_session(
         AuthMethod::PrivateKey => {
             let private_key_path = private_key_path
                 .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| "Private key path is required".to_string())?;
+                .ok_or_else(|| required("privateKeyPath"))?;
             let passphrase = passphrase.as_deref().filter(|value| !value.is_empty());
             let key_pair =
                 load_secret_key(&private_key_path, passphrase).map_err(connection_error)?;
@@ -153,6 +153,6 @@ pub(crate) async fn authenticate_session(
     if auth_result.success() {
         Ok(())
     } else {
-        Err("Authentication failed".to_string())
+        Err(AppError::new(codes::AUTH_FAILED, "Authentication failed"))
     }
 }

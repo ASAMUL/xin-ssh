@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSnippetStore } from "../../stores/snippetStore";
 import { useUiStore } from "../../stores/uiStore";
+import { localizeError } from "../../utils/appError";
 
 const emit = defineEmits(["close"]);
 
@@ -114,7 +115,7 @@ async function saveSnippet() {
     });
     mode.value = "list";
   } catch (error) {
-    formError.value = String(error);
+    formError.value = localizeError(error);
   } finally {
     isSaving.value = false;
   }

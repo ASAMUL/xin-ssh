@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::error::{codes, AppError};
+
 pub(crate) fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }
@@ -18,29 +20,32 @@ pub(crate) fn now_millis() -> u64 {
     millis as u64
 }
 
-pub(crate) fn error_message(error: impl std::fmt::Display) -> String {
-    error.to_string()
-}
-
-pub(crate) fn connection_error(error: impl std::fmt::Display) -> String {
-    error.to_string()
-}
-
 pub(crate) fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-pub(crate) fn summarize_transfer_errors(errors: Vec<String>) -> String {
+/// 批量操作里多个条目分别失败时，合并成一条带条目数与前几条详情的错误。
+pub(crate) fn summarize_entry_errors(errors: Vec<(String, AppError)>) -> AppError {
     let total = errors.len();
-    let preview = errors
-        .into_iter()
+    let mut remaining = errors.into_iter();
+
+    // 只有一个条目失败时保留原始错误码，前端仍能按码精确处理（比如弹冲突对话框）
+    if total == 1 {
+        if let Some((label, error)) = remaining.next() {
+            return error.with("label", label);
+        }
+    }
+
+    let preview = remaining
         .take(3)
+        .map(|(label, error)| format!("{label}: {}", error.message))
         .collect::<Vec<_>>()
         .join("; ");
 
-    if total > 3 {
-        format!("{total} files failed. First errors: {preview}")
-    } else {
-        preview
-    }
+    AppError::new(
+        codes::TRANSFER_PARTIAL_FAILURE,
+        format!("{total} items failed. First errors: {preview}"),
+    )
+    .with("count", total)
+    .with("detail", preview)
 }

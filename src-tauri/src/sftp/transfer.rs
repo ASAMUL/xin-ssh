@@ -19,6 +19,9 @@ use tokio::{
     sync::Mutex as AsyncMutex,
 };
 
+use crate::error::{
+    codes, connection_error, io_error, lock_poisoned, required, AppError,
+};
 use crate::models::{
     RemoteDownloadRequest, RemoteTransferEntry, RemoteUploadRequest, TransferEventPayload,
 };
@@ -29,18 +32,21 @@ use crate::sftp::path::{
 };
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
-use crate::util::{connection_error, error_message, path_to_string, summarize_transfer_errors};
+use crate::util::{path_to_string, summarize_entry_errors};
 
 const TRANSFER_EVENT: &str = "transfer-event";
 const TRANSFER_BUFFER_SIZE: usize = 256 * 1024;
-const TRANSFER_CANCELED_ERROR: &str = "Transfer canceled";
 const TRANSFER_CONCURRENCY: usize = 4;
+
+fn transfer_canceled_error() -> AppError {
+    AppError::new(codes::TRANSFER_CANCELED, "Transfer canceled")
+}
 
 #[tauri::command]
 pub fn start_upload_transfer(
     registry: State<'_, TerminalRegistry>,
     request: RemoteUploadRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_upload_request(&request)?;
     registry.start_upload(request)
 }
@@ -49,7 +55,7 @@ pub fn start_upload_transfer(
 pub fn start_download_transfer(
     registry: State<'_, TerminalRegistry>,
     request: RemoteDownloadRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_download_request(&request)?;
     registry.start_download(request)
 }
@@ -58,9 +64,9 @@ pub fn start_download_transfer(
 pub fn cancel_transfer(
     registry: State<'_, TerminalRegistry>,
     task_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if task_id.trim().is_empty() {
-        return Err("Task id is required".to_string());
+        return Err(required("taskId"));
     }
 
     registry.cancel_transfer(&task_id)
@@ -95,7 +101,6 @@ pub(crate) async fn run_upload_transfer(
         );
     }
 }
-
 pub(crate) async fn run_download_transfer(
     app: AppHandle,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
@@ -121,7 +126,7 @@ async fn upload_transfer(
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteUploadRequest,
     cancellation: Arc<AtomicBool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let sftp = open_sftp_session(session).await?;
     let result = upload_transfer_with_sftp(app, &sftp, &request, &cancellation).await;
     let _ = sftp.close().await;
@@ -133,7 +138,7 @@ async fn upload_transfer_with_sftp(
     sftp: &SftpSession,
     request: &RemoteUploadRequest,
     cancellation: &Arc<AtomicBool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     ensure_transfer_active(cancellation)?;
     let mut plan = plan_local_upload(&request.local_paths, &request.remote_dir).await?;
     apply_remote_conflict_policy(
@@ -169,7 +174,7 @@ async fn upload_transfer_with_sftp(
 
     let progress = &progress;
     let files = std::mem::take(&mut plan.files);
-    let file_results: Vec<Result<(), (String, String)>> = stream::iter(files)
+    let file_results: Vec<Result<(), (String, AppError)>> = stream::iter(files)
         .map(|file| async move {
             let result = async {
                 ensure_transfer_active(cancellation)?;
@@ -197,7 +202,7 @@ async fn download_transfer(
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteDownloadRequest,
     cancellation: Arc<AtomicBool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let sftp = open_sftp_session(session).await?;
     let result = download_transfer_with_sftp(app, &sftp, &request, &cancellation).await;
     let _ = sftp.close().await;
@@ -209,7 +214,7 @@ async fn download_transfer_with_sftp(
     sftp: &SftpSession,
     request: &RemoteDownloadRequest,
     cancellation: &Arc<AtomicBool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     ensure_transfer_active(cancellation)?;
     let mut plan = plan_remote_download(sftp, &request.remote_entries, &request.local_dir).await?;
     apply_local_conflict_policy(
@@ -239,12 +244,12 @@ async fn download_transfer_with_sftp(
 
         async_fs::create_dir_all(directory)
             .await
-            .map_err(error_message)?;
+            .map_err(io_error)?;
     }
 
     let progress = &progress;
     let files = std::mem::take(&mut plan.files);
-    let file_results: Vec<Result<(), (String, String)>> = stream::iter(files)
+    let file_results: Vec<Result<(), (String, AppError)>> = stream::iter(files)
         .map(|file| async move {
             let result = async {
                 ensure_transfer_active(cancellation)?;
@@ -273,10 +278,10 @@ async fn upload_file(
     app: &AppHandle,
     progress: &Mutex<TransferProgress>,
     cancellation: &Arc<AtomicBool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut local_file = async_fs::File::open(&file.local_path)
         .await
-        .map_err(error_message)?;
+        .map_err(io_error)?;
     // 续传（offset > 0）：不 TRUNCATE，双端 seek 到断点；整传保持覆盖语义
     let open_flags = if file.offset > 0 {
         OpenFlags::CREATE | OpenFlags::WRITE
@@ -291,17 +296,17 @@ async fn upload_file(
         local_file
             .seek(SeekFrom::Start(file.offset))
             .await
-            .map_err(error_message)?;
+            .map_err(io_error)?;
         remote_file
             .seek(SeekFrom::Start(file.offset))
             .await
-            .map_err(error_message)?;
+            .map_err(io_error)?;
     }
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
 
     loop {
         ensure_transfer_active(cancellation)?;
-        let read = local_file.read(&mut buffer).await.map_err(error_message)?;
+        let read = local_file.read(&mut buffer).await.map_err(io_error)?;
         if read == 0 {
             break;
         }
@@ -309,15 +314,15 @@ async fn upload_file(
         remote_file
             .write_all(&buffer[..read])
             .await
-            .map_err(error_message)?;
+            .map_err(io_error)?;
         with_progress(progress, |p| {
             p.bytes_transferred += read as u64;
             p.emit(app, "progress", Some(file.remote_path.clone()), false);
         })?;
     }
 
-    remote_file.flush().await.map_err(error_message)?;
-    remote_file.shutdown().await.map_err(error_message)?;
+    remote_file.flush().await.map_err(io_error)?;
+    remote_file.shutdown().await.map_err(io_error)?;
     with_progress(progress, |p| {
         p.files_done += 1;
         // 不强制发送：海量小文件时靠节流合并，最终计数由 completed 事件兜底
@@ -332,9 +337,9 @@ async fn download_file(
     app: &AppHandle,
     progress: &Mutex<TransferProgress>,
     cancellation: &Arc<AtomicBool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if let Some(parent) = file.local_path.parent() {
-        async_fs::create_dir_all(parent).await.map_err(error_message)?;
+        async_fs::create_dir_all(parent).await.map_err(io_error)?;
     }
 
     let mut remote_file = sftp
@@ -348,27 +353,27 @@ async fn download_file(
             .create(true)
             .open(&file.local_path)
             .await
-            .map_err(error_message)?
+            .map_err(io_error)?
     } else {
         async_fs::File::create(&file.local_path)
             .await
-            .map_err(error_message)?
+            .map_err(io_error)?
     };
     if file.offset > 0 {
         remote_file
             .seek(SeekFrom::Start(file.offset))
             .await
-            .map_err(error_message)?;
+            .map_err(io_error)?;
         local_file
             .seek(SeekFrom::Start(file.offset))
             .await
-            .map_err(error_message)?;
+            .map_err(io_error)?;
     }
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
 
     loop {
         ensure_transfer_active(cancellation)?;
-        let read = remote_file.read(&mut buffer).await.map_err(error_message)?;
+        let read = remote_file.read(&mut buffer).await.map_err(io_error)?;
         if read == 0 {
             break;
         }
@@ -376,15 +381,15 @@ async fn download_file(
         local_file
             .write_all(&buffer[..read])
             .await
-            .map_err(error_message)?;
+            .map_err(io_error)?;
         with_progress(progress, |p| {
             p.bytes_transferred += read as u64;
             p.emit(app, "progress", Some(file.remote_path.clone()), false);
         })?;
     }
 
-    local_file.flush().await.map_err(error_message)?;
-    remote_file.shutdown().await.map_err(error_message)?;
+    local_file.flush().await.map_err(io_error)?;
+    remote_file.shutdown().await.map_err(io_error)?;
     with_progress(progress, |p| {
         p.files_done += 1;
         p.emit(app, "progress", Some(file.remote_path.clone()), false);
@@ -396,17 +401,17 @@ fn finish_transfer(
     app: &AppHandle,
     progress: &Mutex<TransferProgress>,
     cancellation: &Arc<AtomicBool>,
-    file_results: Vec<Result<(), (String, String)>>,
-) -> Result<(), String> {
+    file_results: Vec<Result<(), (String, AppError)>>,
+) -> Result<(), AppError> {
     let mut canceled = false;
     let mut errors = Vec::new();
 
     for file_result in file_results {
         if let Err((label, error)) = file_result {
-            if error == TRANSFER_CANCELED_ERROR {
+            if error.is(codes::TRANSFER_CANCELED) {
                 canceled = true;
             } else {
-                errors.push(format!("{label}: {error}"));
+                errors.push((label, error));
             }
         }
     }
@@ -417,7 +422,7 @@ fn finish_transfer(
     }
 
     if !errors.is_empty() {
-        let summary = summarize_transfer_errors(errors);
+        let summary = summarize_entry_errors(errors);
         with_progress(progress, |p| p.fail(app, summary))?;
         return Ok(());
     }
@@ -429,8 +434,8 @@ fn finish_transfer(
 fn with_progress<T>(
     progress: &Mutex<TransferProgress>,
     action: impl FnOnce(&mut TransferProgress) -> T,
-) -> Result<T, String> {
-    let mut guard = progress.lock().map_err(error_message)?;
+) -> Result<T, AppError> {
+    let mut guard = progress.lock().map_err(|_| lock_poisoned())?;
     Ok(action(&mut guard))
 }
 
@@ -475,7 +480,7 @@ async fn apply_remote_conflict_policy(
     sftp: &SftpSession,
     plan: &mut UploadPlan,
     policy: TransferConflictPolicy,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // resume 不看根目标是否存在，而是逐文件比对远端已有字节
     if policy == TransferConflictPolicy::Resume {
         return apply_remote_resume(sftp, plan).await;
@@ -493,7 +498,7 @@ async fn apply_remote_conflict_policy(
                 .next()
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
-            Err(format!("Remote target already exists: {first}"))
+            Err(crate::error::remote_target_exists(&first))
         }
         TransferConflictPolicy::Overwrite => Ok(()),
         TransferConflictPolicy::Skip => {
@@ -509,7 +514,7 @@ async fn apply_remote_conflict_policy(
 fn apply_local_conflict_policy(
     plan: &mut DownloadPlan,
     policy: TransferConflictPolicy,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if policy == TransferConflictPolicy::Resume {
         return apply_local_resume(plan);
     }
@@ -526,7 +531,13 @@ fn apply_local_conflict_policy(
                 .next()
                 .map(|path| path_to_string(path))
                 .unwrap_or_else(|| "unknown".to_string());
-            Err(format!("Local target already exists: {first}"))
+            Err(
+                AppError::new(
+                    codes::LOCAL_TARGET_EXISTS,
+                    format!("Local target already exists: {first}"),
+                )
+                .with("path", &first),
+            )
         }
         TransferConflictPolicy::Overwrite => Ok(()),
         TransferConflictPolicy::Skip => {
@@ -541,7 +552,7 @@ fn apply_local_conflict_policy(
 
 // 上传向续传：远端已有同名文件时，size 已够 → 整个跳过（计入已完成），
 // 不够 → 从远端已有字节续；不存在或非普通文件 → 照常整传
-async fn apply_remote_resume(sftp: &SftpSession, plan: &mut UploadPlan) -> Result<(), String> {
+async fn apply_remote_resume(sftp: &SftpSession, plan: &mut UploadPlan) -> Result<(), AppError> {
     let mut kept_files = Vec::with_capacity(plan.files.len());
 
     for mut file in std::mem::take(&mut plan.files) {
@@ -567,7 +578,7 @@ async fn apply_remote_resume(sftp: &SftpSession, plan: &mut UploadPlan) -> Resul
 }
 
 // 下载向续传：本地已有同名文件时按其大小续；size 已够 → 跳过
-fn apply_local_resume(plan: &mut DownloadPlan) -> Result<(), String> {
+fn apply_local_resume(plan: &mut DownloadPlan) -> Result<(), AppError> {
     let mut kept_files = Vec::with_capacity(plan.files.len());
 
     for mut file in std::mem::take(&mut plan.files) {
@@ -595,7 +606,7 @@ fn apply_local_resume(plan: &mut DownloadPlan) -> Result<(), String> {
 async fn existing_remote_targets(
     sftp: &SftpSession,
     root_targets: &[String],
-) -> Result<HashSet<String>, String> {
+) -> Result<HashSet<String>, AppError> {
     let mut conflicts = HashSet::new();
 
     for target in root_targets {
@@ -643,7 +654,7 @@ async fn rename_upload_plan_roots(
     sftp: &SftpSession,
     plan: &mut UploadPlan,
     conflicting_roots: &HashSet<String>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut replacements = Vec::new();
 
     for root in &plan.root_targets {
@@ -664,7 +675,7 @@ async fn rename_upload_plan_roots(
 fn rename_download_plan_roots(
     plan: &mut DownloadPlan,
     conflicting_roots: &HashSet<PathBuf>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut replacements = Vec::new();
 
     for root in &plan.root_targets {
@@ -682,7 +693,7 @@ fn rename_download_plan_roots(
     Ok(())
 }
 
-async fn unique_remote_target(sftp: &SftpSession, root: &str) -> Result<String, String> {
+async fn unique_remote_target(sftp: &SftpSession, root: &str) -> Result<String, AppError> {
     for index in 1..1000 {
         let candidate = remote_conflict_variant(root, index);
         if !sftp
@@ -694,10 +705,14 @@ async fn unique_remote_target(sftp: &SftpSession, root: &str) -> Result<String, 
         }
     }
 
-    Err(format!("Could not create a unique remote name for {root}"))
+    Err(AppError::new(
+        codes::REMOTE_UNIQUE_NAME_FAILED,
+        format!("Could not create a unique remote name for {root}"),
+    )
+    .with("path", root))
 }
 
-fn unique_local_target(root: &Path) -> Result<PathBuf, String> {
+fn unique_local_target(root: &Path) -> Result<PathBuf, AppError> {
     for index in 1..1000 {
         let candidate = local_conflict_variant(root, index);
         if !candidate.exists() {
@@ -705,10 +720,14 @@ fn unique_local_target(root: &Path) -> Result<PathBuf, String> {
         }
     }
 
-    Err(format!(
-        "Could not create a unique local name for {}",
-        path_to_string(root)
-    ))
+    Err(AppError::new(
+        codes::LOCAL_UNIQUE_NAME_FAILED,
+        format!(
+            "Could not create a unique local name for {}",
+            path_to_string(root)
+        ),
+    )
+    .with("path", path_to_string(root)))
 }
 
 fn apply_remote_replacements(paths: &mut [String], replacements: &[(String, String)]) {
@@ -801,7 +820,10 @@ fn conflict_name_variant(name: &str, index: usize) -> String {
     }
 }
 
-async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<UploadPlan, String> {
+async fn plan_local_upload(
+    local_paths: &[String],
+    remote_dir: &str,
+) -> Result<UploadPlan, AppError> {
     let remote_dir = normalize_remote_path(remote_dir);
     let mut root_targets = Vec::new();
     let mut seen_root_targets = HashSet::new();
@@ -811,12 +833,16 @@ async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<U
 
     for local_path in local_paths {
         let root = PathBuf::from(local_path);
-        let metadata = async_fs::metadata(&root).await.map_err(error_message)?;
+        let metadata = async_fs::metadata(&root).await.map_err(io_error)?;
         let name = local_file_name(&root)?;
         let remote_path = join_remote_path(&remote_dir, &name);
 
         if !seen_root_targets.insert(remote_path.clone()) {
-            return Err(format!("Duplicate upload target: {remote_path}"));
+            return Err(AppError::new(
+                codes::TRANSFER_DUPLICATE_UPLOAD_TARGET,
+                format!("Duplicate upload target: {remote_path}"),
+            )
+            .with("path", &remote_path));
         }
         root_targets.push(remote_path.clone());
 
@@ -825,11 +851,11 @@ async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<U
             let mut stack = vec![(root, remote_path)];
 
             while let Some((local_dir, remote_parent)) = stack.pop() {
-                let mut read_dir = async_fs::read_dir(&local_dir).await.map_err(error_message)?;
+                let mut read_dir = async_fs::read_dir(&local_dir).await.map_err(io_error)?;
 
-                while let Some(child) = read_dir.next_entry().await.map_err(error_message)? {
+                while let Some(child) = read_dir.next_entry().await.map_err(io_error)? {
                     let child_path = child.path();
-                    let child_file_type = child.file_type().await.map_err(error_message)?;
+                    let child_file_type = child.file_type().await.map_err(io_error)?;
                     let child_name = local_file_name(&child_path)?;
                     let child_remote_path = join_remote_path(&remote_parent, &child_name);
 
@@ -837,7 +863,7 @@ async fn plan_local_upload(local_paths: &[String], remote_dir: &str) -> Result<U
                         directories.push(child_remote_path.clone());
                         stack.push((child_path, child_remote_path));
                     } else if child_file_type.is_file() {
-                        let child_metadata = child.metadata().await.map_err(error_message)?;
+                        let child_metadata = child.metadata().await.map_err(io_error)?;
                         let size = child_metadata.len();
                         bytes_total += size;
                         files.push(UploadFilePlan {
@@ -877,7 +903,7 @@ async fn plan_remote_download(
     sftp: &SftpSession,
     remote_entries: &[RemoteTransferEntry],
     local_dir: &str,
-) -> Result<DownloadPlan, String> {
+) -> Result<DownloadPlan, AppError> {
     let local_dir = PathBuf::from(local_dir);
     let mut root_targets = Vec::new();
     let mut seen_root_targets = HashSet::new();
@@ -897,10 +923,7 @@ async fn plan_remote_download(
         let local_path = local_dir.join(local_name);
 
         if !seen_root_targets.insert(local_path.clone()) {
-            return Err(format!(
-                "Duplicate download target: {}",
-                path_to_string(&local_path)
-            ));
+            return Err(duplicate_download_target(&local_path));
         }
         ensure_unique_local_download_path(&mut seen_local_paths, &local_path)?;
         root_targets.push(local_path.clone());
@@ -964,21 +987,26 @@ async fn plan_remote_download(
     })
 }
 
+fn duplicate_download_target(path: &Path) -> AppError {
+    AppError::new(
+        codes::LOCAL_DUPLICATE_TARGET,
+        format!("Duplicate download target: {}", path_to_string(path)),
+    )
+    .with("path", path_to_string(path))
+}
+
 fn ensure_unique_local_download_path(
     seen_paths: &mut HashSet<PathBuf>,
     path: &Path,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if seen_paths.insert(path.to_path_buf()) {
         return Ok(());
     }
 
-    Err(format!(
-        "Duplicate download target after name sanitizing: {}",
-        path_to_string(path)
-    ))
+    Err(duplicate_download_target(path))
 }
 
-async fn ensure_remote_directory(sftp: &SftpSession, path: &str) -> Result<(), String> {
+async fn ensure_remote_directory(sftp: &SftpSession, path: &str) -> Result<(), AppError> {
     if path == "/" {
         return Ok(());
     }
@@ -990,7 +1018,11 @@ async fn ensure_remote_directory(sftp: &SftpSession, path: &str) -> Result<(), S
 
     match sftp.metadata(path.to_string()).await {
         Ok(metadata) if metadata.file_type().is_dir() => Ok(()),
-        Ok(_) => Err(format!("Remote path is not a directory: {path}")),
+        Ok(_) => Err(AppError::new(
+            codes::REMOTE_NOT_DIRECTORY,
+            format!("Remote path is not a directory: {path}"),
+        )
+        .with("path", path)),
         Err(_) => Err(connection_error(create_error)),
     }
 }
@@ -1053,7 +1085,7 @@ impl TransferProgress {
         );
     }
 
-    fn fail(&mut self, app: &AppHandle, error: String) {
+    fn fail(&mut self, app: &AppHandle, error: AppError) {
         emit_transfer_event(
             app,
             TransferEventPayload {
@@ -1086,27 +1118,30 @@ impl TransferProgress {
                 bytes_total: self.bytes_total,
                 files_done: self.files_done,
                 files_total: self.files_total,
-                error: Some(TRANSFER_CANCELED_ERROR.to_string()),
+                error: Some(transfer_canceled_error()),
             },
         );
     }
 }
 
-fn validate_upload_request(request: &RemoteUploadRequest) -> Result<(), String> {
+fn validate_upload_request(request: &RemoteUploadRequest) -> Result<(), AppError> {
     if request.task_id.trim().is_empty() {
-        return Err("Task id is required".to_string());
+        return Err(required("taskId"));
     }
 
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.local_paths.is_empty() {
-        return Err("Choose at least one local file or folder".to_string());
+        return Err(AppError::new(
+            codes::VALIDATION_SELECT_LOCAL_ITEM,
+            "Choose at least one local file or folder",
+        ));
     }
 
     if request.local_paths.iter().any(|path| path.trim().is_empty()) {
-        return Err("Local path is required".to_string());
+        return Err(required("localPath"));
     }
 
     parse_transfer_conflict_policy(&request.conflict_policy)?;
@@ -1114,21 +1149,27 @@ fn validate_upload_request(request: &RemoteUploadRequest) -> Result<(), String> 
     Ok(())
 }
 
-fn validate_download_request(request: &RemoteDownloadRequest) -> Result<(), String> {
+fn validate_download_request(request: &RemoteDownloadRequest) -> Result<(), AppError> {
     if request.task_id.trim().is_empty() {
-        return Err("Task id is required".to_string());
+        return Err(required("taskId"));
     }
 
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.remote_entries.is_empty() {
-        return Err("Choose at least one remote file or folder".to_string());
+        return Err(AppError::new(
+            codes::VALIDATION_SELECT_REMOTE_ITEM,
+            "Choose at least one remote file or folder",
+        ));
     }
 
     if request.local_dir.trim().is_empty() {
-        return Err("Choose a local destination folder".to_string());
+        return Err(AppError::new(
+            codes::VALIDATION_SELECT_LOCAL_DIR,
+            "Choose a local destination folder",
+        ));
     }
 
     parse_transfer_conflict_policy(&request.conflict_policy)?;
@@ -1138,7 +1179,7 @@ fn validate_download_request(request: &RemoteDownloadRequest) -> Result<(), Stri
 
 fn parse_transfer_conflict_policy(
     policy: &Option<String>,
-) -> Result<TransferConflictPolicy, String> {
+) -> Result<TransferConflictPolicy, AppError> {
     match policy
         .as_deref()
         .unwrap_or("fail")
@@ -1151,7 +1192,11 @@ fn parse_transfer_conflict_policy(
         "skip" => Ok(TransferConflictPolicy::Skip),
         "rename" => Ok(TransferConflictPolicy::Rename),
         "resume" => Ok(TransferConflictPolicy::Resume),
-        value => Err(format!("Unsupported conflict policy: {value}")),
+        value => Err(AppError::new(
+            codes::VALIDATION_CONFLICT_POLICY,
+            format!("Unsupported conflict policy: {value}"),
+        )
+        .with("policy", value)),
     }
 }
 
@@ -1176,16 +1221,16 @@ fn is_transfer_canceled(cancellation: &Arc<AtomicBool>) -> bool {
     cancellation.load(Ordering::SeqCst)
 }
 
-fn ensure_transfer_active(cancellation: &Arc<AtomicBool>) -> Result<(), String> {
+fn ensure_transfer_active(cancellation: &Arc<AtomicBool>) -> Result<(), AppError> {
     if is_transfer_canceled(cancellation) {
-        Err(TRANSFER_CANCELED_ERROR.to_string())
+        Err(transfer_canceled_error())
     } else {
         Ok(())
     }
 }
 
-fn transfer_error_kind(error: &str) -> &'static str {
-    if error == TRANSFER_CANCELED_ERROR {
+fn transfer_error_kind(error: &AppError) -> &'static str {
+    if error.is(codes::TRANSFER_CANCELED) {
         "canceled"
     } else {
         "failed"
@@ -1223,7 +1268,7 @@ fn transfer_event(
 }
 
 impl TransferEventPayload {
-    fn with_error(mut self, error: String) -> Self {
+    fn with_error(mut self, error: AppError) -> Self {
         self.error = Some(error);
         self
     }

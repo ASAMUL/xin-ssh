@@ -8,9 +8,9 @@ use tokio::io::copy_bidirectional;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 
+use crate::error::{codes, connection_error, lock_poisoned, required, AppError};
 use crate::models::{TunnelEventPayload, TunnelStartRequest};
 use crate::ssh::client::{authenticate_session, connect_with_tofu, ConnectionTestClient};
-use crate::util::connection_error;
 
 const TUNNEL_EVENT: &str = "tunnel-event";
 
@@ -27,10 +27,13 @@ pub struct TunnelRegistry {
 }
 
 impl TunnelRegistry {
-    fn insert(&self, tunnel_id: String, handle: TunnelHandle) -> Result<(), String> {
-        let mut tunnels = self.inner.lock().map_err(|_| "Tunnel registry poisoned")?;
+    fn insert(&self, tunnel_id: String, handle: TunnelHandle) -> Result<(), AppError> {
+        let mut tunnels = self.inner.lock().map_err(|_| lock_poisoned())?;
         if tunnels.contains_key(&tunnel_id) {
-            return Err("Tunnel is already running".to_string());
+            return Err(AppError::new(
+                codes::TUNNEL_ALREADY_RUNNING,
+                "Tunnel is already running",
+            ));
         }
 
         tunnels.insert(tunnel_id, handle);
@@ -47,7 +50,7 @@ pub async fn start_tunnel(
     app: AppHandle,
     registry: State<'_, TunnelRegistry>,
     request: TunnelStartRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_tunnel_request(&request)?;
 
     let tunnel_id = request.tunnel_id.clone();
@@ -71,7 +74,14 @@ pub async fn start_tunnel(
     // 只监听回环地址：隧道不对局域网暴露本地端口
     let listener = TcpListener::bind(("127.0.0.1", request.local_port))
         .await
-        .map_err(|error| format!("Local port {} unavailable: {error}", request.local_port))?;
+        .map_err(|error| {
+            AppError::new(
+                codes::TUNNEL_PORT_UNAVAILABLE,
+                format!("Local port {} unavailable: {error}", request.local_port),
+            )
+            .with("port", request.local_port)
+            .with("detail", error)
+        })?;
 
     let (shutdown_sender, mut shutdown_receiver) = watch::channel(false);
     registry.insert(
@@ -127,7 +137,7 @@ pub async fn stop_tunnel(
     app: AppHandle,
     registry: State<'_, TunnelRegistry>,
     tunnel_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let Some(handle) = registry.remove(&tunnel_id) else {
         return Ok(());
     };
@@ -178,7 +188,7 @@ fn spawn_forwarding(
     });
 }
 
-fn fail_tunnel(app: &AppHandle, registry: &TunnelRegistry, tunnel_id: &str, error: String) {
+fn fail_tunnel(app: &AppHandle, registry: &TunnelRegistry, tunnel_id: &str, error: AppError) {
     let Some(handle) = registry.remove(tunnel_id) else {
         return;
     };
@@ -187,7 +197,7 @@ fn fail_tunnel(app: &AppHandle, registry: &TunnelRegistry, tunnel_id: &str, erro
     emit_tunnel_event(app, tunnel_id, "error", Some(error));
 }
 
-fn emit_tunnel_event(app: &AppHandle, tunnel_id: &str, kind: &str, error: Option<String>) {
+fn emit_tunnel_event(app: &AppHandle, tunnel_id: &str, kind: &str, error: Option<AppError>) {
     let _ = app.emit(
         TUNNEL_EVENT,
         TunnelEventPayload {
@@ -198,21 +208,21 @@ fn emit_tunnel_event(app: &AppHandle, tunnel_id: &str, kind: &str, error: Option
     );
 }
 
-fn validate_tunnel_request(request: &TunnelStartRequest) -> Result<(), String> {
+fn validate_tunnel_request(request: &TunnelStartRequest) -> Result<(), AppError> {
     if request.tunnel_id.trim().is_empty() {
-        return Err("Tunnel id is required".to_string());
+        return Err(required("tunnelId"));
     }
     if request.host.trim().is_empty() {
-        return Err("Host is required".to_string());
+        return Err(required("host"));
     }
     if request.username.trim().is_empty() {
-        return Err("Username is required".to_string());
+        return Err(required("username"));
     }
     if request.remote_host.trim().is_empty() {
-        return Err("Remote host is required".to_string());
+        return Err(required("remoteHost"));
     }
     if request.local_port == 0 || request.remote_port == 0 {
-        return Err("Ports must be between 1 and 65535".to_string());
+        return Err(crate::error::port_invalid());
     }
 
     Ok(())

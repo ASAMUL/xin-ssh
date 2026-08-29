@@ -6,6 +6,7 @@ import { useProfileStore } from "../../stores/profileStore";
 import { useAppStore } from "../../stores/appStore";
 import { useCredentialStore } from "../../stores/credentialStore";
 import { testConnection as testConnectionRequest } from "../../services/workspaceApi";
+import { errorCode, localizeError } from "../../utils/appError";
 
 const props = defineProps({
   profileId: {
@@ -173,10 +174,10 @@ async function submitProfile() {
     appStore.consumeSnapshot(workspaceSnapshot);
     emit("close");
   } catch (submitError) {
-    const message = String(submitError);
-    error.value = message.includes("Credential store")
-      ? `${t("profile.credentialStoreUnavailable")}: ${message}`
-      : message;
+    // 凭据存储相关的失败额外加一句上下文：多半是本机密钥出了问题，不是填错了
+    error.value = errorCode(submitError).startsWith("credential.")
+      ? `${t("profile.credentialStoreUnavailable")}: ${localizeError(submitError)}`
+      : localizeError(submitError);
   } finally {
     saveProgressKey.value = "";
     isSavingProfile.value = false;

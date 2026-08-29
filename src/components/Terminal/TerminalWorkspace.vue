@@ -14,6 +14,7 @@ import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useCredentialStore } from "../../stores/credentialStore";
+import { localizeError } from "../../utils/appError";
 import {
   TERMINAL_FONTS,
   TERMINAL_FONT_SIZES,
@@ -374,7 +375,7 @@ function applyAppearance(partial) {
     // optimistic: re-skin immediately, persistence follows
     Object.assign(settingsStore.settings, partial);
     settingsStore.patchSettings(partial).catch((error) => {
-      uiStore.setError(String(error));
+      uiStore.setError(error);
     });
     return;
   }
@@ -444,7 +445,7 @@ async function savePendingCredential() {
       });
     }
   } catch (error) {
-    uiStore.setError(`${t("terminal.saveCredentialFailed")}: ${String(error)}`);
+    uiStore.setError(`${t("terminal.saveCredentialFailed")}: ${localizeError(error)}`);
   }
 }
 </script>

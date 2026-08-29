@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{mpsc, Mutex as AsyncMutex};
 use tokio::time::{Duration, Instant};
 
+use crate::error::{connection_error, required, AppError};
 use crate::models::{
     AuthMethod, TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest,
     TerminalStartRequest,
@@ -22,7 +23,7 @@ use crate::sftp::transfer::{
 use crate::ssh::client::{authenticate_session, connect_with_tofu};
 use crate::ssh::registry::{TerminalControl, TerminalRegistry};
 use crate::system_info::collect_system_info_on_session;
-use crate::util::{connection_error, shell_quote};
+use crate::util::shell_quote;
 
 const TERMINAL_EVENT: &str = "terminal-event";
 const TERMINAL_CLOSE_REASON_CLIENT: &str = "client";
@@ -37,7 +38,7 @@ pub async fn start_terminal_session(
     app: AppHandle,
     registry: State<'_, TerminalRegistry>,
     request: TerminalStartRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_terminal_start_request(&request)?;
 
     let session_id = request.session_id.clone();
@@ -80,7 +81,7 @@ pub async fn start_terminal_session(
 pub fn send_terminal_input(
     registry: State<'_, TerminalRegistry>,
     request: TerminalInputRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     registry.send(
         &request.session_id,
         TerminalControl::Input(request.data.into_bytes()),
@@ -91,7 +92,7 @@ pub fn send_terminal_input(
 pub fn resize_terminal(
     registry: State<'_, TerminalRegistry>,
     request: TerminalResizeRequest,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     registry.send(
         &request.session_id,
         TerminalControl::Resize {
@@ -105,7 +106,7 @@ pub fn resize_terminal(
 pub fn close_terminal_session(
     registry: State<'_, TerminalRegistry>,
     session_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     registry.close(&session_id)
 }
 
@@ -114,7 +115,7 @@ async fn run_terminal_shell(
     request: TerminalStartRequest,
     mut control_receiver: mpsc::UnboundedReceiver<TerminalControl>,
     registry: TerminalRegistry,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let session_id = request.session_id.clone();
     let attempt_id = request.attempt_id.clone();
     let mut close_reason = TERMINAL_CLOSE_REASON_REMOTE;
@@ -470,27 +471,27 @@ async fn run_terminal_shell(
     Ok(())
 }
 
-fn validate_terminal_start_request(request: &TerminalStartRequest) -> Result<(), String> {
+fn validate_terminal_start_request(request: &TerminalStartRequest) -> Result<(), AppError> {
     if request.session_id.trim().is_empty() {
-        return Err("Session id is required".to_string());
+        return Err(required("sessionId"));
     }
 
     if request.host.trim().is_empty() {
-        return Err("Host is required".to_string());
+        return Err(required("host"));
     }
 
     if request.username.trim().is_empty() {
-        return Err("Username is required".to_string());
+        return Err(required("username"));
     }
 
     if request.port == 0 {
-        return Err("Port must be greater than 0".to_string());
+        return Err(crate::error::port_invalid());
     }
 
     match &request.auth_method {
         AuthMethod::Password => {
             if request.password.as_deref().unwrap_or_default().is_empty() {
-                return Err("Password is required".to_string());
+                return Err(required("password"));
             }
         }
         AuthMethod::PrivateKey => {
@@ -501,7 +502,7 @@ fn validate_terminal_start_request(request: &TerminalStartRequest) -> Result<(),
                 .trim()
                 .is_empty()
             {
-                return Err("Private key path is required".to_string());
+                return Err(required("privateKeyPath"));
             }
         }
     }
@@ -533,7 +534,7 @@ fn emit_terminal_event(
     attempt_id: Option<&str>,
     kind: &str,
     data: Option<String>,
-    error: Option<String>,
+    error: Option<AppError>,
     reason: Option<&str>,
 ) {
     let _ = app.emit(

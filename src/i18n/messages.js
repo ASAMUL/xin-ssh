@@ -128,6 +128,8 @@ export const messages = {
       requiredFields: "请选择连接并填写有效端口（1-65535）",
       credentialsNeeded: "该连接未保存凭据，输入后启动",
       passphraseOptional: "私钥 Passphrase（无则留空）",
+      genericError: "隧道出错",
+      profileMissing: "找不到该隧道使用的连接配置",
       status: {
         stopped: "未启动",
         starting: "启动中",
@@ -237,6 +239,7 @@ export const messages = {
       saveCredentialFailed: "保存凭据失败",
       savedCredentialMissing: "已保存的凭据不可用，请重新输入。",
       hostKeyChangedTitle: "服务器指纹已变化",
+      genericError: "终端出错",
       hostKeyChangedDescription:
         "该服务器的主机密钥与上次连接时不一致。如果服务器近期重装或更换过密钥，属于正常情况；否则可能存在中间人风险，请谨慎确认。",
       hostKeyExpected: "已记录指纹",
@@ -372,11 +375,6 @@ export const messages = {
       dirtyCloseHint: "修改尚未保存，直接关闭会丢失。",
       discardChanges: "放弃修改",
       keepEditing: "继续编辑",
-      fileTooLarge: "文件超过 5 MB，内置编辑器暂不支持，请下载后在本地编辑。",
-      fileNotText: "这不是 UTF-8 文本文件，内置编辑器无法打开。",
-      isDirectory: "目标是一个目录，无法作为文本编辑。",
-      notRegularFile: "目标不是常规文件（可能是设备或管道），无法编辑。",
-      sessionDisconnected: "连接已断开，请重新连接后再保存。",
       search: {
         findPlaceholder: "查找",
         replacePlaceholder: "替换",
@@ -471,6 +469,101 @@ export const messages = {
     errors: {
       title: "操作失败",
       copy: "复制详情",
+      // 后端 AppError.code → 文案。占位符对应 AppError.params。
+      codes: {
+        "validation.required": "缺少必填项：{field}",
+        "validation.portInvalid": "端口需要在 1 到 65535 之间",
+        "validation.selectLocalItem": "请至少选择一个本地文件或文件夹",
+        "validation.selectRemoteItem": "请至少选择一个远程文件或文件夹",
+        "validation.selectLocalDir": "请选择本地保存目录",
+        "validation.unsupportedConflictPolicy": "不支持的冲突处理方式：{policy}",
+        "validation.unsupportedCredentialKind": "不支持的凭据类型：{kind}",
+
+        "auth.failed": "认证失败，请检查用户名、密码或密钥",
+        "hostKey.changed": "服务器主机密钥已变更",
+
+        "session.notRunning": "会话未连接",
+        "session.notAccepting": "会话已断开，无法继续{kind}",
+        "session.requestCanceled": "{operation}已被取消",
+
+        "timeout.operation": "{operation}超时（{seconds} 秒）",
+
+        "remote.targetExists": "远程已存在同名项：{path}",
+        "remote.isDirectory": "目标是一个目录，无法作为文本编辑：{path}",
+        "remote.notDirectory": "远程路径不是目录：{path}",
+        "remote.notRegularFile": "目标不是常规文件（可能是设备或管道），无法编辑：{path}",
+        "remote.rootForbidden": "根目录不允许{operation}",
+        "remote.uniqueNameFailed": "无法为 {path} 生成不重名的远程名称",
+        "remote.commandFailed": "远程命令执行失败",
+
+        "local.targetExists": "本地已存在同名项：{path}",
+        "local.duplicateTarget": "本地目标路径重复：{path}",
+        "local.uniqueNameFailed": "无法为 {path} 生成不重名的本地名称",
+        "local.fileNameUnknown": "无法解析文件名：{path}",
+
+        "transfer.duplicateUploadTarget": "上传目标重复：{path}",
+        "transfer.canceled": "传输已取消",
+        "transfer.partialFailure": "{count} 个条目失败：{detail}",
+
+        "file.tooLarge": "文件超过 {limitMb} MB，内置编辑器暂不支持，请下载后在本地编辑",
+        "file.binary": "这是二进制文件，内置编辑器无法按文本打开",
+        "file.notUtf8": "这不是 UTF-8 文本文件，内置编辑器无法打开",
+
+        "directory.listingCanceled": "目录加载已取消",
+
+        "workspace.notInitialized": "工作区尚未初始化",
+        "workspace.dirMissing": "未配置工作区目录",
+        "workspace.fileCorrupt": "配置文件已损坏：{path}",
+
+        "credential.encryptFailed": "凭据加密失败",
+        "credential.decryptFailed": "凭据解密失败，可能是本机密钥已变更",
+        "credential.keyFailed": "本机凭据密钥不可用",
+        "credential.corrupt": "已保存的凭据已损坏",
+
+        "tunnel.alreadyRunning": "该隧道已在运行",
+        "tunnel.portUnavailable": "本地端口 {port} 不可用：{detail}",
+
+        "ssh.connection": "SSH 连接失败：{detail}",
+        "ssh.disconnected": "与服务器的连接已断开",
+
+        "io.failed": "本地读写失败：{detail}",
+        "internal.lockPoisoned": "内部状态异常，请重试",
+      },
+      // validation.required 的 {field}
+      fields: {
+        sessionId: "会话 ID",
+        requestId: "请求 ID",
+        taskId: "任务 ID",
+        tunnelId: "隧道 ID",
+        credentialRef: "凭据引用",
+        fingerprint: "指纹",
+        host: "主机",
+        username: "用户名",
+        password: "密码",
+        privateKeyPath: "私钥路径",
+        remoteHost: "目标主机",
+        remotePath: "远程路径",
+        localPath: "本地路径",
+      },
+      // timeout.operation / session.* / remote.rootForbidden 的 {operation} 与 {kind}
+      operations: {
+        input: "输入",
+        sftp: "文件传输",
+        file: "文件操作",
+        upload: "上传",
+        download: "下载",
+        systemInfo: "系统信息采集",
+        remoteSystemInfoCommand: "远程系统信息命令",
+        testConnection: "连接测试",
+        openSftpChannel: "打开 SFTP 通道",
+        createDirectory: "新建文件夹",
+        createFile: "新建文件",
+        listDirectory: "列出目录",
+        readFile: "读取文件",
+        writeFile: "保存文件",
+        rename: "重命名",
+        delete: "删除",
+      },
     },
   },
   "en-US": {
@@ -602,6 +695,8 @@ export const messages = {
       requiredFields: "Pick a connection and enter valid ports (1-65535)",
       credentialsNeeded: "No saved credentials for this connection — enter them to start",
       passphraseOptional: "Private key passphrase (leave empty if none)",
+      genericError: "Tunnel error",
+      profileMissing: "The connection profile for this tunnel is missing",
       status: {
         stopped: "Stopped",
         starting: "Starting",
@@ -711,6 +806,7 @@ export const messages = {
       saveCredentialFailed: "Could not save credentials",
       savedCredentialMissing: "Saved credentials are unavailable. Enter them again.",
       hostKeyChangedTitle: "Server fingerprint changed",
+      genericError: "Terminal error",
       hostKeyChangedDescription:
         "The server's host key differs from the one recorded on the last connection. This is expected if the server was recently reinstalled or rotated its keys; otherwise it could indicate a man-in-the-middle attack.",
       hostKeyExpected: "Recorded fingerprint",
@@ -846,11 +942,6 @@ export const messages = {
       dirtyCloseHint: "Your changes are not saved and will be lost if you close now.",
       discardChanges: "Discard changes",
       keepEditing: "Keep editing",
-      fileTooLarge: "This file is larger than 5 MB. Download it to edit locally.",
-      fileNotText: "This is not a UTF-8 text file, so the built-in editor cannot open it.",
-      isDirectory: "The target is a directory and cannot be edited as text.",
-      notRegularFile: "The target is not a regular file (device or pipe) and cannot be edited.",
-      sessionDisconnected: "The connection is closed. Reconnect before saving.",
       search: {
         findPlaceholder: "Find",
         replacePlaceholder: "Replace",
@@ -945,6 +1036,103 @@ export const messages = {
     errors: {
       title: "Operation failed",
       copy: "Copy details",
+      // Backend AppError.code → message. Placeholders map to AppError.params.
+      codes: {
+        "validation.required": "Missing required value: {field}",
+        "validation.portInvalid": "Port must be between 1 and 65535",
+        "validation.selectLocalItem": "Choose at least one local file or folder",
+        "validation.selectRemoteItem": "Choose at least one remote file or folder",
+        "validation.selectLocalDir": "Choose a local destination folder",
+        "validation.unsupportedConflictPolicy": "Unsupported conflict policy: {policy}",
+        "validation.unsupportedCredentialKind": "Unsupported credential kind: {kind}",
+
+        "auth.failed": "Authentication failed — check the username, password or key",
+        "hostKey.changed": "The server host key has changed",
+
+        "session.notRunning": "The session is not connected",
+        "session.notAccepting": "The session disconnected and cannot continue {kind}",
+        "session.requestCanceled": "{operation} was canceled",
+
+        "timeout.operation": "{operation} timed out after {seconds}s",
+
+        "remote.targetExists": "A remote item with that name already exists: {path}",
+        "remote.isDirectory": "The target is a directory and cannot be edited as text: {path}",
+        "remote.notDirectory": "Remote path is not a directory: {path}",
+        "remote.notRegularFile":
+          "The target is not a regular file (device or pipe) and cannot be edited: {path}",
+        "remote.rootForbidden": "{operation} is not allowed on the root path",
+        "remote.uniqueNameFailed": "Could not find an unused remote name for {path}",
+        "remote.commandFailed": "The remote command failed",
+
+        "local.targetExists": "A local item with that name already exists: {path}",
+        "local.duplicateTarget": "Duplicate local target path: {path}",
+        "local.uniqueNameFailed": "Could not find an unused local name for {path}",
+        "local.fileNameUnknown": "Could not determine the file name: {path}",
+
+        "transfer.duplicateUploadTarget": "Duplicate upload target: {path}",
+        "transfer.canceled": "Transfer canceled",
+        "transfer.partialFailure": "{count} items failed: {detail}",
+
+        "file.tooLarge": "This file is larger than {limitMb} MB. Download it to edit locally.",
+        "file.binary": "This is a binary file and cannot be opened as text",
+        "file.notUtf8": "This is not a UTF-8 text file, so the built-in editor cannot open it",
+
+        "directory.listingCanceled": "Directory listing canceled",
+
+        "workspace.notInitialized": "Workspace is not initialized",
+        "workspace.dirMissing": "Workspace directory is not configured",
+        "workspace.fileCorrupt": "Config file is corrupt: {path}",
+
+        "credential.encryptFailed": "Could not encrypt the credential",
+        "credential.decryptFailed":
+          "Could not decrypt the credential — the device key may have changed",
+        "credential.keyFailed": "The local credential key is unavailable",
+        "credential.corrupt": "The stored credential is corrupt",
+
+        "tunnel.alreadyRunning": "That tunnel is already running",
+        "tunnel.portUnavailable": "Local port {port} is unavailable: {detail}",
+
+        "ssh.connection": "SSH connection failed: {detail}",
+        "ssh.disconnected": "The connection to the server was lost",
+
+        "io.failed": "Local read/write failed: {detail}",
+        "internal.lockPoisoned": "Internal state error, please retry",
+      },
+      // {field} for validation.required
+      fields: {
+        sessionId: "session id",
+        requestId: "request id",
+        taskId: "task id",
+        tunnelId: "tunnel id",
+        credentialRef: "credential reference",
+        fingerprint: "fingerprint",
+        host: "host",
+        username: "username",
+        password: "password",
+        privateKeyPath: "private key path",
+        remoteHost: "target host",
+        remotePath: "remote path",
+        localPath: "local path",
+      },
+      // {operation} / {kind} for timeout.operation, session.*, remote.rootForbidden
+      operations: {
+        input: "input",
+        sftp: "file transfer",
+        file: "file operations",
+        upload: "upload",
+        download: "download",
+        systemInfo: "system info sampling",
+        remoteSystemInfoCommand: "the remote system info command",
+        testConnection: "connection test",
+        openSftpChannel: "opening the SFTP channel",
+        createDirectory: "creating a folder",
+        createFile: "creating a file",
+        listDirectory: "listing the directory",
+        readFile: "reading the file",
+        writeFile: "saving the file",
+        rename: "rename",
+        delete: "delete",
+      },
     },
   },
 };
