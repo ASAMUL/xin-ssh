@@ -45,7 +45,7 @@
   left: 50%;
   top: 50%;
   border-radius: 999px;
-  background: rgba(93, 108, 132, 0.28);
+  background: color-mix(in srgb, var(--xin-text-muted) 28%, transparent);
   opacity: 0;
   transform: translate(-50%, -50%);
   transition:
@@ -67,8 +67,8 @@
 .xin-split > .splitpanes__splitter:hover::before,
 .xin-split.splitpanes--dragging > .splitpanes__splitter::before {
   opacity: 1;
-  background: rgba(47, 109, 246, 0.6);
-  box-shadow: 0 0 0 3px rgba(47, 109, 246, 0.14);
+  background: rgb(var(--xin-accent-rgb) / 0.6);
+  box-shadow: 0 0 0 3px rgb(var(--xin-accent-rgb) / 0.14);
 }
 
 /* 文件管理器内部的树/列表分割：面板间距更小 */

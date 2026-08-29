@@ -19,9 +19,9 @@ const MATCH_LIMIT = 999;
 // 高亮色必须是 #RRGGBB：普通匹配深蓝灰、活跃匹配品牌蓝，深浅主题下白色前景都可读
 const SEARCH_DECORATIONS = {
   matchBackground: "#3a4f7a",
-  activeMatchBackground: "#155eef",
+  activeMatchBackground: "var(--xin-accent-strong)",
   matchOverviewRuler: "#3a4f7a",
-  activeMatchColorOverviewRuler: "#155eef",
+  activeMatchColorOverviewRuler: "var(--xin-accent-strong)",
 };
 
 const searchInput = ref(null);

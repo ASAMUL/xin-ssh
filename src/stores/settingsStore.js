@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { saveSettings } from "../services/workspaceApi";
 import { normalizeTerminalBackground } from "../services/backgroundApi";
+import { applyAppearanceMode, normalizeAppearanceMode } from "../utils/appearanceMode";
 import { i18n } from "../i18n";
 import { DEFAULT_TERMINAL_THEME_ID, TERMINAL_FONTS, TERMINAL_FONT_SIZES } from "../config/terminalThemes";
 
@@ -41,6 +42,7 @@ export const useSettingsStore = defineStore("settings", {
     homeViewMode: (state) =>
       state.settings?.homeViewMode === "list" ? "list" : "grid",
     terminalBackground: (state) => normalizeTerminalBackground(state.settings?.terminalBackground),
+    appearanceMode: (state) => normalizeAppearanceMode(state.settings?.appearanceMode),
   },
   actions: {
     hydrate(settings) {
@@ -51,6 +53,9 @@ export const useSettingsStore = defineStore("settings", {
       if (settings?.locale) {
         i18n.global.locale.value = settings.locale;
       }
+      // 明暗模式挂在 <html> 上，不属于 Vue 的响应式范围，得在这里显式落一次；
+      // 启动时 main.js 已按系统偏好画过，这里是拿到用户存的档后校准。
+      applyAppearanceMode(this.appearanceMode);
     },
     async patchSettings(partial) {
       if (!this.settings) {
@@ -124,6 +129,11 @@ export const useSettingsStore = defineStore("settings", {
     // 全局终端背景图；单个连接可在外观面板里覆盖成自己的一张
     setTerminalBackground(terminalBackground) {
       return this.applySettingsPatch({ terminalBackground });
+    },
+    // 先落 DOM 再持久化：切换要立刻可见，存盘失败也不该把界面卡在旧模式
+    setAppearanceMode(appearanceMode) {
+      const mode = applyAppearanceMode(appearanceMode);
+      return this.applySettingsPatch({ appearanceMode: mode });
     },
   },
 });

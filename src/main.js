@@ -22,6 +22,7 @@ import { createPinia } from "pinia";
 import { createRouter, createWebHashHistory } from "vue-router";
 import App from "./App.vue";
 import { i18n } from "./i18n";
+import { applyAppearanceMode } from "./utils/appearanceMode";
 import ui from "@nuxt/ui/vue-plugin";
 
 addCollection(lucideIcons);
@@ -31,6 +32,10 @@ addCollection(lucideIcons);
 if (window.__TAURI_INTERNALS__) {
   document.documentElement.classList.add("native-glass");
 }
+
+// 先按系统偏好上色再挂载：settings.json 是异步读的，不抢在挂载前定调的话，
+// 深色用户每次启动都会先闪一下白。拿到存档后 settingsStore.hydrate 会再校准一次。
+applyAppearanceMode("system");
 
 // Nuxt UI 的 Vue 插件依赖 vue-router（ULink 等组件需要注入的 router）。
 // 应用本身不做页面路由，这里只挂一个空路由满足该依赖，请勿移除。

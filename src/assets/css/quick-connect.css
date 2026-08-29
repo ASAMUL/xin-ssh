@@ -14,7 +14,7 @@
   /* 同时覆盖默认 shadow-lg 与 ring（两者都走 box-shadow） */
   box-shadow:
     var(--xin-specular),
-    0 24px 64px rgba(20, 34, 62, 0.24);
+    0 24px 64px rgb(var(--xin-shadow-rgb) / 0.24);
   backdrop-filter: var(--xin-glass-blur);
 }
 

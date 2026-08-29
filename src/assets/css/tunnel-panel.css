@@ -9,8 +9,8 @@
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 24px 18px;
-  border-top: 1px solid rgba(120, 136, 160, 0.16);
-  background: rgba(255, 255, 255, 0.32);
+  border-top: 1px solid var(--xin-border-soft);
+  background: rgb(var(--xin-fill-rgb) / 0.32);
 }
 
 .tunnel-intro {
@@ -38,31 +38,31 @@
 }
 
 .tunnel-item {
-  --status-color: #94a3b8;
-  --status-soft: rgba(148, 163, 184, 0.12);
+  --status-color: var(--xin-status-idle);
+  --status-soft: rgb(var(--xin-neutral-rgb) / 0.12);
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--xin-glass-border);
   border-radius: var(--xin-radius-lg);
-  background: rgba(255, 255, 255, 0.5);
+  background: rgb(var(--xin-fill-rgb) / 0.5);
   box-shadow: var(--xin-specular);
 }
 
 .tunnel-item.running {
   --status-color: var(--xin-success);
-  --status-soft: rgba(53, 184, 113, 0.15);
+  --status-soft: rgb(var(--xin-success-rgb) / 0.15);
 }
 
 .tunnel-item.starting {
   --status-color: var(--xin-warning);
-  --status-soft: rgba(215, 166, 65, 0.14);
+  --status-soft: rgb(var(--xin-warning-rgb) / 0.14);
 }
 
 .tunnel-item.error {
   --status-color: var(--xin-danger);
-  --status-soft: rgba(239, 68, 68, 0.12);
+  --status-soft: rgb(var(--xin-danger-rgb) / 0.12);
 }
 
 .tunnel-item-head {
@@ -79,7 +79,7 @@
   place-items: center;
   color: #1ea467;
   border-radius: 11px;
-  background: rgba(34, 176, 108, 0.14);
+  background: rgb(var(--xin-success-rgb) / 0.14);
   font-size: 17px;
 }
 
@@ -118,7 +118,7 @@
   gap: 6px;
   height: 24px;
   padding: 0 10px;
-  color: #475569;
+  color: var(--xin-text-secondary);
   border-radius: 999px;
   background: var(--status-soft);
   font-size: 11px;
@@ -141,7 +141,7 @@
 .tunnel-item-error {
   margin: 0;
   padding: 0 2px;
-  color: #dc2626;
+  color: var(--xin-danger-strong);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -151,9 +151,9 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid rgba(47, 109, 246, 0.2);
+  border: 1px solid rgb(var(--xin-accent-rgb) / 0.2);
   border-radius: var(--xin-radius);
-  background: rgba(47, 109, 246, 0.06);
+  background: rgb(var(--xin-accent-rgb) / 0.06);
   font-size: 12px;
   color: var(--xin-text-muted);
 }

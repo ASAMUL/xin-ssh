@@ -16,7 +16,7 @@
   border-left: 1px solid var(--xin-glass-border);
   border-radius: 0 0 var(--xin-radius-lg) 0;
   background: var(--xin-glass-strong);
-  box-shadow: -20px 0 48px rgba(15, 23, 42, 0.24);
+  box-shadow: -20px 0 48px rgb(var(--xin-shadow-rgb) / 0.24);
   backdrop-filter: var(--xin-glass-blur);
 }
 
@@ -52,7 +52,7 @@
   height: 28px;
   display: grid;
   place-items: center;
-  color: #64748b;
+  color: var(--xin-text-muted);
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -60,7 +60,7 @@
 
 .snippet-head button:hover {
   color: var(--xin-text);
-  background: rgba(137, 148, 166, 0.16);
+  background: rgb(var(--xin-neutral-rgb) / 0.16);
 }
 
 .snippet-body {
@@ -87,7 +87,7 @@
   font-size: 11.5px;
   border: 1px solid var(--xin-glass-edge);
   border-radius: var(--xin-radius-sm);
-  background: rgba(148, 163, 184, 0.1);
+  background: rgb(var(--xin-neutral-rgb) / 0.1);
 }
 
 .snippet-offline-hint svg {
@@ -105,7 +105,7 @@
   overflow-y: auto;
   padding: 2px 12px 10px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(137, 148, 166, 0.35) transparent;
+  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.35) transparent;
 }
 
 .snippet-empty {
@@ -159,15 +159,15 @@
 
 .snippet-item:hover {
   border-color: var(--xin-glass-border);
-  background: rgba(255, 255, 255, 0.55);
+  background: rgb(var(--xin-fill-rgb) / 0.55);
 }
 
 .snippet-item.confirming {
   justify-content: space-between;
   gap: 8px;
   padding: 9px 10px;
-  border-color: rgba(239, 68, 68, 0.32);
-  background: rgba(254, 242, 242, 0.72);
+  border-color: rgb(var(--xin-danger-rgb) / 0.32);
+  background: var(--xin-surface-danger);
 }
 
 .snippet-item-main {
@@ -221,7 +221,7 @@
 .snippet-confirm-text {
   min-width: 0;
   overflow: hidden;
-  color: #991b1b;
+  color: var(--xin-danger-text);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;

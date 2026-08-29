@@ -1,6 +1,6 @@
 .connection-card {
-  --status-color: #94a3b8;
-  --status-soft: rgba(148, 163, 184, 0.12);
+  --status-color: var(--xin-status-idle);
+  --status-soft: rgb(var(--xin-neutral-rgb) / 0.12);
   position: relative;
   min-width: 0;
   display: grid;
@@ -10,7 +10,7 @@
   background: var(--xin-glass);
   box-shadow:
     var(--xin-specular),
-    0 16px 34px rgba(20, 34, 62, 0.07);
+    0 16px 34px rgb(var(--xin-shadow-rgb) / 0.07);
   backdrop-filter: var(--xin-glass-blur);
   transition:
     transform 160ms ease,
@@ -21,30 +21,30 @@
 
 .connection-card.connected {
   --status-color: var(--xin-success);
-  --status-soft: rgba(53, 184, 113, 0.15);
+  --status-soft: rgb(var(--xin-success-rgb) / 0.15);
 }
 
 .connection-card.connecting {
   --status-color: var(--xin-warning);
-  --status-soft: rgba(215, 166, 65, 0.14);
+  --status-soft: rgb(var(--xin-warning-rgb) / 0.14);
 }
 
 .connection-card.authRequired {
   --status-color: var(--xin-accent);
-  --status-soft: rgba(47, 109, 246, 0.14);
+  --status-soft: rgb(var(--xin-accent-rgb) / 0.14);
 }
 
 .connection-card.error {
   --status-color: var(--xin-danger);
-  --status-soft: rgba(239, 68, 68, 0.12);
+  --status-soft: rgb(var(--xin-danger-rgb) / 0.12);
 }
 
 .connection-card:hover {
-  border-color: rgba(47, 109, 246, 0.32);
-  background: rgba(255, 255, 255, 0.72);
+  border-color: rgb(var(--xin-accent-rgb) / 0.32);
+  background: rgb(var(--xin-fill-rgb) / 0.72);
   box-shadow:
     var(--xin-specular),
-    0 22px 46px rgba(20, 34, 62, 0.12);
+    0 22px 46px rgb(var(--xin-shadow-rgb) / 0.12);
   transform: translateY(-2px);
 }
 
@@ -70,10 +70,10 @@
   place-items: center;
   color: #ffffff;
   border-radius: 13px;
-  background: linear-gradient(160deg, #6f9aff 0%, #2f6df6 100%);
+  background: linear-gradient(160deg, #6f9aff 0%, var(--xin-accent) 100%);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.4) inset,
-    0 10px 22px rgba(47, 109, 246, 0.28);
+    0 1px 0 rgb(var(--xin-fill-rgb) / 0.4) inset,
+    0 10px 22px rgb(var(--xin-accent-rgb) / 0.28);
   font-size: 21px;
 }
 
@@ -121,7 +121,7 @@
   max-width: 100%;
   height: 25px;
   padding: 0 10px;
-  color: #475569;
+  color: var(--xin-text-secondary);
   border-radius: 999px;
   background: var(--status-soft);
   font-size: 11px;

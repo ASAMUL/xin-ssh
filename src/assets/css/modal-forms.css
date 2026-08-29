@@ -9,13 +9,16 @@
   display: grid;
   place-items: center;
   padding: 22px;
-  background: rgba(23, 33, 54, 0.26);
+  background: rgb(var(--xin-shadow-rgb) / 0.26);
   backdrop-filter: blur(10px) saturate(1.1);
 }
 
 .connection-form,
 .settings-panel {
   width: min(620px, 100%);
+  /* flex item 默认 min-width:auto，内容一宽就会把上面这个 width 顶破。
+     少了这行，弹窗会被最宽的一行内容撑开，还会连带冒出横向滚动条。 */
+  min-width: 0;
   max-height: 100%;
   display: flex;
   flex-direction: column;
@@ -25,7 +28,7 @@
   background: var(--xin-glass-strong);
   box-shadow:
     var(--xin-specular),
-    0 32px 90px rgba(20, 34, 62, 0.28);
+    0 32px 90px rgb(var(--xin-shadow-rgb) / 0.28);
   backdrop-filter: var(--xin-glass-blur);
 }
 
@@ -41,13 +44,13 @@
   justify-content: space-between;
   gap: 16px;
   padding: 18px 24px 14px;
-  border-bottom: 1px solid rgba(120, 136, 160, 0.16);
+  border-bottom: 1px solid var(--xin-border-soft);
 }
 
 .connection-form h2,
 .settings-panel h2 {
   margin: 0;
-  color: #0f172a;
+  color: var(--xin-text);
   font-size: 19px;
   font-weight: 720;
   letter-spacing: -0.2px;
@@ -61,7 +64,7 @@
   overflow-y: auto;
   padding: 18px 24px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(137, 148, 166, 0.35) transparent;
+  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.35) transparent;
 }
 
 .form-body::-webkit-scrollbar {
@@ -71,7 +74,7 @@
 .form-body::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(137, 148, 166, 0.35);
+  background: rgb(var(--xin-neutral-rgb) / 0.35);
   background-clip: padding-box;
 }
 
@@ -82,8 +85,8 @@
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 24px 18px;
-  border-top: 1px solid rgba(120, 136, 160, 0.16);
-  background: rgba(255, 255, 255, 0.32);
+  border-top: 1px solid var(--xin-border-soft);
+  background: rgb(var(--xin-fill-rgb) / 0.32);
 }
 
 .form-grid {
@@ -100,12 +103,12 @@
 .form-error,
 .form-progress {
   margin: 0;
-  color: #64748b;
+  color: var(--xin-text-muted);
   font-size: 12px;
 }
 
 .form-error {
-  color: #dc2626;
+  color: var(--xin-danger-strong);
 }
 
 .segmented-control {
@@ -114,8 +117,8 @@
   gap: 5px;
   padding: 4px;
   border-radius: var(--xin-radius);
-  background: rgba(16, 26, 44, 0.06);
-  box-shadow: inset 0 1px 2px rgba(16, 26, 44, 0.05);
+  background: rgb(var(--xin-ink-rgb) / 0.06);
+  box-shadow: inset 0 1px 2px rgb(var(--xin-ink-rgb) / 0.05);
 }
 
 .segmented-control button {
@@ -124,7 +127,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #475569;
+  color: var(--xin-text-secondary);
   border: 0;
   border-radius: calc(var(--xin-radius) - 3px);
   background: transparent;
@@ -135,11 +138,11 @@
 }
 
 .segmented-control button.active {
-  color: #0757e6;
-  background: rgba(255, 255, 255, 0.94);
+  color: var(--xin-accent-deep);
+  background: rgb(var(--xin-fill-rgb) / 0.94);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 4px 14px rgba(20, 34, 62, 0.1);
+    0 1px 0 rgb(var(--xin-fill-rgb) / 0.9) inset,
+    0 4px 14px rgb(var(--xin-shadow-rgb) / 0.1);
 }
 
 .key-fields {
@@ -160,28 +163,28 @@
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  color: #64748b;
+  color: var(--xin-text-muted);
   border: 1px solid rgba(37, 99, 235, 0.16);
   border-radius: var(--xin-radius);
-  background: rgba(240, 245, 253, 0.7);
+  background: var(--xin-surface-raised);
   font-size: 16px;
 }
 
 .credential-save-option {
   padding: 10px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid rgb(var(--xin-neutral-rgb) / 0.18);
   border-radius: var(--xin-radius);
-  background: rgba(248, 250, 252, 0.5);
+  background: var(--xin-surface-raised-soft);
 }
 
 .credential-save-option label {
-  color: #344054;
+  color: var(--xin-text-body);
   font-size: 12px;
   font-weight: 780;
 }
 
 .credential-save-option p {
-  color: #64748b;
+  color: var(--xin-text-muted);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -193,14 +196,14 @@
   gap: 12px;
   min-height: 52px;
   padding: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border: 1px solid rgb(var(--xin-neutral-rgb) / 0.2);
   border-radius: var(--xin-radius);
-  background: rgba(248, 250, 252, 0.55);
+  background: var(--xin-surface-raised-soft);
 }
 
 .connection-test-panel.success {
   border-color: rgba(34, 197, 94, 0.24);
-  background: rgba(240, 253, 244, 0.7);
+  background: var(--xin-surface-success);
 }
 
 .test-action {
@@ -226,6 +229,9 @@
 .settings-body {
   min-height: 0;
   overflow-y: auto;
+  /* 只写 overflow-y 的话，另一轴的 visible 会被规范强制算成 auto，
+     于是底部平白多一条横向滚动条——必须显式关掉。 */
+  overflow-x: hidden;
   padding: 4px 24px 14px;
 }
 
@@ -236,15 +242,39 @@
   justify-content: space-between;
   gap: 16px;
   padding: 14px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  border-bottom: 1px solid rgb(var(--xin-neutral-rgb) / 0.14);
 }
 
 .settings-row:last-child {
   border-bottom: 0;
 }
 
+/* 文案块要能收缩，否则 small 的 nowrap 会给整行撑出一个撑不下的最小宽度 */
+.settings-row > div:first-child {
+  min-width: 0;
+}
+
 .settings-locale {
   min-width: 160px;
+}
+
+/* 外观：三选一的分段控件挤在行右侧会顶破弹窗宽度，改成整行铺满
+   （iOS 设置里的分段控件也是这么放的，三个选项等分更好点）。
+   注意本文件是全局 CSS（main.css @import 进来的），不是 SFC scoped 样式，
+   所以直接写后代选择器——:deep() 在这里是无效选择器。 */
+.settings-row-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.settings-appearance [role="tablist"] {
+  width: 100%;
+  margin: 0;
+}
+
+.settings-appearance [role="tab"] {
+  flex: 1;
 }
 
 .settings-row strong,
@@ -256,7 +286,7 @@
   max-width: 420px;
   overflow: hidden;
   margin-top: 5px;
-  color: #64748b;
+  color: var(--xin-text-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -156,7 +156,7 @@ function createConnection() {
 
 .quick-connect-trigger:hover {
   color: var(--xin-text);
-  background: rgba(255, 255, 255, 0.42);
+  background: rgb(var(--xin-fill-rgb) / 0.42);
 }
 
 .quick-connect-trigger:active {
@@ -165,12 +165,12 @@ function createConnection() {
 
 .quick-connect-trigger.open {
   color: var(--xin-accent-strong);
-  border-color: rgba(16, 26, 44, 0.07);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.8) 100%);
+  border-color: rgb(var(--xin-ink-rgb) / 0.07);
+  background: linear-gradient(180deg, rgb(var(--xin-fill-rgb) / 0.97) 0%, rgb(var(--xin-fill-rgb) / 0.8) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 1px 1px rgba(20, 34, 62, 0.05),
-    0 2px 6px -2px rgba(20, 34, 62, 0.12);
+    var(--xin-specular-strong),
+    0 1px 1px rgb(var(--xin-shadow-rgb) / 0.05),
+    0 2px 6px -2px rgb(var(--xin-shadow-rgb) / 0.12);
   backdrop-filter: var(--xin-glass-blur);
   -webkit-backdrop-filter: var(--xin-glass-blur);
 }

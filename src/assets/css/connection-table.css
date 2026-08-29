@@ -6,7 +6,7 @@
   background: var(--xin-glass);
   box-shadow:
     var(--xin-specular),
-    0 16px 34px rgba(20, 34, 62, 0.07);
+    0 16px 34px rgb(var(--xin-shadow-rgb) / 0.07);
   backdrop-filter: var(--xin-glass-blur);
 }
 
@@ -37,9 +37,9 @@
 }
 
 .connection-table tbody tr {
-  --status-color: #94a3b8;
-  --status-soft: rgba(148, 163, 184, 0.12);
-  border-bottom: 1px solid rgba(16, 26, 44, 0.05);
+  --status-color: var(--xin-status-idle);
+  --status-soft: rgb(var(--xin-neutral-rgb) / 0.12);
+  border-bottom: 1px solid rgb(var(--xin-ink-rgb) / 0.05);
   transition: background 120ms ease;
 }
 
@@ -48,27 +48,27 @@
 }
 
 .connection-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.55);
+  background: rgb(var(--xin-fill-rgb) / 0.55);
 }
 
 .connection-table tbody tr.connected {
   --status-color: var(--xin-success);
-  --status-soft: rgba(53, 184, 113, 0.15);
+  --status-soft: rgb(var(--xin-success-rgb) / 0.15);
 }
 
 .connection-table tbody tr.connecting {
   --status-color: var(--xin-warning);
-  --status-soft: rgba(215, 166, 65, 0.14);
+  --status-soft: rgb(var(--xin-warning-rgb) / 0.14);
 }
 
 .connection-table tbody tr.authRequired {
   --status-color: var(--xin-accent);
-  --status-soft: rgba(47, 109, 246, 0.14);
+  --status-soft: rgb(var(--xin-accent-rgb) / 0.14);
 }
 
 .connection-table tbody tr.error {
   --status-color: var(--xin-danger);
-  --status-soft: rgba(239, 68, 68, 0.12);
+  --status-soft: rgb(var(--xin-danger-rgb) / 0.12);
 }
 
 .col-name {
@@ -127,7 +127,7 @@ td.col-name {
   gap: 7px;
   height: 24px;
   padding: 0 10px;
-  color: #475569;
+  color: var(--xin-text-secondary);
   border-radius: 999px;
   background: var(--status-soft);
   font-size: 11px;

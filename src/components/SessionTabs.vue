@@ -151,7 +151,7 @@ watch(
 .home-tab:hover,
 .session-tab:hover {
   color: var(--xin-text);
-  background: rgba(255, 255, 255, 0.42);
+  background: rgb(var(--xin-fill-rgb) / 0.42);
 }
 
 /* iOS 的选中态靠「发丝描边 + 顶部高光 + 极紧的两层投影」立起来，
@@ -160,12 +160,12 @@ watch(
 .home-tab.active,
 .session-tab.active {
   color: var(--xin-text);
-  border-color: rgba(16, 26, 44, 0.07);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.8) 100%);
+  border-color: rgb(var(--xin-ink-rgb) / 0.07);
+  background: linear-gradient(180deg, rgb(var(--xin-fill-rgb) / 0.97) 0%, rgb(var(--xin-fill-rgb) / 0.8) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 1px 1px rgba(20, 34, 62, 0.05),
-    0 2px 6px -2px rgba(20, 34, 62, 0.12);
+    var(--xin-specular-strong),
+    0 1px 1px rgb(var(--xin-shadow-rgb) / 0.05),
+    0 2px 6px -2px rgb(var(--xin-shadow-rgb) / 0.12);
   backdrop-filter: var(--xin-glass-blur);
   -webkit-backdrop-filter: var(--xin-glass-blur);
 }
@@ -289,23 +289,23 @@ watch(
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #94a3b8;
-  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
+  background: var(--xin-status-idle);
+  box-shadow: 0 0 0 4px rgb(var(--xin-neutral-rgb) / 0.12);
 }
 
 .tab-status.authRequired {
   background: var(--xin-accent);
-  box-shadow: 0 0 0 4px rgba(47, 109, 246, 0.13);
+  box-shadow: 0 0 0 4px rgb(var(--xin-accent-rgb) / 0.13);
 }
 
 .tab-status.connected {
   background: var(--xin-success);
-  box-shadow: 0 0 0 4px rgba(53, 184, 113, 0.16);
+  box-shadow: 0 0 0 4px rgb(var(--xin-success-rgb) / 0.16);
 }
 
 .tab-status.connecting {
   background: var(--xin-warning);
-  box-shadow: 0 0 0 4px rgba(215, 166, 65, 0.14);
+  box-shadow: 0 0 0 4px rgb(var(--xin-warning-rgb) / 0.14);
   animation: tab-status-pulse 1.15s ease-in-out infinite;
 }
 
@@ -322,8 +322,8 @@ watch(
 }
 
 .tab-status.error {
-  background: #ef4444;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+  background: var(--xin-danger);
+  box-shadow: 0 0 0 4px rgb(var(--xin-danger-rgb) / 0.12);
 }
 
 .tab-title {
@@ -342,7 +342,7 @@ watch(
   justify-self: center;
   display: grid;
   place-items: center;
-  color: #7c8798;
+  color: var(--xin-text-soft);
   font-size: 13px;
   border: 0;
   border-radius: 50%;
@@ -362,8 +362,8 @@ watch(
 }
 
 .tab-close:hover {
-  color: #0f172a;
-  background: rgba(16, 26, 44, 0.09);
+  color: var(--xin-text);
+  background: rgb(var(--xin-ink-rgb) / 0.09);
 }
 
 .tab-close:active {

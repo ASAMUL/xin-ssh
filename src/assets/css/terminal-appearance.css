@@ -16,7 +16,7 @@
   border-left: 1px solid var(--xin-glass-border);
   border-radius: 0 0 var(--xin-radius-lg) 0;
   background: var(--xin-glass-strong);
-  box-shadow: -20px 0 48px rgba(15, 23, 42, 0.24);
+  box-shadow: -20px 0 48px rgb(var(--xin-shadow-rgb) / 0.24);
   backdrop-filter: var(--xin-glass-blur);
 }
 
@@ -52,7 +52,7 @@
   height: 28px;
   display: grid;
   place-items: center;
-  color: #64748b;
+  color: var(--xin-text-muted);
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -60,7 +60,7 @@
 
 .appearance-head button:hover {
   color: var(--xin-text);
-  background: rgba(148, 163, 184, 0.16);
+  background: rgb(var(--xin-neutral-rgb) / 0.16);
 }
 
 .appearance-body {
@@ -71,7 +71,7 @@
   overflow: auto;
   padding: 12px 14px 16px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(137, 148, 166, 0.34) transparent;
+  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.34) transparent;
 }
 
 .appearance-body::-webkit-scrollbar {
@@ -81,7 +81,7 @@
 .appearance-body::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(137, 148, 166, 0.32);
+  background: rgb(var(--xin-neutral-rgb) / 0.32);
   background-clip: padding-box;
 }
 
@@ -117,11 +117,11 @@
   text-align: left;
   border: 0;
   border-radius: 13px;
-  background: rgba(255, 255, 255, 0.5);
+  background: rgb(var(--xin-fill-rgb) / 0.5);
   /* 发丝描边走 ring 而不是 border：不占布局，也不会在圆角处露出锯齿 */
   box-shadow:
-    0 0 0 1px rgba(16, 26, 44, 0.09),
-    0 1px 2px rgba(20, 34, 62, 0.05);
+    0 0 0 1px rgb(var(--xin-ink-rgb) / 0.09),
+    0 1px 2px rgb(var(--xin-shadow-rgb) / 0.05);
   transition:
     box-shadow 160ms ease,
     transform 160ms cubic-bezier(0.32, 0.72, 0.24, 1);
@@ -131,7 +131,7 @@
   transform: translateY(-2px);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--card-accent) 45%, transparent),
-    0 8px 18px -8px rgba(20, 34, 62, 0.3);
+    0 8px 18px -8px rgb(var(--xin-shadow-rgb) / 0.3);
 }
 
 .theme-card:active {
@@ -141,7 +141,7 @@
 .theme-card.active {
   box-shadow:
     0 0 0 2px var(--card-accent),
-    0 8px 18px -10px rgba(20, 34, 62, 0.34);
+    0 8px 18px -10px rgb(var(--xin-shadow-rgb) / 0.34);
 }
 
 .theme-swatch {
@@ -196,6 +196,8 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  /* 这圈高光压在**主题自己的画布**上（卡片背景是 theme.screenBg），
+     不是应用表面，所以不跟随应用明暗——保持字面白，别换成 --xin-fill-rgb。 */
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
@@ -206,8 +208,8 @@
   gap: 6px;
   min-height: 28px;
   padding: 0 10px;
-  background: rgba(255, 255, 255, 0.62);
-  box-shadow: inset 0 1px 0 rgba(16, 26, 44, 0.07);
+  background: rgb(var(--xin-fill-rgb) / 0.62);
+  box-shadow: inset 0 1px 0 rgb(var(--xin-ink-rgb) / 0.07);
 }
 
 .theme-card-name span {
@@ -244,21 +246,21 @@
   color: var(--xin-text);
   border: 0;
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 0 1px rgba(16, 26, 44, 0.09);
+  background: rgb(var(--xin-fill-rgb) / 0.5);
+  box-shadow: 0 0 0 1px rgb(var(--xin-ink-rgb) / 0.09);
   transition:
     box-shadow 140ms ease,
     background 140ms ease;
 }
 
 .font-option:hover {
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 0 0 1px rgba(47, 109, 246, 0.32);
+  background: rgb(var(--xin-fill-rgb) / 0.78);
+  box-shadow: 0 0 0 1px rgb(var(--xin-accent-rgb) / 0.32);
 }
 
 .font-option.active {
-  background: rgba(47, 109, 246, 0.08);
-  box-shadow: 0 0 0 1.5px rgba(47, 109, 246, 0.5);
+  background: rgb(var(--xin-accent-rgb) / 0.08);
+  box-shadow: 0 0 0 1.5px rgb(var(--xin-accent-rgb) / 0.5);
 }
 
 .font-sample {
@@ -287,8 +289,8 @@
   color: var(--xin-text-muted);
   border: 0;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 0 1px rgba(16, 26, 44, 0.09);
+  background: rgb(var(--xin-fill-rgb) / 0.5);
+  box-shadow: 0 0 0 1px rgb(var(--xin-ink-rgb) / 0.09);
   font-size: 12px;
   font-weight: 620;
   font-variant-numeric: tabular-nums;
@@ -300,23 +302,23 @@
 
 .size-row button:hover {
   color: var(--xin-text);
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 0 0 1px rgba(47, 109, 246, 0.32);
+  background: rgb(var(--xin-fill-rgb) / 0.78);
+  box-shadow: 0 0 0 1px rgb(var(--xin-accent-rgb) / 0.32);
 }
 
 .size-row button.active {
   color: var(--xin-accent-strong);
-  background: rgba(47, 109, 246, 0.1);
-  box-shadow: 0 0 0 1.5px rgba(47, 109, 246, 0.5);
+  background: rgb(var(--xin-accent-rgb) / 0.1);
+  box-shadow: 0 0 0 1.5px rgb(var(--xin-accent-rgb) / 0.5);
 }
 
 /* —— 自定义背景图 —— */
 .background-preview {
   height: 74px;
   border-radius: 11px;
-  background-color: rgba(16, 26, 44, 0.06);
+  background-color: rgb(var(--xin-ink-rgb) / 0.06);
   background-position: center;
-  box-shadow: 0 0 0 1px rgba(16, 26, 44, 0.09);
+  box-shadow: 0 0 0 1px rgb(var(--xin-ink-rgb) / 0.09);
 }
 
 .background-actions {
@@ -333,9 +335,9 @@
 .background-note {
   margin: 0;
   padding: 7px 9px;
-  color: #8a6410;
+  color: var(--xin-warning-text);
   border-radius: 9px;
-  background: rgba(215, 166, 65, 0.13);
+  background: rgb(var(--xin-warning-rgb) / 0.13);
   font-size: 11px;
   line-height: 1.45;
 }

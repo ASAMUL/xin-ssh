@@ -19,7 +19,7 @@
   overflow: auto;
   padding: 14px 8px 40px 4px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(137, 148, 166, 0.34) transparent;
+  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.34) transparent;
 }
 
 .home-main::-webkit-scrollbar {
@@ -29,7 +29,7 @@
 .home-main::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(137, 148, 166, 0.32);
+  background: rgb(var(--xin-neutral-rgb) / 0.32);
   background-clip: padding-box;
 }
 
@@ -82,7 +82,7 @@
   background: var(--xin-glass);
   box-shadow:
     var(--xin-specular),
-    0 12px 30px rgba(20, 34, 62, 0.06);
+    0 12px 30px rgb(var(--xin-shadow-rgb) / 0.06);
   backdrop-filter: var(--xin-glass-blur);
 }
 
@@ -93,7 +93,7 @@
 .home-search :deep(input) {
   height: 38px;
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgb(var(--xin-fill-rgb) / 0.6);
 }
 
 .home-hero-actions :deep(button) {
@@ -121,7 +121,7 @@
   background: var(--xin-glass);
   box-shadow:
     var(--xin-specular),
-    0 14px 30px rgba(20, 34, 62, 0.06);
+    0 14px 30px rgb(var(--xin-shadow-rgb) / 0.06);
   backdrop-filter: var(--xin-glass-blur);
   text-align: left;
   cursor: pointer;
@@ -133,11 +133,11 @@
 }
 
 .home-quick-card:hover:not(:disabled) {
-  border-color: rgba(47, 109, 246, 0.3);
-  background: rgba(255, 255, 255, 0.72);
+  border-color: rgb(var(--xin-accent-rgb) / 0.3);
+  background: rgb(var(--xin-fill-rgb) / 0.72);
   box-shadow:
     var(--xin-specular),
-    0 20px 42px rgba(20, 34, 62, 0.11);
+    0 20px 42px rgb(var(--xin-shadow-rgb) / 0.11);
   transform: translateY(-2px);
 }
 
@@ -158,17 +158,17 @@
 
 .home-quick-icon.blue {
   color: var(--xin-accent);
-  background: rgba(47, 109, 246, 0.13);
+  background: rgb(var(--xin-accent-rgb) / 0.13);
 }
 
 .home-quick-icon.green {
   color: #1ea467;
-  background: rgba(34, 176, 108, 0.14);
+  background: rgb(var(--xin-success-rgb) / 0.14);
 }
 
 .home-quick-icon.amber {
   color: #d78e2c;
-  background: rgba(232, 153, 60, 0.16);
+  background: rgb(var(--xin-warning-rgb) / 0.16);
 }
 
 .home-quick-icon.purple {
@@ -244,7 +244,7 @@
 .home-view-toggle :deep(button.active) {
   color: #ffffff;
   background: linear-gradient(180deg, #5f8bff 0%, var(--xin-accent-strong) 100%);
-  box-shadow: 0 6px 14px rgba(47, 109, 246, 0.32);
+  box-shadow: 0 6px 14px rgb(var(--xin-accent-rgb) / 0.32);
 }
 
 /* —— 卡片网格 —— */
@@ -276,7 +276,7 @@
   max-width: 100%;
   min-height: 27px;
   padding: 0 12px;
-  color: #334155;
+  color: var(--xin-text-body);
   border: 1px solid var(--xin-glass-border);
   border-radius: 999px;
   background: var(--xin-glass);

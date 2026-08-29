@@ -7,30 +7,93 @@
 
 :root {
   --ui-radius: 0.7rem;
+
+  /* —— 叠加色的基色通道 ——
+     全应用的半透明叠加（玻璃填充、描边墨色、投影、强调底、中性 hover）都写成
+     `rgb(var(--xin-*-rgb) / <alpha>)`：alpha 留在使用处（各处需要的浓度本来就不同，
+     强行收进固定阶梯会改变现有观感），只把**基色**抽出来。
+     深色模式于是变成「翻这几个基色 + 文本阶梯」，而不是逐条改几百个色值。 */
+  --xin-fill-rgb: 255 255 255;
+  --xin-ink-rgb: 16 26 44;
+  --xin-shadow-rgb: 20 34 62;
+  --xin-neutral-rgb: 137 148 166;
+  --xin-accent-rgb: 47 109 246;
+  --xin-success-rgb: 53 184 113;
+  --xin-warning-rgb: 215 166 65;
+  --xin-danger-rgb: 239 68 68;
+
+  /* —— 文本灰阶：深 → 浅 ——
+     文字/图标只走这 7 级。深色模式整条阶梯换一组值即可；
+     新 UI 别再写死灰色，否则暗色下必然漏翻一处。 */
   --xin-text: #101a2c;
+  --xin-text-strong: #182230;
+  --xin-text-body: #344054;
+  --xin-text-secondary: #475569;
   --xin-text-muted: #5d6c84;
   --xin-text-soft: #8a94a6;
+  --xin-text-faint: #98a2b3;
+
+  /* —— 品牌与状态实色 —— */
   --xin-accent: #2f6df6;
   --xin-accent-strong: #155eef;
-  --xin-accent-soft: rgba(47, 109, 246, 0.12);
+  --xin-accent-deep: #0757e6;
   --xin-success: #35b871;
+  --xin-success-strong: #22b06c;
   --xin-warning: #d7a641;
+  --xin-warning-strong: #d9951a;
   --xin-danger: #ef4444;
-  --xin-border: rgba(120, 136, 160, 0.22);
-  --xin-border-strong: rgba(111, 123, 143, 0.34);
-  /* liquid glass surfaces */
-  --xin-glass: rgba(255, 255, 255, 0.55);
-  --xin-glass-strong: rgba(255, 255, 255, 0.76);
-  --xin-glass-muted: rgba(248, 250, 253, 0.45);
-  --xin-glass-border: rgba(255, 255, 255, 0.62);
-  --xin-glass-edge: rgba(16, 26, 44, 0.09);
+  --xin-danger-strong: #dc2626;
+  --xin-danger-deep: #b91c1c;
+  --xin-danger-text: #991b1b;
+  --xin-warning-text: #8a6410;
+  --xin-status-idle: #94a3b8;
+
+  /* —— 常用叠加的命名快捷方式（高频组合，避免每处重写 alpha）—— */
+  --xin-border-rgb: 120 136 160;
+  --xin-accent-soft: rgb(var(--xin-accent-rgb) / 0.12);
+  --xin-border: rgb(var(--xin-border-rgb) / 0.22);
+  --xin-border-soft: rgb(var(--xin-border-rgb) / 0.16);
+  --xin-border-strong: rgb(var(--xin-border-rgb) / 0.34);
+
+  /* —— 环境光 ——
+     玻璃要有东西可折射，窗口底铺三团彩色光晕；深色下换成低明度高饱和的一组，
+     否则在近黑画布上会糊成灰。 */
+  --xin-ambient-a: rgb(88 134 255 / 0.18);
+  --xin-ambient-b: rgb(56 189 248 / 0.15);
+  --xin-ambient-c: rgb(167 139 250 / 0.14);
+
+  /* —— 液态玻璃表面 ——
+     深色模式下 fill 基色换成一层**比画布更亮**的靛蓝（深色 UI 里"抬高"= 变亮），
+     而不是把白色反成黑：直接反色只会得到一块脏灰，玻璃感全靠高光和边缘交代。 */
+  --xin-glass: rgb(var(--xin-fill-rgb) / 0.55);
+  --xin-glass-strong: rgb(var(--xin-fill-rgb) / 0.76);
+  --xin-glass-muted: rgb(248 250 253 / 0.45);
+  --xin-glass-border: rgb(var(--xin-fill-rgb) / 0.62);
+  --xin-glass-edge: rgb(var(--xin-ink-rgb) / 0.09);
   --xin-glass-blur: blur(28px) saturate(1.55);
-  --xin-specular: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+  --xin-specular: inset 0 1px 0 rgb(255 255 255 / 0.68);
+  --xin-specular-strong: inset 0 1px 0 rgb(255 255 255 / 0.92);
   --xin-surface: var(--xin-glass);
   --xin-surface-strong: var(--xin-glass-strong);
   --xin-surface-muted: var(--xin-glass-muted);
-  --xin-shadow-soft: 0 10px 32px rgba(20, 34, 62, 0.08);
-  --xin-shadow-panel: 0 24px 64px rgba(20, 34, 62, 0.14);
+  /* 带语义的内嵌面：列表头、内联提示条、状态区块。深色模式最容易在这类
+     「浅色调底」上翻车（淡粉淡绿直接变成刺眼白块），所以单独立令牌。 */
+  --xin-surface-raised: rgb(249 251 253 / 0.86);
+  --xin-surface-raised-soft: rgb(248 250 252 / 0.55);
+  --xin-surface-accent: rgb(239 244 255 / 0.82);
+  --xin-surface-success: rgb(240 253 244 / 0.7);
+  --xin-surface-danger: rgb(255 245 245 / 0.82);
+  --xin-shadow-soft: 0 10px 32px rgb(var(--xin-shadow-rgb) / 0.08);
+  --xin-shadow-panel: 0 24px 64px rgb(var(--xin-shadow-rgb) / 0.14);
+
+  /* —— 画布底色：窗口与首页的实底 ——
+     Tauri 里 .native-glass 会把画布铺成半透明好透出系统 Mica，所以基色
+     也得留成通道形式，否则深色模式下那层窗底会继续发白。 */
+  --xin-canvas-rgb: 238 242 249;
+  --xin-canvas-raised-rgb: 247 249 253;
+  --xin-canvas: rgb(var(--xin-canvas-rgb));
+  --xin-canvas-raised: rgb(var(--xin-canvas-raised-rgb));
+
   --xin-radius-xl: 22px;
   --xin-radius-lg: 16px;
   --xin-radius: 12px;
@@ -47,10 +110,82 @@
     system-ui,
     sans-serif;
   color: var(--xin-text);
-  background: #eef2f9;
+  background: var(--xin-canvas);
   font-family: var(--xin-font-ui);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+/* ————————————————————————————————————————————————————————————
+   深色模式。类名由 utils/appearanceMode.js 挂在 <html> 上。
+   同一个 .dark 也让 Nuxt UI v4 整体翻面——它不用 dark: 变体，而是靠
+   .dark 重定义 --ui-* 语义变量，所以这里不用为任何 Nuxt UI 控件写 CSS。
+
+   三条深色玻璃的设计原则（都不是「把浅色反过来」）：
+   1. 抬高 = 变亮。浅色下面板靠白色叠加从画布里"浮"出来；深色下同理，
+      fill 基色取一层比画布更亮的靛蓝，0.55 alpha 压上去正好是抬起一级。
+   2. 边缘承担全部结构。深色下投影几乎不可见（黑压黑），所以 ink 基色翻成
+      亮蓝白，那些 0.05~0.14 的发丝描边在暗底上反而更要紧。
+   3. 高光必须留白。--xin-specular 不跟 fill 走（跟了就变成一条靛蓝线），
+      固定用白色、压到 0.08——这一条亮边是"玻璃"和"灰塑料"的分界。
+   ———————————————————————————————————————————————————————————— */
+.dark {
+  --xin-fill-rgb: 48 62 92;
+  --xin-ink-rgb: 176 196 236;
+  --xin-shadow-rgb: 0 0 0;
+  --xin-neutral-rgb: 158 178 214;
+  --xin-accent-rgb: 96 145 255;
+  --xin-success-rgb: 69 205 136;
+  --xin-warning-rgb: 229 185 95;
+  --xin-danger-rgb: 255 107 107;
+  --xin-border-rgb: 150 172 210;
+
+  /* 阶梯的**对比语义**不变，只是明度整条反过来：text 最高对比，faint 最低 */
+  --xin-text: #e8eefc;
+  --xin-text-strong: #ffffff;
+  --xin-text-body: #c3cfe6;
+  --xin-text-secondary: #a6b3cd;
+  --xin-text-muted: #8794b0;
+  --xin-text-soft: #6c7995;
+  --xin-text-faint: #5a677f;
+
+  /* 「更强调」在浅色下是更深，在深色下是更亮 */
+  --xin-accent: #6091ff;
+  --xin-accent-strong: #86adff;
+  --xin-accent-deep: #a8c6ff;
+  --xin-success: #45cd88;
+  --xin-success-strong: #6bdca2;
+  --xin-warning: #e5b95f;
+  --xin-warning-strong: #f0c877;
+  --xin-danger: #ff6b6b;
+  --xin-danger-strong: #ff8585;
+  --xin-danger-deep: #ffa0a0;
+  --xin-danger-text: #ffb0b0;
+  --xin-warning-text: #e8c489;
+  --xin-status-idle: #64748b;
+
+  --xin-ambient-a: rgb(76 116 255 / 0.22);
+  --xin-ambient-b: rgb(34 170 230 / 0.14);
+  --xin-ambient-c: rgb(150 110 250 / 0.18);
+
+  --xin-glass-muted: rgb(26 34 54 / 0.5);
+  /* 玻璃的亮边：浅色下是白 0.62，深色下若跟着 fill 走会变成靛蓝，必须单独给 */
+  --xin-glass-border: rgb(190 210 245 / 0.14);
+  --xin-glass-edge: rgb(var(--xin-ink-rgb) / 0.14);
+  --xin-specular: inset 0 1px 0 rgb(255 255 255 / 0.08);
+  --xin-specular-strong: inset 0 1px 0 rgb(255 255 255 / 0.12);
+  /* 黑影在暗底上本来就弱，加大 alpha 找回层次 */
+  --xin-shadow-soft: 0 10px 32px rgb(var(--xin-shadow-rgb) / 0.32);
+  --xin-shadow-panel: 0 24px 64px rgb(var(--xin-shadow-rgb) / 0.5);
+
+  --xin-canvas-rgb: 10 14 24;
+  --xin-canvas-raised-rgb: 17 23 38;
+
+  --xin-surface-raised: rgb(38 48 72 / 0.6);
+  --xin-surface-raised-soft: rgb(38 48 72 / 0.38);
+  --xin-surface-accent: rgb(34 52 96 / 0.6);
+  --xin-surface-success: rgb(22 52 38 / 0.6);
+  --xin-surface-danger: rgb(64 26 30 / 0.62);
 }
 
 * {
@@ -67,7 +202,7 @@ body,
 
 body {
   overflow: hidden;
-  background: #eef2f9;
+  background: var(--xin-canvas);
 }
 
 /* Base form styles live in the `base` cascade layer so Tailwind utility
@@ -91,8 +226,8 @@ button {
    与玻璃主题冲突；统一改成系统蓝。此规则必须保持在 layer 之外，
    以覆盖 utilities 层里的 ring 颜色。 */
 :where(input, select, textarea, button, [role="checkbox"], [role="radio"], [role="switch"], [role="combobox"]):focus-visible {
-  --tw-ring-color: rgba(47, 109, 246, 0.55);
-  outline-color: rgba(47, 109, 246, 0.55);
+  --tw-ring-color: rgb(var(--xin-accent-rgb) / 0.55);
+  outline-color: rgb(var(--xin-accent-rgb) / 0.55);
 }
 
 .spin-icon {
@@ -119,10 +254,10 @@ button {
   overflow: hidden;
   /* soft ambient color field so glass panels have something to refract */
   background:
-    radial-gradient(1100px 720px at 6% -12%, rgba(88, 134, 255, 0.18), transparent 62%),
-    radial-gradient(920px 640px at 102% -4%, rgba(56, 189, 248, 0.15), transparent 58%),
-    radial-gradient(1100px 860px at 50% 118%, rgba(167, 139, 250, 0.14), transparent 62%),
-    linear-gradient(180deg, #f7f9fd 0%, #eef2f9 100%);
+    radial-gradient(1100px 720px at 6% -12%, var(--xin-ambient-a), transparent 62%),
+    radial-gradient(920px 640px at 102% -4%, var(--xin-ambient-b), transparent 58%),
+    radial-gradient(1100px 860px at 50% 118%, var(--xin-ambient-c), transparent 62%),
+    linear-gradient(180deg, var(--xin-canvas-raised) 0%, var(--xin-canvas) 100%);
 }
 
 /* Inside Tauri the window itself is transparent with a native Mica/Acrylic
@@ -135,10 +270,10 @@ button {
 
 .native-glass .desktop-window {
   background:
-    radial-gradient(1100px 720px at 6% -12%, rgba(88, 134, 255, 0.15), transparent 62%),
-    radial-gradient(920px 640px at 102% -4%, rgba(56, 189, 248, 0.12), transparent 58%),
-    radial-gradient(1100px 860px at 50% 118%, rgba(167, 139, 250, 0.12), transparent 62%),
-    linear-gradient(180deg, rgba(247, 249, 253, 0.84) 0%, rgba(238, 242, 249, 0.88) 100%);
+    radial-gradient(1100px 720px at 6% -12%, var(--xin-ambient-a), transparent 62%),
+    radial-gradient(920px 640px at 102% -4%, var(--xin-ambient-b), transparent 58%),
+    radial-gradient(1100px 860px at 50% 118%, var(--xin-ambient-c), transparent 62%),
+    linear-gradient(180deg, rgb(var(--xin-canvas-raised-rgb) / 0.84) 0%, rgb(var(--xin-canvas-rgb) / 0.88) 100%);
 }
 
 /* Title bar melts into the window surface: no fill, no seam — the session
@@ -183,7 +318,7 @@ button {
   height: 18px;
   margin-left: 13px;
   border-radius: 1px;
-  background: rgba(16, 26, 44, 0.14);
+  background: rgb(var(--xin-ink-rgb) / 0.14);
 }
 
 .app-dot {
@@ -194,10 +329,10 @@ button {
   color: #ffffff;
   font-size: 15px;
   border-radius: 9px;
-  background: linear-gradient(145deg, #83a7ff, #2f6df6);
+  background: linear-gradient(145deg, #83a7ff, var(--xin-accent));
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.4) inset,
-    0 6px 16px rgba(47, 109, 246, 0.3);
+    0 1px 0 rgb(var(--xin-fill-rgb) / 0.4) inset,
+    0 6px 16px rgb(var(--xin-accent-rgb) / 0.3);
 }
 
 .window-drag-space {
@@ -216,17 +351,17 @@ button {
   width: 38px;
   height: 38px;
   justify-content: center;
-  color: #344054;
+  color: var(--xin-text-body);
   border-radius: 11px;
 }
 
 .window-tools button:hover {
-  background: rgba(137, 148, 166, 0.14);
+  background: rgb(var(--xin-neutral-rgb) / 0.14);
 }
 
 .window-tools button.transfer-entry-active {
-  color: #0757e6;
-  background: rgba(7, 87, 230, 0.12);
+  color: var(--xin-accent-deep);
+  background: rgb(var(--xin-accent-rgb) / 0.12);
 }
 
 .window-controls {
@@ -241,19 +376,19 @@ button {
   height: 38px;
   display: grid;
   place-items: center;
-  color: #344054;
+  color: var(--xin-text-body);
   border: 0;
   border-radius: 11px;
   background: transparent;
 }
 
 .window-control:hover {
-  background: rgba(137, 148, 166, 0.14);
+  background: rgb(var(--xin-neutral-rgb) / 0.14);
 }
 
 .window-control.close:hover {
   color: #ffffff;
-  background: #ef4444;
+  background: var(--xin-danger);
 }
 
 .window-controls.mac {
@@ -296,7 +431,7 @@ button {
 .startup-state {
   align-content: center;
   gap: 18px;
-  color: #475569;
+  color: var(--xin-text-secondary);
 }
 
 .startup-mark,
@@ -310,7 +445,7 @@ button {
   border-radius: 20px;
   background: linear-gradient(145deg, #7fa3ff, #4264f4);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.42) inset,
+    0 1px 0 rgb(var(--xin-fill-rgb) / 0.42) inset,
     0 20px 44px rgba(63, 99, 242, 0.28);
 }
 
@@ -319,8 +454,8 @@ button {
 .cta-button {
   background: linear-gradient(180deg, #5f8bff 0%, var(--xin-accent-strong) 100%);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.32) inset,
-    0 12px 26px rgba(47, 109, 246, 0.32);
+    0 1px 0 rgb(var(--xin-fill-rgb) / 0.32) inset,
+    0 12px 26px rgb(var(--xin-accent-rgb) / 0.32);
   transition:
     box-shadow 140ms ease,
     filter 140ms ease;
@@ -329,8 +464,8 @@ button {
 .cta-button:hover:not(:disabled) {
   filter: brightness(1.05);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.32) inset,
-    0 14px 30px rgba(47, 109, 246, 0.4);
+    0 1px 0 rgb(var(--xin-fill-rgb) / 0.32) inset,
+    0 14px 30px rgb(var(--xin-accent-rgb) / 0.4);
 }
 
 .cta-button:disabled {
@@ -377,17 +512,17 @@ button {
   flex-direction: column;
   gap: 6px;
   padding: 14px 16px;
-  color: #991b1b;
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  color: var(--xin-danger-text);
+  border: 1px solid rgb(var(--xin-danger-rgb) / 0.3);
   border-radius: var(--xin-radius-lg);
-  background: rgba(255, 245, 245, 0.82);
+  background: var(--xin-surface-danger);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 16px 38px rgba(15, 23, 42, 0.16);
+    var(--xin-specular),
+    0 16px 38px rgb(var(--xin-shadow-rgb) / 0.16);
   backdrop-filter: var(--xin-glass-blur);
 }
 
 ::selection {
   color: #ffffff;
-  background: #0757e6;
+  background: var(--xin-accent-deep);
 }

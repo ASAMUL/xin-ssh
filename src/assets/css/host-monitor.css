@@ -5,7 +5,7 @@
   min-height: 0;
   display: flex;
   overflow: hidden;
-  color: #1d2939;
+  color: var(--xin-text-strong);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -22,7 +22,7 @@
   overflow: hidden auto;
   padding: 0;
   scrollbar-width: thin;
-  scrollbar-color: rgba(152, 162, 179, 0.3) transparent;
+  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.3) transparent;
 }
 
 .monitor-scroll::-webkit-scrollbar {
@@ -32,7 +32,7 @@
 .monitor-scroll::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(152, 162, 179, 0.34);
+  background: rgb(var(--xin-neutral-rgb) / 0.34);
   background-clip: padding-box;
 }
 
@@ -44,7 +44,7 @@
   background: var(--xin-glass);
   box-shadow:
     var(--xin-specular),
-    0 10px 24px rgba(20, 34, 62, 0.06);
+    0 10px 24px rgb(var(--xin-shadow-rgb) / 0.06);
   backdrop-filter: var(--xin-glass-blur);
 }
 
@@ -75,7 +75,7 @@
 }
 
 .connection-status-row {
-  color: #1f2937;
+  color: var(--xin-text-strong);
   font-size: 12px;
   font-weight: 760;
   line-height: 1.2;
@@ -92,7 +92,7 @@
 }
 
 .monitor-address small {
-  color: #667085;
+  color: var(--xin-text-muted);
   font-size: 11px;
   line-height: 1.2;
 }
@@ -100,7 +100,7 @@
 .monitor-address strong {
   min-width: 0;
   overflow: hidden;
-  color: #182230;
+  color: var(--xin-text-strong);
   font-size: 17px;
   font-weight: 700;
   line-height: 1.14;
@@ -114,7 +114,7 @@
   border-radius: 10px;
   background: linear-gradient(180deg, #1f70ff 0%, #115cf3 100%);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.3) inset,
+    0 1px 0 rgb(var(--xin-fill-rgb) / 0.3) inset,
     0 8px 16px rgba(24, 99, 255, 0.26);
   font-size: 12px;
   font-weight: 780;
@@ -126,7 +126,7 @@
 
 .monitor-card-heading {
   margin: 0;
-  color: #1f2937;
+  color: var(--xin-text-strong);
   font-size: 12px;
   font-weight: 800;
   line-height: 1.2;
@@ -171,14 +171,14 @@
 
 .compact-info-list dt {
   flex: 0 0 auto;
-  color: #667085;
+  color: var(--xin-text-muted);
   font-weight: 640;
 }
 
 .compact-info-list dd {
   min-width: 0;
   overflow: hidden;
-  color: #344054;
+  color: var(--xin-text-body);
   font-weight: 760;
   text-align: right;
   text-overflow: ellipsis;
@@ -212,7 +212,7 @@
 }
 
 .resource-topline {
-  color: #667085;
+  color: var(--xin-text-muted);
   font-size: 11px;
   line-height: 1.2;
 }
@@ -229,12 +229,12 @@
 
 .resource-icon {
   flex: 0 0 auto;
-  color: #98a2b3;
+  color: var(--xin-text-faint);
 }
 
 .resource-topline strong {
   flex: 0 0 auto;
-  color: #344054;
+  color: var(--xin-text-body);
   font-size: 11px;
   font-weight: 820;
 }
@@ -253,12 +253,12 @@
   overflow: hidden;
   border: 0;
   border-radius: 999px;
-  background: rgba(16, 26, 44, 0.09);
+  background: rgb(var(--xin-ink-rgb) / 0.09);
 }
 
 .resource-row :deep(.monitor-progress-indicator) {
   border-radius: inherit;
-  background: linear-gradient(90deg, #2f6df6 0%, #4d8bff 100%);
+  background: linear-gradient(90deg, var(--xin-accent) 0%, #4d8bff 100%);
 }
 
 .metric-sparkline {
@@ -284,7 +284,7 @@
   min-width: 0;
   display: block;
   overflow: hidden;
-  color: #667085;
+  color: var(--xin-text-muted);
   font-size: 10px;
   font-weight: 650;
   line-height: 1.15;
@@ -304,7 +304,7 @@
   grid-template-columns: minmax(0, 1fr) 38px 8px;
   align-items: center;
   gap: 7px;
-  color: #344054;
+  color: var(--xin-text-body);
   font-size: 11px;
   line-height: 1.18;
 }
@@ -317,7 +317,7 @@
 }
 
 .process-row strong {
-  color: #344054;
+  color: var(--xin-text-body);
   font-weight: 760;
   text-align: right;
 }
@@ -335,7 +335,7 @@
 
 .monitor-empty {
   margin: 0;
-  color: #98a2b3;
+  color: var(--xin-text-faint);
   font-size: 11px;
   line-height: 1.2;
 }
@@ -349,12 +349,12 @@
   align-items: center;
   justify-content: flex-end;
   gap: 5px;
-  color: #344054;
+  color: var(--xin-text-body);
 }
 
 .network-info-list dd.upload,
 .network-info-list dd.download {
-  color: #344054;
+  color: var(--xin-text-body);
   font-size: 12px;
   font-weight: 820;
 }
@@ -366,17 +366,17 @@
 
 :deep(.system-info-detail-panel) {
   width: min(430px, calc(100vw - 30px));
-  color: #1d2939;
+  color: var(--xin-text-strong);
   border-left: 1px solid var(--xin-glass-border);
-  background: rgba(248, 250, 253, 0.86);
-  box-shadow: -18px 0 46px rgba(15, 23, 42, 0.16);
+  background: var(--xin-surface-raised);
+  box-shadow: -18px 0 46px rgb(var(--xin-shadow-rgb) / 0.16);
   backdrop-filter: var(--xin-glass-blur);
 }
 
 :deep(.system-info-detail-header) {
   padding: 16px 18px 12px;
   border-bottom: 1px solid var(--xin-glass-edge);
-  background: rgba(255, 255, 255, 0.5);
+  background: rgb(var(--xin-fill-rgb) / 0.5);
 }
 
 :deep(.system-info-detail-body) {
@@ -394,15 +394,15 @@
   padding: 12px;
   border: 1px solid var(--xin-glass-border);
   border-radius: var(--xin-radius-lg);
-  background: rgba(255, 255, 255, 0.66);
+  background: rgb(var(--xin-fill-rgb) / 0.66);
   box-shadow:
     var(--xin-specular),
-    0 8px 18px rgba(16, 24, 40, 0.04);
+    0 8px 18px rgb(var(--xin-ink-rgb) / 0.04);
 }
 
 .detail-section h3 {
   margin: 0;
-  color: #182230;
+  color: var(--xin-text-strong);
   font-size: 13px;
   font-weight: 820;
   line-height: 1.2;
@@ -430,14 +430,14 @@
 }
 
 .detail-list dt {
-  color: #667085;
+  color: var(--xin-text-muted);
   font-weight: 680;
 }
 
 .detail-list dd {
   min-width: 0;
   overflow: hidden;
-  color: #344054;
+  color: var(--xin-text-body);
   font-weight: 760;
   text-align: right;
   text-overflow: ellipsis;
@@ -455,13 +455,13 @@
   min-width: 0;
   padding: 9px;
   border-radius: 10px;
-  background: rgba(16, 26, 44, 0.045);
+  background: rgb(var(--xin-ink-rgb) / 0.045);
 }
 
 .detail-mini-block > strong {
   min-width: 0;
   overflow: hidden;
-  color: #182230;
+  color: var(--xin-text-strong);
   font-size: 12px;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -481,7 +481,7 @@
   align-items: center;
   padding: 8px 9px;
   border-radius: 10px;
-  background: rgba(16, 26, 44, 0.045);
+  background: rgb(var(--xin-ink-rgb) / 0.045);
 }
 
 .detail-process-row div {
@@ -499,18 +499,18 @@
 }
 
 .detail-process-row strong {
-  color: #344054;
+  color: var(--xin-text-body);
   font-size: 12px;
   font-weight: 780;
 }
 
 .detail-process-row small {
-  color: #667085;
+  color: var(--xin-text-muted);
   font-size: 10px;
 }
 
 .detail-process-row span {
-  color: #344054;
+  color: var(--xin-text-body);
   font-size: 12px;
   font-weight: 780;
   text-align: right;

@@ -60,7 +60,7 @@ const conflictDialog = reactive({
 });
 const fileSearchInputUi = {
   root: "file-search",
-  base: "h-8 rounded-lg bg-default ps-8 pe-3 text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] placeholder:text-dimmed",
+  base: "h-8 rounded-lg bg-default ps-8 pe-3 text-xs font-semibold shadow-[inset_0_1px_0_rgb(var(--xin-fill-rgb) / 0.9)] placeholder:text-dimmed",
   leading: "ps-2.5",
   leadingIcon: "size-4 text-muted",
 };

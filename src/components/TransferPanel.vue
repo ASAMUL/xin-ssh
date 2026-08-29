@@ -352,13 +352,13 @@ function formatTaskTime(timestamp) {
   display: grid;
   gap: 10px;
   padding: 14px;
-  color: #0f172a;
+  color: var(--xin-text);
   border: 1px solid var(--xin-glass-border);
   border-radius: var(--xin-radius-lg);
   background: var(--xin-glass-strong);
   box-shadow:
     var(--xin-specular),
-    0 24px 60px rgba(15, 23, 42, 0.22);
+    0 24px 60px rgb(var(--xin-shadow-rgb) / 0.22);
   backdrop-filter: var(--xin-glass-blur);
 }
 
@@ -384,7 +384,7 @@ function formatTaskTime(timestamp) {
 .transfer-head span,
 .transfer-copy span {
   overflow: hidden;
-  color: #64748b;
+  color: var(--xin-text-muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -413,7 +413,7 @@ function formatTaskTime(timestamp) {
   gap: 7px;
   margin: 0;
   padding: 22px 0 26px;
-  color: #94a3b8;
+  color: var(--xin-status-idle);
   font-size: 12px;
   font-weight: 640;
 }
@@ -429,9 +429,9 @@ function formatTaskTime(timestamp) {
   align-items: center;
   gap: 8px;
   padding: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid rgb(var(--xin-neutral-rgb) / 0.16);
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgb(var(--xin-fill-rgb) / 0.55);
 }
 
 .transfer-icon {
@@ -439,7 +439,7 @@ function formatTaskTime(timestamp) {
   height: 24px;
   display: grid;
   place-items: center;
-  color: #0757e6;
+  color: var(--xin-accent-deep);
 }
 
 .transfer-task.download .transfer-icon {
@@ -447,7 +447,7 @@ function formatTaskTime(timestamp) {
 }
 
 .transfer-task.failed .transfer-icon {
-  color: #dc2626;
+  color: var(--xin-danger-strong);
 }
 
 .transfer-task.completed .transfer-icon {
@@ -455,7 +455,7 @@ function formatTaskTime(timestamp) {
 }
 
 .transfer-task.canceled .transfer-icon {
-  color: #64748b;
+  color: var(--xin-text-muted);
 }
 
 .transfer-copy {
@@ -474,7 +474,7 @@ function formatTaskTime(timestamp) {
 }
 
 .transfer-task small {
-  color: #64748b;
+  color: var(--xin-text-muted);
   font-size: 11px;
   font-weight: 720;
 }
@@ -493,7 +493,7 @@ function formatTaskTime(timestamp) {
   height: 4px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(16, 26, 44, 0.09);
+  background: rgb(var(--xin-ink-rgb) / 0.09);
 }
 
 .task-progress span,
@@ -501,7 +501,7 @@ function formatTaskTime(timestamp) {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #0757e6, #2f8cff);
+  background: linear-gradient(90deg, var(--xin-accent-deep), #2f8cff);
 }
 
 .transfer-task.download .task-progress span {
@@ -512,7 +512,7 @@ function formatTaskTime(timestamp) {
   height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(16, 26, 44, 0.09);
+  background: rgb(var(--xin-ink-rgb) / 0.09);
 }
 
 @media (max-width: 980px) {

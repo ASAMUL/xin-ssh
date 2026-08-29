@@ -481,6 +481,11 @@ export const messages = {
       keepaliveOff: "关闭",
       keepaliveSeconds: "{seconds} 秒",
       workspaceDir: "用户配置目录",
+      appearance: "外观",
+      appearanceHint: "应用界面的明暗；终端配色在终端工具栏的「外观」里单独设置",
+      appearanceSystem: "跟随系统",
+      appearanceLight: "浅色",
+      appearanceDark: "深色",
       close: "关闭",
     },
     errors: {
@@ -1070,6 +1075,11 @@ export const messages = {
       keepaliveOff: "Off",
       keepaliveSeconds: "{seconds} s",
       workspaceDir: "User config directory",
+      appearance: "Appearance",
+      appearanceHint: "Light or dark for the app UI; terminal colours are set separately in the terminal's Appearance panel",
+      appearanceSystem: "System",
+      appearanceLight: "Light",
+      appearanceDark: "Dark",
       close: "Close",
     },
     errors: {

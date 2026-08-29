@@ -64,7 +64,7 @@
 .terminal-search-flag.active {
   color: #ffffff;
   background: var(--xin-accent);
-  box-shadow: 0 2px 8px rgba(47, 109, 246, 0.35);
+  box-shadow: 0 2px 8px rgb(var(--xin-accent-rgb) / 0.35);
 }
 
 .terminal-search-flag.active:hover {

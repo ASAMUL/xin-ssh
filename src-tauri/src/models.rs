@@ -64,6 +64,9 @@ pub struct WorkspaceSettings {
     // SSH keepalive 间隔（秒），0 = 禁用；终端与隧道连接共用
     #[serde(default = "default_ssh_keepalive_seconds")]
     pub ssh_keepalive_seconds: u64,
+    // 应用明暗模式：system | light | dark（终端配色是另一套，见 terminal_theme）
+    #[serde(default = "default_appearance_mode")]
+    pub appearance_mode: String,
 }
 
 // 新装、settings.json 缺字段、以及文件损坏回退，都落到这一份默认值上
@@ -86,6 +89,7 @@ impl Default for WorkspaceSettings {
             home_view_mode: default_home_view_mode(),
             ssh_keepalive_seconds: default_ssh_keepalive_seconds(),
             terminal_background: None,
+            appearance_mode: default_appearance_mode(),
         }
     }
 }
@@ -134,6 +138,10 @@ pub fn default_locale() -> String {
     "zh-CN".to_string()
 }
 
+/// 默认跟随系统明暗，前端 utils/appearanceMode.js 负责解析成实际的 light/dark
+pub fn default_appearance_mode() -> String {
+    "system".to_string()
+}
 pub fn default_terminal_font_family() -> String {
     "Cascadia Code".to_string()
 }
