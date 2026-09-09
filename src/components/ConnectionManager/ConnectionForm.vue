@@ -79,14 +79,16 @@ const canSave = computed(
     Number(form.port) > 0,
 );
 
+// 分组创建和后台更新都会替换快照，同一连接的快照刷新不能覆盖尚未保存的输入。
 watch(
-  [editingProfile, defaultGroupId],
+  [() => props.profileId, () => editingProfile.value?.id],
   () => {
     resetForm();
   },
   { immediate: true },
 );
 
+// 凭据不能跨编辑对象复用，切换连接时连同临时测试结果一起清空。
 function resetForm() {
   const profile = editingProfile.value;
 
@@ -108,7 +110,7 @@ function resetForm() {
 }
 
 function groupDisplayName(group) {
-  return group.name === "Ungrouped" ? t("sidebar.ungrouped") : group.name;
+  return group.id === "group-default" ? t("sidebar.ungrouped") : group.name;
 }
 
 const testResultMessage = computed(() => {
@@ -162,7 +164,7 @@ async function submitProfile() {
         privateKeyPath: form.authMethod === "privateKey" ? form.privateKeyPath : null,
         credentialRef,
         defaultRemotePath: form.defaultRemotePath || "/",
-        sortOrder: currentProfile?.sortOrder ?? profileStore.activeProfiles.length,
+        sortOrder: currentProfile?.sortOrder ?? Math.max(-1, ...profileStore.activeProfiles.map((profile) => profile.sortOrder)) + 1,
         favorite: currentProfile?.favorite ?? false,
         lastConnectedAt: currentProfile?.lastConnectedAt ?? null,
         createdAt: currentProfile?.createdAt ?? now,
@@ -269,7 +271,7 @@ async function testCurrentConnection() {
   try {
     connectionTestResult.value = await testConnectionRequest(buildConnectionTestRequest());
   } catch (testError) {
-    error.value = `${t("profile.testFailed")}: ${String(testError)}`;
+    error.value = `${t("profile.testFailed")}: ${localizeError(testError)}`;
   } finally {
     isTestingConnection.value = false;
   }
@@ -288,25 +290,12 @@ async function createInlineGroup() {
   const name = newGroupName.value.trim();
   if (!name || isSavingGroup.value) return;
 
-  const now = Date.now().toString();
-  const groupId = crypto.randomUUID();
-
   isSavingGroup.value = true;
   try {
-    await profileStore.saveGroup({
-      id: groupId,
-      syncId: groupId,
-      name,
-      sortOrder: profileStore.activeGroups.length,
-      collapsed: false,
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-    });
-    form.groupId = groupId;
+    form.groupId = await profileStore.createGroup(name);
     closeInlineGroupCreator();
   } catch (groupError) {
-    error.value = `${t("sidebar.createGroupFailed")}: ${String(groupError)}`;
+    error.value = `${t("sidebar.createGroupFailed")}: ${localizeError(groupError)}`;
   } finally {
     isSavingGroup.value = false;
   }

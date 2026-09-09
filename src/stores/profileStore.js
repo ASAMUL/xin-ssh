@@ -3,6 +3,9 @@ import {
   deleteGroup,
   deleteProfile,
   markProfileConnected,
+  moveProfile,
+  reorderGroups,
+  retryDeletedCredentialCleanup,
   saveGroup,
   saveProfile,
 } from "../services/workspaceApi";
@@ -11,6 +14,8 @@ export const useProfileStore = defineStore("profiles", {
   state: () => ({
     groups: [],
     profiles: [],
+    isSavingLayout: false,
+    isCleaningCredentials: false,
   }),
   getters: {
     activeGroups: (state) =>
@@ -21,6 +26,8 @@ export const useProfileStore = defineStore("profiles", {
       state.profiles
         .filter((profile) => !profile.deletedAt)
         .sort((left, right) => left.sortOrder - right.sortOrder),
+    profilesAwaitingCredentialCleanup: (state) =>
+      state.profiles.filter((profile) => profile.deletedAt && profile.credentialRef),
     favoriteProfiles() {
       return this.activeProfiles.filter((profile) => profile.favorite);
     },
@@ -90,10 +97,74 @@ export const useProfileStore = defineStore("profiles", {
       this.hydrate(snapshot);
       return snapshot;
     },
-    async deleteGroup(groupId) {
-      const snapshot = await deleteGroup(groupId);
+    // 新建分组：连接表单里的「就地新建」和首页侧栏共用同一条链路
+    async createGroup(name) {
+      const now = Date.now().toString();
+      const groupId = crypto.randomUUID();
+
+      await this.saveGroup({
+        id: groupId,
+        syncId: groupId,
+        name,
+        sortOrder: Math.max(-1, ...this.activeGroups.map((group) => group.sortOrder)) + 1,
+        collapsed: false,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      });
+      return groupId;
+    },
+    async renameGroup(groupId, name) {
+      const group = this.groups.find((item) => item.id === groupId);
+      if (!group) return null;
+
+      return this.saveGroup({ ...group, name });
+    },
+    // deleteProfiles = false：组内连接移回未分组；true：连接随分组一起删
+    async deleteGroup(groupId, { deleteProfiles = false } = {}) {
+      const snapshot = await deleteGroup(groupId, deleteProfiles);
       this.hydrate(snapshot);
       return snapshot;
+    },
+    async moveProfileToGroup(profileId, groupId, beforeProfileId = null) {
+      if (this.isSavingLayout) return;
+      this.isSavingLayout = true;
+      try {
+        this.hydrate(await moveProfile(profileId, groupId, beforeProfileId));
+      } finally {
+        this.isSavingLayout = false;
+      }
+    },
+    async reorderGroups(groupIds) {
+      if (this.isSavingLayout) return;
+      this.isSavingLayout = true;
+      try {
+        this.hydrate(await reorderGroups(groupIds));
+      } finally {
+        this.isSavingLayout = false;
+      }
+    },
+    async setGroupCollapsed(groupId, collapsed) {
+      const group = this.activeGroups.find((item) => item.id === groupId);
+      if (!group || group.collapsed === collapsed || this.isSavingLayout) return;
+      this.isSavingLayout = true;
+      try {
+        await this.saveGroup({ ...group, collapsed });
+      } finally {
+        this.isSavingLayout = false;
+      }
+    },
+    async retryCredentialCleanup() {
+      if (this.isCleaningCredentials) return;
+      this.isCleaningCredentials = true;
+      try {
+        this.hydrate(await retryDeletedCredentialCleanup());
+      } finally {
+        this.isCleaningCredentials = false;
+      }
+    },
+    profilesInGroup(groupId) {
+      return this.profilesByGroup.find(({ group }) => group.id === groupId)?.profiles ?? [];
     },
   },
 });

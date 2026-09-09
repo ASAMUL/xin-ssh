@@ -64,8 +64,20 @@ export function saveGroup(group) {
   return invoke("save_group", { group });
 }
 
-export function deleteGroup(groupId) {
-  return invoke("delete_group", { groupId });
+export function deleteGroup(groupId, deleteProfiles = false) {
+  return invoke("delete_group", { groupId, deleteProfiles });
+}
+
+export function reorderGroups(groupIds) {
+  return invoke("reorder_groups", { groupIds });
+}
+
+export function moveProfile(profileId, groupId, beforeProfileId = null) {
+  return invoke("move_profile", { profileId, groupId, beforeProfileId });
+}
+
+export function retryDeletedCredentialCleanup() {
+  return invoke("retry_deleted_credential_cleanup");
 }
 
 export function saveSettings(settings) {

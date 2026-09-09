@@ -86,6 +86,11 @@ pub mod codes {
     pub const WORKSPACE_NOT_INITIALIZED: &str = "workspace.notInitialized";
     pub const WORKSPACE_DIR_MISSING: &str = "workspace.dirMissing";
     pub const WORKSPACE_FILE_CORRUPT: &str = "workspace.fileCorrupt";
+    pub const GROUP_DEFAULT_PROTECTED: &str = "group.defaultProtected";
+    pub const GROUP_NAME_REQUIRED: &str = "group.nameRequired";
+    pub const GROUP_NOT_FOUND: &str = "group.notFound";
+    pub const PROFILE_NOT_FOUND: &str = "profile.notFound";
+    pub const CREDENTIAL_CLEANUP_FAILED: &str = "credential.cleanupFailed";
 
     pub const BACKGROUND_UNSUPPORTED_FORMAT: &str = "background.unsupportedFormat";
     pub const BACKGROUND_TOO_LARGE: &str = "background.tooLarge";
@@ -137,7 +142,10 @@ pub fn request_canceled(operation: &str) -> AppError {
 }
 
 pub fn session_not_running() -> AppError {
-    AppError::new(codes::SESSION_NOT_RUNNING, "Terminal session is not running")
+    AppError::new(
+        codes::SESSION_NOT_RUNNING,
+        "Terminal session is not running",
+    )
 }
 
 pub fn not_accepting(kind: &str) -> AppError {

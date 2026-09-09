@@ -143,11 +143,17 @@ export const useSessionStore = defineStore("sessions", {
     showConnectionHub() {
       this.activeSessionId = null;
     },
-    async closeSession(sessionId) {
+    async closeSession(sessionId, { requireDisconnect = false } = {}) {
+      if (!this.sessions.some((session) => session.id === sessionId)) return;
+
+      try {
+        await closeTerminalSession(sessionId);
+      } catch (error) {
+        if (requireDisconnect) throw error;
+      }
+      // 等待关闭期间其他标签也可能被移除，必须重新定位，避免删错标签。
       const closingIndex = this.sessions.findIndex((session) => session.id === sessionId);
       if (closingIndex < 0) return;
-
-      await closeTerminalSession(sessionId).catch(() => {});
       clearTerminalBuffer(sessionId);
       if (terminalSink?.sessionId === sessionId) {
         terminalSink = null;
@@ -157,6 +163,20 @@ export const useSessionStore = defineStore("sessions", {
 
       const nextSession = this.sessions[closingIndex] ?? this.sessions[closingIndex - 1] ?? null;
       this.activeSessionId = nextSession?.id ?? null;
+    },
+    // 删除连接配置时，它已打开的终端一并关掉，不留下指向已删配置的孤儿 tab
+    async closeSessionsForProfile(profileId) {
+      const sessionIds = this.sessions
+        .filter((session) => session.profileId === profileId)
+        .map((session) => session.id);
+
+      for (const sessionId of sessionIds) {
+        await this.closeSession(sessionId, { requireDisconnect: true });
+      }
+      return sessionIds.length;
+    },
+    sessionCountForProfile(profileId) {
+      return this.sessions.filter((session) => session.profileId === profileId).length;
     },
     clearActiveTerminal() {
       const session = this.activeSession;

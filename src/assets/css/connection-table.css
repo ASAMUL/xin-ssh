@@ -142,7 +142,7 @@ td.col-name {
 }
 
 .col-actions {
-  width: 96px;
+  width: 124px;
   text-align: right;
   white-space: nowrap;
 }
@@ -153,6 +153,7 @@ td.col-actions :deep(button) {
 }
 
 .connection-table tbody tr:hover td.col-actions :deep(button),
-td.col-actions :deep(button:focus-visible) {
+td.col-actions :deep(button:focus-visible),
+td.col-actions :deep(button[data-state="open"]) {
   opacity: 1;
 }

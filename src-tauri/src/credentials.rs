@@ -1,6 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305};
@@ -17,6 +18,8 @@ const DEVICE_CREDENTIAL_KEY_FILE: &str = "device-credential-key.json";
 const CREDENTIALS_FILE: &str = "credentials.json";
 const DEVICE_CREDENTIAL_KEY_BYTES: usize = 32;
 const CREDENTIAL_NONCE_BYTES: usize = 12;
+// 保存凭据和删除清理可能来自不同会话，串行写入避免相互覆盖。
+static CREDENTIALS_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -64,6 +67,9 @@ pub async fn save_credential(
     app: AppHandle,
     request: SaveCredentialRequest,
 ) -> Result<(), AppError> {
+    let _guard = CREDENTIALS_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     validate_credential_ref(&request.credential_ref)?;
     let workspace = active_workspace_dir(&app)?;
     let key = device_credential_key(&app)?;
@@ -97,11 +103,9 @@ pub async fn read_credential(
 
     let workspace = active_workspace_dir(&app)?;
     let credentials_file = read_credentials_file(&workspace)?;
-    let Some(record) = credentials_file
-        .credentials
-        .iter()
-        .find(|record| record.credential_ref == request.credential_ref && record.kind == request.kind)
-    else {
+    let Some(record) = credentials_file.credentials.iter().find(|record| {
+        record.credential_ref == request.credential_ref && record.kind == request.kind
+    }) else {
         return Ok(None);
     };
 
@@ -114,6 +118,9 @@ pub async fn remove_credential(
     app: AppHandle,
     request: RemoveCredentialRequest,
 ) -> Result<(), AppError> {
+    let _guard = CREDENTIALS_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     validate_credential_ref(&request.credential_ref)?;
     for kind in &request.kinds {
         validate_credential_kind(kind)?;
@@ -125,6 +132,31 @@ pub async fn remove_credential(
         record.credential_ref != request.credential_ref || !request.kinds.contains(&record.kind)
     });
     write_credentials_file(&workspace, &credentials_file)
+}
+
+// 不依赖解密密钥，设备密钥不可用时仍可以清理已删除连接的密文。
+pub(crate) fn remove_credential_records(
+    workspace: &Path,
+    credential_refs: &[String],
+) -> Result<(), AppError> {
+    let _guard = CREDENTIALS_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if credential_refs.is_empty() || !workspace.join(CREDENTIALS_FILE).exists() {
+        return Ok(());
+    }
+
+    let mut credentials_file = read_credentials_file(workspace)?;
+    let before = credentials_file.credentials.len();
+    credentials_file
+        .credentials
+        .retain(|record| !credential_refs.contains(&record.credential_ref));
+
+    if credentials_file.credentials.len() == before {
+        return Ok(());
+    }
+
+    write_credentials_file(workspace, &credentials_file)
 }
 
 fn device_credential_key_path(app: &AppHandle) -> Result<PathBuf, AppError> {
@@ -304,9 +336,7 @@ fn decrypt_credential_record(
         .map_err(|_| credential_corrupt("Credential is not valid UTF-8"))
 }
 
-fn credential_cipher_key(
-    key: &[u8; DEVICE_CREDENTIAL_KEY_BYTES],
-) -> Result<LessSafeKey, AppError> {
+fn credential_cipher_key(key: &[u8; DEVICE_CREDENTIAL_KEY_BYTES]) -> Result<LessSafeKey, AppError> {
     let unbound_key = UnboundKey::new(&CHACHA20_POLY1305, key).map_err(|_| {
         AppError::new(
             codes::CREDENTIAL_KEY_FAILED,

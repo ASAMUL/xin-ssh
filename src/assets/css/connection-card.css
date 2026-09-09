@@ -82,8 +82,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* 给右上角的星标/编辑按钮留出空间 */
-  padding-right: 52px;
+  /* 三个操作按钮常驻占位，悬停时不会覆盖长名称。 */
+  padding-right: 78px;
 }
 
 .connection-card-copy strong,
@@ -161,13 +161,23 @@
   gap: 2px;
 }
 
+.connection-card-drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.connection-card-drag-handle:active {
+  cursor: grabbing;
+}
+
 .connection-card-tools :deep(button) {
   opacity: 0;
   transition: opacity 140ms ease;
 }
 
 .connection-card:hover .connection-card-tools :deep(button),
-.connection-card-tools :deep(button:focus-visible) {
+.connection-card-tools :deep(button:focus-visible),
+.connection-card-tools :deep(button[data-state="open"]) {
   opacity: 1;
 }
 

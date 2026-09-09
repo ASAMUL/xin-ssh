@@ -1,7 +1,9 @@
 use std::{
+    collections::HashSet,
     fs,
     io::Write,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use tauri::{AppHandle, Manager};
@@ -19,6 +21,9 @@ const PROFILES_FILE: &str = "profiles.json";
 const SETTINGS_FILE: &str = "settings.json";
 const TUNNELS_FILE: &str = "tunnels.json";
 const SNIPPETS_FILE: &str = "snippets.json";
+
+// 在线会话会同时更新最近连接时间，配置读改写需要串行，避免覆盖分组和删除结果。
+static PROFILES_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 pub(crate) use crate::models::CURRENT_SCHEMA_VERSION;
 
@@ -87,6 +92,9 @@ pub async fn save_profile(
     app: AppHandle,
     profile: ConnectionProfile,
 ) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = PROFILES_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut next_profile = profile;
@@ -112,6 +120,9 @@ pub async fn mark_profile_connected(
     app: AppHandle,
     profile_id: String,
 ) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = PROFILES_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
 
@@ -132,30 +143,123 @@ pub async fn delete_profile(
     app: AppHandle,
     profile_id: String,
 ) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = PROFILES_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let deleted_at = now_stamp();
 
-    if let Some(profile) = profiles_file
+    soft_delete_profiles(&mut profiles_file, &deleted_at, |profile| {
+        profile.id == profile_id
+    });
+
+    finish_profile_deletion(&workspace, &mut profiles_file)
+}
+
+// 清理成功前保留墓碑上的凭据引用，失败或进程退出后仍能重试。
+fn soft_delete_profiles(
+    profiles_file: &mut ProfilesFile,
+    deleted_at: &str,
+    matches: impl Fn(&ConnectionProfile) -> bool,
+) {
+    for profile in profiles_file
         .profiles
         .iter_mut()
-        .find(|item| item.id == profile_id)
+        .filter(|profile| profile.deleted_at.is_none() && matches(profile))
     {
-        profile.deleted_at = Some(deleted_at);
+        profile.deleted_at = Some(deleted_at.to_string());
+        profile.updated_at = deleted_at.to_string();
     }
+}
 
-    write_profiles_file(&workspace, &profiles_file)?;
+fn finish_profile_deletion(
+    workspace: &Path,
+    profiles_file: &mut ProfilesFile,
+) -> Result<WorkspaceSnapshot, AppError> {
+    write_profiles_file(workspace, profiles_file)?;
+    let mut snapshot = load_workspace_from_dir(workspace)?;
+    // 删除已落盘，清理失败通过快照中保留的引用提示并重试，不误报成删除失败。
+    if cleanup_deleted_credentials(workspace, profiles_file).is_ok() {
+        snapshot.profiles = profiles_file.profiles.clone();
+    }
+    Ok(snapshot)
+}
+
+// 只清理没有有效配置继续引用的凭据，成功后才移除用于失败重试的墓碑引用。
+fn cleanup_deleted_credentials(
+    workspace: &Path,
+    profiles_file: &mut ProfilesFile,
+) -> Result<(), AppError> {
+    let active_refs: HashSet<String> = profiles_file
+        .profiles
+        .iter()
+        .filter(|profile| profile.deleted_at.is_none())
+        .filter_map(|profile| profile.credential_ref.clone())
+        .collect();
+    let credential_refs: Vec<String> = profiles_file
+        .profiles
+        .iter()
+        .filter(|profile| profile.deleted_at.is_some())
+        .filter_map(|profile| profile.credential_ref.clone())
+        .filter(|reference| !active_refs.contains(reference))
+        .collect();
+    crate::credentials::remove_credential_records(workspace, &credential_refs)?;
+    let mut changed = false;
+    for profile in profiles_file
+        .profiles
+        .iter_mut()
+        .filter(|profile| profile.deleted_at.is_some())
+    {
+        changed |= profile.credential_ref.take().is_some();
+    }
+    if changed {
+        write_profiles_file(workspace, profiles_file)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn retry_deleted_credential_cleanup(
+    app: AppHandle,
+) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = PROFILES_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let workspace = active_workspace_dir(&app)?;
+    let mut profiles_file = read_profiles_file(&workspace)?;
+    cleanup_deleted_credentials(&workspace, &mut profiles_file).map_err(|_| {
+        AppError::new(
+            codes::CREDENTIAL_CLEANUP_FAILED,
+            "Saved credentials could not be removed",
+        )
+    })?;
     load_workspace_from_dir(&workspace)
 }
 
+// 默认分组承担兜底归属，后端也必须防止其被改名或保存成删除状态。
 #[tauri::command]
 pub async fn save_group(
     app: AppHandle,
     group: ConnectionGroup,
 ) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = PROFILES_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut next_group = group;
+    next_group.name = next_group.name.trim().to_string();
+    if next_group.name.is_empty() {
+        return Err(AppError::new(
+            codes::GROUP_NAME_REQUIRED,
+            "A group name is required",
+        ));
+    }
+    if next_group.id == default_group_id() {
+        next_group.name = "Ungrouped".to_string();
+        next_group.deleted_at = None;
+    }
     next_group.updated_at = now_stamp();
 
     if let Some(existing) = profiles_file
@@ -172,8 +276,23 @@ pub async fn save_group(
     load_workspace_from_dir(&workspace)
 }
 
+// 保留连接时按原顺序追加到默认分组，避免混入已有排序；一并删除时保留凭据清理重试信息。
 #[tauri::command]
-pub async fn delete_group(app: AppHandle, group_id: String) -> Result<WorkspaceSnapshot, AppError> {
+pub async fn delete_group(
+    app: AppHandle,
+    group_id: String,
+    delete_profiles: bool,
+) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = PROFILES_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if group_id == default_group_id() {
+        return Err(AppError::new(
+            codes::GROUP_DEFAULT_PROTECTED,
+            "The default group cannot be deleted",
+        ));
+    }
+
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let deleted_at = now_stamp();
@@ -184,17 +303,139 @@ pub async fn delete_group(app: AppHandle, group_id: String) -> Result<WorkspaceS
         .find(|item| item.id == group_id)
     {
         group.deleted_at = Some(deleted_at.clone());
+        group.updated_at = deleted_at.clone();
     }
 
+    if delete_profiles {
+        soft_delete_profiles(&mut profiles_file, &deleted_at, |profile| {
+            profile.group_id == group_id
+        })
+    } else {
+        let next_order = profiles_file
+            .profiles
+            .iter()
+            .filter(|profile| {
+                profile.deleted_at.is_none() && profile.group_id == default_group_id()
+            })
+            .map(|profile| profile.sort_order)
+            .max()
+            .unwrap_or(-1)
+            + 1;
+        let mut moved_profiles: Vec<_> = profiles_file
+            .profiles
+            .iter_mut()
+            .filter(|profile| profile.deleted_at.is_none() && profile.group_id == group_id)
+            .collect();
+        moved_profiles.sort_by_key(|profile| profile.sort_order);
+        for (index, profile) in moved_profiles.into_iter().enumerate() {
+            profile.group_id = default_group_id();
+            profile.sort_order = next_order + index as i32;
+            profile.updated_at = deleted_at.clone();
+        }
+    }
+
+    finish_profile_deletion(&workspace, &mut profiles_file)
+}
+
+// 一次写入整组顺序，避免逐条保存产生半完成的布局，同时将默认分组固定在首位。
+#[tauri::command]
+pub async fn reorder_groups(
+    app: AppHandle,
+    group_ids: Vec<String>,
+) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = PROFILES_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let workspace = active_workspace_dir(&app)?;
+    let mut profiles_file = read_profiles_file(&workspace)?;
+    let mut groups: Vec<_> = profiles_file
+        .groups
+        .iter_mut()
+        .filter(|group| group.deleted_at.is_none())
+        .collect();
+    groups.sort_by_key(|group| {
+        (
+            group.id != default_group_id(),
+            group_ids
+                .iter()
+                .position(|id| id == &group.id)
+                .unwrap_or(usize::MAX),
+            group.sort_order,
+        )
+    });
+    let now = now_stamp();
+    for (index, group) in groups.into_iter().enumerate() {
+        if group.sort_order != index as i32 {
+            group.sort_order = index as i32;
+            group.updated_at = now.clone();
+        }
+    }
+    write_profiles_file(&workspace, &profiles_file)?;
+    load_workspace_from_dir(&workspace)
+}
+
+// 归属和目标组排序必须同时落盘，避免跨组拖拽中途失败后出现位置与分组不一致。
+#[tauri::command]
+pub async fn move_profile(
+    app: AppHandle,
+    profile_id: String,
+    group_id: String,
+    before_profile_id: Option<String>,
+) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = PROFILES_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let workspace = active_workspace_dir(&app)?;
+    let mut profiles_file = read_profiles_file(&workspace)?;
+    if !profiles_file
+        .groups
+        .iter()
+        .any(|group| group.id == group_id && group.deleted_at.is_none())
+    {
+        return Err(AppError::new(
+            codes::GROUP_NOT_FOUND,
+            "The group no longer exists",
+        ));
+    }
+    let profile = profiles_file
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.id == profile_id && profile.deleted_at.is_none())
+        .ok_or_else(|| {
+            AppError::new(codes::PROFILE_NOT_FOUND, "The connection no longer exists")
+        })?;
+    let now = now_stamp();
+    profile.group_id = group_id.clone();
+    profile.updated_at = now.clone();
+    let mut ordered_ids: Vec<_> = profiles_file
+        .profiles
+        .iter()
+        .filter(|profile| {
+            profile.deleted_at.is_none() && profile.group_id == group_id && profile.id != profile_id
+        })
+        .collect();
+    ordered_ids.sort_by_key(|profile| profile.sort_order);
+    let mut ordered_ids: Vec<String> = ordered_ids
+        .into_iter()
+        .map(|profile| profile.id.clone())
+        .collect();
+    let insert_at = before_profile_id
+        .as_ref()
+        .and_then(|before| ordered_ids.iter().position(|id| id == before))
+        .unwrap_or(ordered_ids.len());
+    ordered_ids.insert(insert_at, profile_id);
     for profile in profiles_file
         .profiles
         .iter_mut()
-        .filter(|profile| profile.group_id == group_id)
+        .filter(|profile| profile.deleted_at.is_none() && profile.group_id == group_id)
     {
-        profile.group_id = default_group_id();
-        profile.updated_at = deleted_at.clone();
+        if let Some(index) = ordered_ids.iter().position(|id| id == &profile.id) {
+            if profile.sort_order != index as i32 {
+                profile.sort_order = index as i32;
+                profile.updated_at = now.clone();
+            }
+        }
     }
-
     write_profiles_file(&workspace, &profiles_file)?;
     load_workspace_from_dir(&workspace)
 }
@@ -214,9 +455,10 @@ pub async fn save_settings(
 #[tauri::command]
 pub async fn list_tunnel_configs(app: AppHandle) -> Result<Vec<TunnelConfig>, AppError> {
     let workspace = active_workspace_dir(&app)?;
-    Ok(valid_records(read_tunnels_file(&workspace)?.tunnels, |tunnel| {
-        &tunnel.id
-    }))
+    Ok(valid_records(
+        read_tunnels_file(&workspace)?.tunnels,
+        |tunnel| &tunnel.id,
+    ))
 }
 
 #[tauri::command]
@@ -276,9 +518,10 @@ fn write_tunnels_file(workspace: &Path, tunnels_file: &TunnelsFile) -> Result<()
 #[tauri::command]
 pub async fn list_snippets(app: AppHandle) -> Result<Vec<Snippet>, AppError> {
     let workspace = active_workspace_dir(&app)?;
-    Ok(valid_records(read_snippets_file(&workspace)?.snippets, |snippet| {
-        &snippet.id
-    }))
+    Ok(valid_records(
+        read_snippets_file(&workspace)?.snippets,
+        |snippet| &snippet.id,
+    ))
 }
 
 #[tauri::command]

@@ -1,7 +1,10 @@
 <script setup>
+import { ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useHomeSortable } from "../../composables/useHomeSortable";
 
-defineProps({
+const props = defineProps({
+  busy: { type: Boolean, default: false },
   navItems: {
     type: Array,
     default: () => [],
@@ -20,8 +23,70 @@ defineProps({
   },
 });
 
-const emit = defineEmits(["selectNav", "selectGroup", "openSettings", "openTunnels"]);
+const emit = defineEmits([
+  "selectNav",
+  "selectGroup",
+  "createGroup",
+  "renameGroup",
+  "deleteGroup",
+  "reorderGroups",
+  "openSettings",
+  "openTunnels",
+]);
 const { t } = useI18n();
+const groupList = ref(null);
+useHomeSortable(groupList, {
+  draggable: ".home-sidebar-group-row",
+  handle: ".home-group-drag-handle",
+  disabled: () => props.busy,
+  onDrop: ({ order }) => emit("reorderGroups", order),
+});
+
+// 默认分组是「未分组」兜底位，不能改名也不能删
+const DEFAULT_GROUP_ID = "group-default";
+
+// 菜单提供拖拽的键盘等价入口，同时阻止普通分组越过置顶的默认分组。
+function groupMenuItems(group) {
+  const index = props.groups.findIndex((item) => item.group.id === group.id);
+  return [
+    [
+      {
+        label: t("sidebar.renameGroup"),
+        icon: "i-lucide-pencil",
+        onSelect: () => emit("renameGroup", group),
+      },
+    ],
+    [
+      {
+        label: t("home.moveUp"),
+        icon: "i-lucide-arrow-up",
+        disabled: props.busy || index <= 1,
+        onSelect: () => moveGroup(index, -1),
+      },
+      {
+        label: t("home.moveDown"),
+        icon: "i-lucide-arrow-down",
+        disabled: props.busy || index === props.groups.length - 1,
+        onSelect: () => moveGroup(index, 1),
+      },
+    ],
+    [
+      {
+        label: t("sidebar.deleteGroup"),
+        icon: "i-lucide-trash-2",
+        color: "error",
+        onSelect: () => emit("deleteGroup", group),
+      },
+    ],
+  ];
+}
+
+function moveGroup(index, offset) {
+  const ids = props.groups.map(({ group }) => group.id);
+  const [id] = ids.splice(index, 1);
+  ids.splice(index + offset, 0, id);
+  emit("reorderGroups", ids);
+}
 
 // 分组图标的点缀色，按序循环
 const GROUP_COLORS = [
@@ -56,23 +121,63 @@ function groupColor(index) {
       </button>
     </nav>
 
-    <div v-if="groups.length > 0" class="home-sidebar-section">
-      <span class="home-sidebar-label">{{ t("home.groups") }}</span>
-      <button
-        v-for="({ group, name, count }, index) in groups"
-        :key="group.id"
-        type="button"
-        class="home-sidebar-item home-sidebar-group"
-        :class="{ active: activeGroupId === group.id }"
-        :style="groupColor(index)"
-        @click="emit('selectGroup', group.id)"
-      >
-        <span class="home-sidebar-group-icon">
-          <UIcon name="i-lucide-folder" />
-        </span>
-        <span>{{ name }}</span>
-        <em>{{ count }}</em>
-      </button>
+    <div class="home-sidebar-section">
+      <span class="home-sidebar-label home-sidebar-label-row">
+        <span>{{ t("home.groups") }}</span>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          icon="i-lucide-plus"
+          :aria-label="t('sidebar.addGroup')"
+          :title="t('sidebar.addGroup')"
+          @click="emit('createGroup')"
+        />
+      </span>
+      <div ref="groupList" class="home-sidebar-group-list">
+        <div
+          v-for="({ group, name, count }, index) in groups"
+          :key="group.id"
+          class="home-sidebar-group-row"
+          :data-sort-id="group.id"
+          :data-sort-locked="group.id === DEFAULT_GROUP_ID"
+          :style="groupColor(index)"
+        >
+          <button
+            type="button"
+            class="home-sidebar-item home-sidebar-group"
+            :class="{ active: activeGroupId === group.id }"
+            @click="emit('selectGroup', group.id)"
+          >
+            <span
+              class="home-sidebar-group-icon"
+              :class="{ 'home-group-drag-handle': group.id !== DEFAULT_GROUP_ID }"
+              :title="group.id !== DEFAULT_GROUP_ID ? t('home.sortGroup') : undefined"
+            >
+              <UIcon name="i-lucide-folder" />
+            </span>
+            <span>{{ name }}</span>
+            <em>{{ count }}</em>
+          </button>
+          <UDropdownMenu
+            v-if="group.id !== DEFAULT_GROUP_ID"
+            :items="groupMenuItems(group)"
+            size="xs"
+            :content="{ align: 'start', side: 'right' }"
+          >
+            <UButton
+              class="home-sidebar-group-menu"
+              :disabled="busy"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              icon="i-lucide-ellipsis"
+              :aria-label="t('home.moreActions')"
+              :title="t('home.moreActions')"
+            />
+          </UDropdownMenu>
+        </div>
+      </div>
     </div>
 
     <div class="home-sidebar-section">

@@ -40,12 +40,6 @@ Thumbs.db
 coverage/
 .nyc_output/
 
-# Package manager lock files (optional �C many teams commit them, uncomment if you prefer to ignore)
-package-lock.json
-pnpm-lock.yaml
-pnpm-workspace.yaml
-yarn.lock
-
 # Temporary folders
 tmp/
 temp/

@@ -501,27 +501,6 @@ button {
   background: transparent;
 }
 
-.error-banner {
-  /* top-right so it never overlaps the transfer toast in the bottom-right corner */
-  position: absolute;
-  right: 18px;
-  top: 14px;
-  z-index: 40;
-  max-width: 460px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
-  color: var(--xin-danger-text);
-  border: 1px solid rgb(var(--xin-danger-rgb) / 0.3);
-  border-radius: var(--xin-radius-lg);
-  background: var(--xin-surface-danger);
-  box-shadow:
-    var(--xin-specular),
-    0 16px 38px rgb(var(--xin-shadow-rgb) / 0.16);
-  backdrop-filter: var(--xin-glass-blur);
-}
-
 ::selection {
   color: #ffffff;
   background: var(--xin-accent-deep);

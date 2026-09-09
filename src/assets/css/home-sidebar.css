@@ -117,3 +117,62 @@
   padding-top: 10px;
   border-top: 1px solid var(--xin-glass-edge);
 }
+
+/* ---- 分组行：条目按钮 + 悬停时出现的 ⋯ 菜单触发器 ---- */
+.home-sidebar-group-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.home-sidebar-group-row .home-sidebar-item {
+  /* 右侧留出 ⋯ 按钮的空间 */
+  padding-right: 6px;
+}
+
+.home-sidebar-group-menu {
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.home-sidebar-group-row:hover .home-sidebar-group-menu,
+.home-sidebar-group-menu:focus-visible,
+.home-sidebar-group-menu[data-state="open"] {
+  opacity: 1;
+}
+
+/* 分组区标题行：文字 + 「+」按钮 */
+.home-sidebar-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 4px;
+}
+
+.home-sidebar-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.home-group-drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.home-sidebar-group-list .home-sort-ghost {
+  opacity: 0.3;
+}
+
+@media (max-width: 920px) {
+  .home-sidebar-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .home-sidebar-group-menu {
+    opacity: 1;
+  }
+}

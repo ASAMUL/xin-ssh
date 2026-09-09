@@ -251,43 +251,14 @@
 
 .home-recent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(238px, 100%), 1fr));
   gap: 12px;
 }
 
 .home-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
   gap: 13px;
-}
-
-.home-group {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-}
-
-.home-group-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: max-content;
-  max-width: 100%;
-  min-height: 27px;
-  padding: 0 12px;
-  color: var(--xin-text-body);
-  border: 1px solid var(--xin-glass-border);
-  border-radius: 999px;
-  background: var(--xin-glass);
-  font-size: 12px;
-  font-weight: 650;
-  box-shadow: var(--xin-specular);
-  backdrop-filter: var(--xin-glass-blur);
-}
-
-.home-group-title small {
-  color: var(--xin-text-soft);
 }
 
 /* —— 空状态 —— */
@@ -331,10 +302,7 @@
 @media (max-width: 920px) {
   .home-dashboard {
     grid-template-columns: 1fr;
-  }
-
-  .home-sidebar {
-    display: none;
+    grid-template-rows: minmax(120px, 180px) minmax(0, 1fr);
   }
 
   .home-hero,
