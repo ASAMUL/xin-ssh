@@ -2,6 +2,12 @@ import { defineStore } from "pinia";
 import { listen } from "@tauri-apps/api/event";
 import { i18n } from "../i18n";
 import { toAppError } from "../utils/appError";
+import { sameConnection } from "../utils/connectionIdentity";
+import { loadTransferHistory, saveTransferHistory } from "../services/transferHistory";
+import { useSessionStore } from "./sessionStore";
+import { useProfileStore } from "./profileStore";
+import { useSettingsStore } from "./settingsStore";
+import { useUiStore } from "./uiStore";
 import {
   cancelTransfer,
   startDownloadTransfer,
@@ -13,13 +19,16 @@ const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
 const ACTIVE_STATUSES = new Set(["queued", "running", "canceling"]);
 // 已结束任务保留的条数上限：面板兼作跨会话的传输历史，放宽到 100 条
 const MAX_FINISHED_TASKS = 100;
-const HISTORY_STORAGE_KEY = "xin-terminal/transfer-history";
-// 每条记录最多持久化的路径条数，避免大批量传输把 localStorage 撑爆
-const MAX_PERSISTED_PATHS = 20;
+let historyLoading = null;
+let listeningPromise = null;
 
 export const useTransferStore = defineStore("transfers", {
   state: () => ({
-    tasks: loadPersistedHistory(),
+    tasks: [],
+    historyLoaded: false,
+    historyIsLoading: false,
+    historyError: null,
+    retryingTasks: {},
     panelOpen: false,
     // 下载完成信号：面板关闭时由 App 层消费并弹出快捷提示
     downloadReadySignal: null,
@@ -43,16 +52,61 @@ export const useTransferStore = defineStore("transfers", {
     },
   },
   actions: {
+    // 加载失败时保留磁盘原件；新任务可留在内存，重试成功后再合并写回。
+    async loadHistory() {
+      if (this.historyLoaded) return true;
+      if (historyLoading) return historyLoading;
+      this.historyIsLoading = true;
+      historyLoading = loadTransferHistory().then((history) => {
+        const currentIds = new Set(this.tasks.map((task) => task.id));
+        this.tasks.push(...history.filter((task) => !currentIds.has(task.id)));
+        this.pruneFinishedTasks();
+        this.historyLoaded = true;
+        this.historyError = null;
+        this.persistHistory();
+        return true;
+      }).catch((error) => {
+        console.warn("[Xin Terminal] load transfer history failed", error);
+        this.historyError = { code: "transfer.historyLoadFailed", message: String(error) };
+        return false;
+      }).finally(() => {
+        this.historyIsLoading = false;
+        historyLoading = null;
+      });
+      return historyLoading;
+    },
     async startListening() {
       if (this.unlistenTransfer) return;
-
-      try {
-        this.unlistenTransfer = await listen(TRANSFER_EVENT_NAME, (event) => {
+      if (!listeningPromise) {
+        listeningPromise = listen(TRANSFER_EVENT_NAME, (event) => {
           this.handleTransferEvent(event.payload);
-        });
-      } catch (error) {
-        console.warn("[Xin Terminal] transfer event listener unavailable", error);
+        }).then((unlisten) => { this.unlistenTransfer = unlisten; })
+          .finally(() => { listeningPromise = null; });
       }
+      return listeningPromise;
+    },
+    async prepareTransfer(session, options) {
+      // 历史读取是异步的，等待时同一标签可能重连到修改后的地址，不能沿用旧目录发起传输。
+      const expectedConnection = session?.connectionTarget ? { ...session.connectionTarget } : null;
+      await this.loadHistory();
+      await this.startListening();
+      const current = useSessionStore().findSession(session?.id);
+      if (!current || current.status !== "connected" || !current.connectionTarget) {
+        throw { code: "session.notRunning", message: "Terminal session is not connected" };
+      }
+      if (!sameConnection(expectedConnection, current.connectionTarget)) {
+        throw { code: "transfer.connectionChanged", message: "Connection changed before starting the transfer" };
+      }
+      if (options.taskId) {
+        const original = this.findTask(options.taskId);
+        const error = this.resumeBlockReason(original, options.conflictPolicy, true);
+        if (error) throw error;
+        if (current.profileId !== original.profileId || current.workspaceDir !== original.workspaceDir
+          || !sameConnection(current.connectionTarget, original.connection)) {
+          throw { code: "transfer.connectionChanged", message: "Connection changed before resuming" };
+        }
+      }
+      return current;
     },
     stopListening() {
       this.unlistenTransfer?.();
@@ -70,13 +124,22 @@ export const useTransferStore = defineStore("transfers", {
       return signal;
     },
     async uploadPaths(session, localPaths, remoteDir, options = {}) {
+      localPaths = [...localPaths];
+      session = await this.prepareTransfer(session, options);
       const taskId = options.taskId || crypto.randomUUID();
+      const backendTaskId = crypto.randomUUID();
       const label = transferLabel(localPaths, "transfers.uploadFallback", "transfers.localItems");
       this.panelOpen = true;
       this.upsertTask({
         id: taskId,
+        backendTaskId,
         sessionId: session.id,
         sessionName: session.name || session.host || null,
+        profileId: session.profileId,
+        workspaceDir: session.workspaceDir,
+        connection: { ...session.connectionTarget },
+        resumeMetadataVersion: 1,
+        sourceCount: localPaths.length,
         direction: "upload",
         status: "queued",
         label,
@@ -90,25 +153,36 @@ export const useTransferStore = defineStore("transfers", {
         remoteDir,
         conflictPolicy: options.conflictPolicy ?? null,
         conflictPrompted: Boolean(options.conflictPolicy),
+        error: null,
+        currentPath: null,
       });
 
       try {
         await startUploadTransfer({
-          taskId,
+          taskId: backendTaskId,
           sessionId: session.id,
           localPaths,
           remoteDir,
           conflictPolicy: options.conflictPolicy ?? null,
         });
+        const current = this.findTask(taskId);
+        if (current?.backendTaskId === backendTaskId && current.status === "canceling") {
+          await this.requestTaskCancellation(taskId, backendTaskId);
+        }
       } catch (error) {
-        this.failTask(taskId, error);
+        this.failTask(taskId, backendTaskId, error);
         throw error;
       }
 
       return taskId;
     },
     async downloadEntries(session, entries, localDir, options = {}) {
+      entries = entries.map((entry) => ({
+        path: entry.path, name: entry.name, isDirectory: Boolean(entry.isDirectory), size: entry.size ?? null,
+      }));
+      session = await this.prepareTransfer(session, options);
       const taskId = options.taskId || crypto.randomUUID();
+      const backendTaskId = crypto.randomUUID();
       const label = transferLabel(
         entries.map((entry) => entry.name),
         "transfers.downloadFallback",
@@ -117,8 +191,14 @@ export const useTransferStore = defineStore("transfers", {
       this.panelOpen = true;
       this.upsertTask({
         id: taskId,
+        backendTaskId,
         sessionId: session.id,
         sessionName: session.name || session.host || null,
+        profileId: session.profileId,
+        workspaceDir: session.workspaceDir,
+        connection: { ...session.connectionTarget },
+        resumeMetadataVersion: 1,
+        sourceCount: entries.length,
         direction: "download",
         status: "queued",
         label,
@@ -132,11 +212,13 @@ export const useTransferStore = defineStore("transfers", {
         localDir,
         conflictPolicy: options.conflictPolicy ?? null,
         conflictPrompted: Boolean(options.conflictPolicy),
+        error: null,
+        currentPath: null,
       });
 
       try {
         await startDownloadTransfer({
-          taskId,
+          taskId: backendTaskId,
           sessionId: session.id,
           localDir,
           remoteEntries: entries.map((entry) => ({
@@ -147,30 +229,34 @@ export const useTransferStore = defineStore("transfers", {
           })),
           conflictPolicy: options.conflictPolicy ?? null,
         });
+        const current = this.findTask(taskId);
+        if (current?.backendTaskId === backendTaskId && current.status === "canceling") {
+          await this.requestTaskCancellation(taskId, backendTaskId);
+        }
       } catch (error) {
-        this.failTask(taskId, error);
+        this.failTask(taskId, backendTaskId, error);
         throw error;
       }
 
       return taskId;
     },
-    retryTaskWithConflictPolicy(taskId, conflictPolicy) {
+    // 同一记录每次重试都使用新后端 ID，旧事件和旧任务清理不会影响这次传输。
+    async retryTaskWithConflictPolicy(taskId, conflictPolicy) {
       const task = this.findTask(taskId);
       if (!task || !conflictPolicy || conflictPolicy === "cancel") return null;
-
-      const sessionRef = { id: task.sessionId, name: task.sessionName };
-
-      if (task.direction === "upload") {
-        return this.uploadPaths(sessionRef, task.localPaths || [], task.remoteDir, {
-          taskId: task.id,
-          conflictPolicy,
-        });
+      const error = this.resumeBlockReason(task, conflictPolicy);
+      if (error) throw error;
+      this.retryingTasks[taskId] = true;
+      try {
+        const session = this.findResumeSession(task);
+        const options = { taskId: task.id, conflictPolicy };
+        if (task.direction === "upload") {
+          return await this.uploadPaths(session, task.localPaths, task.remoteDir, options);
+        }
+        return await this.downloadEntries(session, task.remoteEntries, task.localDir, options);
+      } finally {
+        delete this.retryingTasks[taskId];
       }
-
-      return this.downloadEntries(sessionRef, task.remoteEntries || [], task.localDir, {
-        taskId: task.id,
-        conflictPolicy,
-      });
     },
     // 断点续传：resume 策略重发原任务，两端半成品保留，缺多少补多少
     resumeTask(taskId) {
@@ -178,7 +264,7 @@ export const useTransferStore = defineStore("transfers", {
     },
     async cancelTask(taskId) {
       const task = this.findTask(taskId);
-      if (!task || FINISHED_STATUSES.has(task.status)) return;
+      if (!task || FINISHED_STATUSES.has(task.status) || task.status === "canceling") return;
 
       this.upsertTask({
         ...task,
@@ -187,15 +273,23 @@ export const useTransferStore = defineStore("transfers", {
         updatedAt: Date.now(),
       });
 
+      await this.requestTaskCancellation(taskId, task.backendTaskId, task.status);
+    },
+    async requestTaskCancellation(taskId, backendTaskId, fallbackStatus = "running") {
       try {
-        await cancelTransfer(taskId);
+        await cancelTransfer(backendTaskId);
       } catch (error) {
-        this.failTask(taskId, error);
+        const current = this.findTask(taskId);
+        if (current?.backendTaskId === backendTaskId && current.status === "canceling") {
+          // 取消请求失败不代表传输结束，必须继续接收真实进度并允许再次取消。
+          this.upsertTask({ ...current, status: fallbackStatus, error: toAppError(error) });
+          useUiStore().setError(error);
+        }
       }
     },
     markTaskCanceled(taskId) {
       const task = this.findTask(taskId);
-      if (!task) return;
+      if (!this.isResumeCandidate(task) || this.retryingTasks[taskId]) return;
 
       this.upsertTask({
         ...task,
@@ -215,7 +309,9 @@ export const useTransferStore = defineStore("transfers", {
     },
     handleTransferEvent(event) {
       const now = Date.now();
-      const task = this.findTask(event.taskId);
+      const task = this.tasks.find((task) => task.backendTaskId === event.taskId
+        && task.sessionId === event.sessionId && task.direction === event.direction);
+      if (!task || FINISHED_STATUSES.has(task.status)) return;
       const previousBytes = task?.bytesTransferred ?? 0;
       const previousUpdatedAt = task?.updatedAt ?? now;
       const elapsedSeconds = Math.max((now - previousUpdatedAt) / 1000, 0.001);
@@ -227,10 +323,11 @@ export const useTransferStore = defineStore("transfers", {
           : (task?.speedBytesPerSecond ?? 0);
 
       this.upsertTask({
-        id: event.taskId,
+        id: task.id,
         sessionId: event.sessionId,
         direction: event.direction,
-        status: eventStatus(event.kind),
+        status: task.status === "canceling" && !FINISHED_STATUSES.has(eventStatus(event.kind))
+          ? "canceling" : eventStatus(event.kind),
         label,
         rootLabel,
         currentPath: event.currentPath,
@@ -248,7 +345,7 @@ export const useTransferStore = defineStore("transfers", {
       const justCompleted = event.kind === "completed" && task?.status !== "completed";
       if (justCompleted && event.direction === "download" && !this.panelOpen) {
         this.downloadReadySignal = {
-          taskId: event.taskId,
+          taskId: task.id,
           at: now,
         };
       }
@@ -258,25 +355,28 @@ export const useTransferStore = defineStore("transfers", {
       const taskIndex = this.tasks.findIndex((task) => task.id === nextTask.id);
       const normalizedTask = {
         createdAt: now,
-        updatedAt: now,
         currentPath: null,
         error: null,
+        ...(taskIndex >= 0 ? this.tasks[taskIndex] : {}),
         ...nextTask,
+        updatedAt: nextTask.updatedAt ?? now,
       };
 
       if (taskIndex >= 0) {
-        this.tasks[taskIndex] = {
-          ...this.tasks[taskIndex],
-          ...normalizedTask,
-        };
+        if (nextTask.status === "queued") {
+          this.tasks.splice(taskIndex, 1);
+          this.tasks.unshift(normalizedTask);
+        } else {
+          this.tasks[taskIndex] = normalizedTask;
+        }
       } else {
         this.tasks.unshift(normalizedTask);
       }
 
       this.pruneFinishedTasks();
 
-      if (FINISHED_STATUSES.has(normalizedTask.status)) {
-        this.persistFinishedTasks();
+      if (FINISHED_STATUSES.has(normalizedTask.status) || nextTask.status === "queued") {
+        this.persistHistory();
       }
     },
     pruneFinishedTasks() {
@@ -286,18 +386,19 @@ export const useTransferStore = defineStore("transfers", {
       );
       if (finishedCount <= MAX_FINISHED_TASKS) return;
 
-      // 任务按新到旧排列，保留最新的已结束任务
-      let kept = 0;
-      this.tasks = this.tasks.filter((task) => {
-        if (!FINISHED_STATUSES.has(task.status)) return true;
-
-        kept += 1;
-        return kept <= MAX_FINISHED_TASKS;
-      });
+      // 长任务和旧记录的重试也可能刚刚结束，按最近更新时间淘汰，不能按最初入队位置删除。
+      const recentFinishedIds = new Set(this.tasks
+        .filter((task) => FINISHED_STATUSES.has(task.status))
+        .sort((left, right) => (right.updatedAt ?? right.createdAt ?? 0) - (left.updatedAt ?? left.createdAt ?? 0))
+        .slice(0, MAX_FINISHED_TASKS)
+        .map((task) => task.id));
+      this.tasks = this.tasks.filter((task) => !FINISHED_STATUSES.has(task.status)
+        || this.retryingTasks[task.id] || recentFinishedIds.has(task.id));
     },
-    failTask(taskId, error) {
+    failTask(taskId, backendTaskId, error) {
       const task = this.findTask(taskId);
-      if (!task) return;
+      // 启动请求的拒绝可能晚于终态事件或下一次重试，只允许它结束自己的当前尝试。
+      if (!task || task.backendTaskId !== backendTaskId || FINISHED_STATUSES.has(task.status)) return;
 
       this.upsertTask({
         ...task,
@@ -309,38 +410,61 @@ export const useTransferStore = defineStore("transfers", {
     },
     removeTask(taskId) {
       const task = this.findTask(taskId);
-      if (!task || !FINISHED_STATUSES.has(task.status)) return;
+      if (!task || !FINISHED_STATUSES.has(task.status) || this.retryingTasks[taskId]) return;
 
       this.tasks = this.tasks.filter((item) => item.id !== taskId);
-      this.persistFinishedTasks();
+      this.persistHistory();
     },
     clearFinished() {
-      this.tasks = this.tasks.filter((task) => !FINISHED_STATUSES.has(task.status));
-      this.persistFinishedTasks();
+      this.tasks = this.tasks.filter((task) => !FINISHED_STATUSES.has(task.status) || this.retryingTasks[task.id]);
+      this.persistHistory();
     },
-    persistFinishedTasks() {
+    async persistHistory() {
+      if (!this.historyLoaded) return false;
       try {
-        const finished = this.tasks
-          .filter((task) => FINISHED_STATUSES.has(task.status))
-          .slice(0, MAX_FINISHED_TASKS)
-          .map(slimTaskForStorage);
-        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(finished));
+        await saveTransferHistory(this.tasks);
+        this.historyError = null;
+        return true;
       } catch (error) {
         console.warn("[Xin Terminal] persist transfer history failed", error);
+        this.historyError = { code: "transfer.historySaveFailed", message: String(error) };
+        return false;
       }
+    },
+    retryHistoryStorage() {
+      return this.historyLoaded ? this.persistHistory() : this.loadHistory();
     },
     canCancelTask(task) {
       return ACTIVE_STATUSES.has(task?.status);
     },
-    // 失败/取消且路径信息完整（含从 localStorage 恢复的历史）才能续传
+    isResumeCandidate(task) {
+      return Boolean(task && ["failed", "canceled"].includes(task.status));
+    },
     canResumeTask(task) {
-      if (!task || !["failed", "canceled"].includes(task.status)) return false;
-
-      if (task.direction === "upload") {
-        return Boolean(task.localPaths?.length && task.remoteDir);
-      }
-
-      return Boolean(task.remoteEntries?.length && task.localDir);
+      return this.isResumeCandidate(task) && !this.resumeBlockReason(task);
+    },
+    // profileId 只标识配置；同时核对地址与工作区，避免配置改指另一台主机后误续传。
+    resumeBlockReason(task, conflictPolicy = "resume", allowRetrying = false) {
+      const fail = (code) => ({ code, message: code, params: { name: task?.sessionName || task?.connection?.host || "" } });
+      if (!this.isResumeCandidate(task) || (!allowRetrying && this.retryingTasks[task.id])) return fail("transfer.retryInProgress");
+      if (task.resumeMetadataVersion !== 1 || !task.profileId || !task.connection) return fail("transfer.historyLegacy");
+      if (!hasCompleteSources(task)) return fail("transfer.historyIncomplete");
+      if (conflictPolicy === "resume" && task.conflictPolicy === "rename") return fail("transfer.resumeRenamed");
+      if (task.workspaceDir !== useSettingsStore().workspaceDir) return fail("workspace.changed");
+      const profile = useProfileStore().activeProfiles.find((profile) => profile.id === task.profileId);
+      if (!profile) return fail("profile.notFound");
+      if (!sameConnection(task.connection, profile)) return fail("transfer.connectionChanged");
+      if (!this.findResumeSession(task)) return fail("transfer.connectionRequired");
+      return null;
+    },
+    findResumeSession(task) {
+      const sessions = useSessionStore();
+      const candidates = sessions.sessions.filter((session) => session.status === "connected"
+        && session.profileId === task.profileId && session.workspaceDir === task.workspaceDir
+        && sameConnection(session.connectionTarget, task.connection));
+      return candidates.find((session) => session.id === task.sessionId)
+        ?? candidates.find((session) => session.id === sessions.activeSessionId)
+        ?? candidates[0] ?? null;
     },
     findTask(taskId) {
       return this.tasks.find((task) => task.id === taskId) ?? null;
@@ -368,56 +492,15 @@ function transferLabel(items, fallbackKey, multiKey) {
   return t(multiKey, { count: items.length });
 }
 
-// 只持久化展示与“打开/复制路径”所需的字段，运行态字段（速度等）不落盘
-function slimTaskForStorage(task) {
-  return {
-    id: task.id,
-    sessionId: task.sessionId ?? null,
-    sessionName: task.sessionName ?? null,
-    direction: task.direction,
-    status: task.status,
-    label: task.label,
-    rootLabel: task.rootLabel ?? task.label,
-    bytesTransferred: task.bytesTransferred ?? 0,
-    bytesTotal: task.bytesTotal ?? 0,
-    filesDone: task.filesDone ?? 0,
-    filesTotal: task.filesTotal ?? 0,
-    error: task.error ?? null,
-    createdAt: task.createdAt ?? Date.now(),
-    updatedAt: task.updatedAt ?? Date.now(),
-    localDir: task.localDir ?? null,
-    remoteDir: task.remoteDir ?? null,
-    localPaths: Array.isArray(task.localPaths) ? task.localPaths.slice(0, MAX_PERSISTED_PATHS) : [],
-    remoteEntries: Array.isArray(task.remoteEntries)
-      ? task.remoteEntries.slice(0, MAX_PERSISTED_PATHS).map((entry) => ({
-          path: entry.path,
-          name: entry.name,
-          isDirectory: Boolean(entry.isDirectory),
-        }))
-      : [],
-  };
-}
-
-function loadPersistedHistory() {
-  try {
-    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .filter((task) => task && task.id && FINISHED_STATUSES.has(task.status))
-      .slice(0, MAX_FINISHED_TASKS)
-      .map((task) => ({
-        ...task,
-        speedBytesPerSecond: 0,
-        currentPath: null,
-        conflictPolicy: null,
-        conflictPrompted: true,
-      }));
-  } catch (error) {
-    console.warn("[Xin Terminal] load transfer history failed", error);
-    return [];
+function hasCompleteSources(task) {
+  if (!Number.isInteger(task.sourceCount) || task.sourceCount <= 0) return false;
+  const hasPath = (value) => typeof value === "string" && value.trim().length > 0;
+  if (task.direction === "upload") {
+    return hasPath(task.remoteDir) && Array.isArray(task.localPaths)
+      && task.localPaths.length === task.sourceCount && task.localPaths.every(hasPath);
   }
+  return task.direction === "download" && hasPath(task.localDir) && Array.isArray(task.remoteEntries)
+    && task.remoteEntries.length === task.sourceCount
+    && task.remoteEntries.every((entry) => entry && hasPath(entry.path)
+      && hasPath(entry.name) && typeof entry.isDirectory === "boolean");
 }

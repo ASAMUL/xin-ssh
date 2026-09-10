@@ -965,7 +965,8 @@ async fn plan_remote_download(
                 }
             }
         } else {
-            let size = entry.size.or(metadata.size).unwrap_or(0);
+            // 历史记录中的大小可能已过期，续传必须优先按远端当前大小判断是否传完。
+            let size = metadata.size.or(entry.size).unwrap_or(0);
             bytes_total += size;
             files.push(DownloadFilePlan {
                 label: entry.name.clone(),

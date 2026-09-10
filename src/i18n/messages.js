@@ -438,6 +438,7 @@ export const messages = {
       resume: "继续传输",
       downloadReadyTitle: "下载完成",
       viewHistory: "查看记录",
+      loadingHistory: "正在读取传输历史",
     },
     editor: {
       loading: "正在读取文件",
@@ -590,6 +591,15 @@ export const messages = {
 
         "transfer.duplicateUploadTarget": "上传目标重复：{path}",
         "transfer.canceled": "传输已取消",
+        "transfer.interrupted": "上次退出时传输中断",
+        "transfer.historyLegacy": "旧版记录缺少可靠的连接及完整路径信息，无法续传",
+        "transfer.historyIncomplete": "任务的源路径信息不完整，无法续传",
+        "transfer.historyLoadFailed": "传输历史读取失败，新任务暂存于本次运行",
+        "transfer.historySaveFailed": "传输历史保存失败，本次记录可能无法在重启后恢复",
+        "transfer.retryInProgress": "该任务正在启动或传输中",
+        "transfer.connectionRequired": "请先连接 {name}，再继续传输",
+        "transfer.connectionChanged": "原连接的主机、端口或用户已变更，无法续传",
+        "transfer.resumeRenamed": "此任务使用过自动重命名，无法确认续传目标，请重新选择文件传输",
         "transfer.partialFailure": "{count} 个条目失败：{detail}",
 
         "file.tooLarge": "文件超过 {limitMb} MB，内置编辑器暂不支持，请下载后在本地编辑",
@@ -1106,6 +1116,7 @@ export const messages = {
       resume: "Resume transfer",
       downloadReadyTitle: "Download complete",
       viewHistory: "View transfers",
+      loadingHistory: "Loading transfer history",
     },
     editor: {
       loading: "Reading file",
@@ -1259,6 +1270,15 @@ export const messages = {
 
         "transfer.duplicateUploadTarget": "Duplicate upload target: {path}",
         "transfer.canceled": "Transfer canceled",
+        "transfer.interrupted": "Transfer interrupted when the application last exited",
+        "transfer.historyLegacy": "This legacy record lacks reliable connection and complete path information and cannot be resumed",
+        "transfer.historyIncomplete": "The source paths are incomplete. This transfer cannot be resumed.",
+        "transfer.historyLoadFailed": "Transfer history could not be loaded. New tasks are kept in memory for this run.",
+        "transfer.historySaveFailed": "Transfer history could not be saved. These records may not be available after restarting.",
+        "transfer.retryInProgress": "This transfer is starting or already running",
+        "transfer.connectionRequired": "Connect to {name} before resuming this transfer",
+        "transfer.connectionChanged": "The original host, port, or user has changed. This transfer cannot be resumed.",
+        "transfer.resumeRenamed": "This task used automatic renaming, so its resume destination is uncertain. Select the files again to transfer them.",
         "transfer.partialFailure": "{count} items failed: {detail}",
 
         "file.tooLarge": "This file is larger than {limitMb} MB. Download it to edit locally.",

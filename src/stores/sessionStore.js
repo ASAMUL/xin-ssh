@@ -9,6 +9,7 @@ import {
   trustHostKey,
 } from "../services/workspaceApi";
 import { i18n } from "../i18n";
+import { connectionIdentity } from "../utils/connectionIdentity";
 import {
   CONNECTION_LOST_CODES,
   ERROR_CODES,
@@ -99,6 +100,7 @@ export const useSessionStore = defineStore("sessions", {
       const session = {
         id: crypto.randomUUID(),
         profileId: profile.id,
+        workspaceDir: useSettingsStore().workspaceDir,
         // 同一连接第 2+ 个终端显示 "name (2)"，编号取最小可用值
         labelIndex,
         name: sessionDisplayName(profile.name, labelIndex),
@@ -116,6 +118,7 @@ export const useSessionStore = defineStore("sessions", {
         currentAttemptId: null,
         autoReconnectAttempts: 0,
         connectedAt: null,
+        connectionTarget: null,
         lastDisconnectReason: null,
         createdAt: Date.now(),
         terminalRevision: 0,
@@ -214,12 +217,12 @@ export const useSessionStore = defineStore("sessions", {
       }
 
       try {
+        // 配置可以在终端存活时被修改，传输必须记录本次真正发给后端的连接地址。
+        session.connectionTarget = connectionIdentity(session);
         await startTerminalSession({
           sessionId: session.id,
           attemptId,
-          host: session.host,
-          port: session.port,
-          username: session.username,
+          ...session.connectionTarget,
           authMethod: session.authMethod,
           password: credentials.password || null,
           privateKeyPath: session.privateKeyPath || null,
@@ -265,16 +268,18 @@ export const useSessionStore = defineStore("sessions", {
         const credentialStore = useCredentialStore();
         const credentials = await readSavedCredentials(credentialStore, session);
 
+        // 读取凭据期间可能已关会话或重新连接，旧尝试不能覆盖新的连接目标。
+        if (this.findSession(sessionId)?.currentAttemptId !== attemptId) return false;
+
         if (session.authMethod === "password" && !credentials.password) {
           throw new Error(i18n.global.t("terminal.savedCredentialMissing"));
         }
 
+        session.connectionTarget = connectionIdentity(session);
         await startTerminalSession({
           sessionId: session.id,
           attemptId,
-          host: session.host,
-          port: session.port,
-          username: session.username,
+          ...session.connectionTarget,
           authMethod: session.authMethod,
           password: credentials.password || null,
           privateKeyPath: session.privateKeyPath || null,

@@ -98,16 +98,18 @@ const contextMenuItems = computed(() => {
       onSelect: () => transferStore.cancelTask(task.id),
     });
   } else {
-    if (transferStore.canResumeTask(task)) {
+    if (transferStore.isResumeCandidate(task)) {
       manageGroup.push({
         label: t("transfers.resume"),
         icon: "i-lucide-play",
+        disabled: !transferStore.canResumeTask(task),
         onSelect: () => resumeTask(task),
       });
     }
     manageGroup.push({
       label: t("transfers.removeRecord"),
       icon: "i-lucide-trash-2",
+      disabled: Boolean(transferStore.retryingTasks[task.id]),
       onSelect: () => transferStore.removeTask(task.id),
     });
   }
@@ -146,9 +148,12 @@ async function resumeTask(task) {
   try {
     await transferStore.resumeTask(task.id);
   } catch (error) {
-    // resumeTask 内部已把任务标记为失败并附错误详情，这里提示即可
     uiStore.setError(error);
   }
+}
+
+function resumeHint(task) {
+  return localizeError(transferStore.resumeBlockReason(task)) || t("transfers.resume");
 }
 
 async function copyText(text) {
@@ -195,7 +200,7 @@ function taskMeta(task) {
 
   if (isFinished(task)) {
     const statusText =
-      task.status === "completed" ? t("transfers.completed") : t("transfers.canceled");
+      task.status === "completed" ? t("transfers.completed") : localizeError(task.error) || t("transfers.canceled");
     const parts = [statusText];
     if (task.bytesTransferred) parts.push(formatBytes(task.bytesTransferred));
     if (task.sessionName) parts.push(task.sessionName);
@@ -231,7 +236,7 @@ function formatTaskTime(timestamp) {
 </script>
 
 <template>
-  <aside class="transfer-panel" aria-label="Transfer history">
+  <aside class="transfer-panel" :aria-label="t('transfers.title')">
     <header class="transfer-head">
       <div>
         <strong>{{ t("transfers.title") }}</strong>
@@ -265,9 +270,15 @@ function formatTaskTime(timestamp) {
       </div>
     </header>
 
+    <UProgress v-if="transferStore.historyIsLoading" :model-value="null" size="xs"
+      :aria-label="t('transfers.loadingHistory')" />
+    <UAlert v-if="transferStore.historyError" color="warning" variant="soft"
+      icon="i-lucide-database" :title="localizeError(transferStore.historyError)"
+      :actions="[{ label: t('common.retry'), icon: 'i-lucide-refresh-cw', onClick: () => transferStore.retryHistoryStorage() }]" />
+
     <UContextMenu :items="contextMenuItems" size="xs" :ui="contextMenuUi">
       <div class="transfer-list" @contextmenu="prepareContextMenu">
-        <p v-if="!transferStore.hasTasks" class="transfer-empty">
+        <p v-if="!transferStore.hasTasks && !transferStore.historyIsLoading" class="transfer-empty">
           <UIcon name="i-lucide-inbox" class="transfer-empty-icon" />
           {{ t("transfers.empty") }}
         </p>
@@ -293,17 +304,13 @@ function formatTaskTime(timestamp) {
           }}</small>
           <small v-else>{{ taskProgress(task) }}%</small>
 
-          <UButton
-            v-if="transferStore.canResumeTask(task)"
-            color="primary"
-            variant="ghost"
-            size="xs"
-            icon="i-lucide-play"
-            class="transfer-task-action"
-            :aria-label="t('transfers.resume')"
-            :title="t('transfers.resume')"
-            @click="resumeTask(task)"
-          />
+          <UTooltip v-if="transferStore.isResumeCandidate(task)" :text="resumeHint(task)">
+            <span class="transfer-task-action" :tabindex="transferStore.canResumeTask(task) ? undefined : 0">
+              <UButton color="primary" variant="ghost" size="xs" icon="i-lucide-play"
+                :disabled="!transferStore.canResumeTask(task)" :aria-label="resumeHint(task)"
+                @click="resumeTask(task)" />
+            </span>
+          </UTooltip>
           <UButton
             v-else-if="canOpenTaskLocally(task)"
             color="neutral"
