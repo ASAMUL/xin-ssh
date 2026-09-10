@@ -1,5 +1,8 @@
 import { defineStore } from "pinia";
 import { deleteSnippet, listSnippets, saveSnippet } from "../services/workspaceApi";
+import { createSerialQueue } from "../utils/serialQueue";
+
+const enqueueSnippetChange = createSerialQueue();
 
 export const useSnippetStore = defineStore("snippets", {
   state: () => ({
@@ -16,17 +19,24 @@ export const useSnippetStore = defineStore("snippets", {
     // 面板首次打开时按需加载；浏览器 dev 无后端时静默
     async loadSnippets() {
       try {
-        this.snippets = await listSnippets();
-        this.loaded = true;
+        await enqueueSnippetChange(async () => {
+          this.snippets = await listSnippets();
+          this.loaded = true;
+        });
       } catch (error) {
         console.warn("[Xin Terminal] snippets unavailable", error);
       }
     },
     async saveSnippet(snippet) {
-      this.snippets = await saveSnippet(snippet);
+      const next = { ...snippet };
+      return enqueueSnippetChange(async () => {
+        this.snippets = await saveSnippet(next);
+      });
     },
     async removeSnippet(snippetId) {
-      this.snippets = await deleteSnippet(snippetId);
+      return enqueueSnippetChange(async () => {
+        this.snippets = await deleteSnippet(snippetId);
+      });
     },
   },
 });

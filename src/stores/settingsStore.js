@@ -3,6 +3,8 @@ import { saveSettings } from "../services/workspaceApi";
 import { normalizeTerminalBackground } from "../services/backgroundApi";
 import { applyAppearanceMode, normalizeAppearanceMode } from "../utils/appearanceMode";
 import { i18n } from "../i18n";
+import { createSerialQueue } from "../utils/serialQueue";
+import { useUiStore } from "./uiStore";
 import { DEFAULT_TERMINAL_THEME_ID, TERMINAL_FONTS, TERMINAL_FONT_SIZES } from "../config/terminalThemes";
 
 const MONITOR_REFRESH_SECONDS_OPTIONS = [2, 5, 10, 30];
@@ -14,10 +16,12 @@ const DEFAULT_TERMINAL_FONT_SIZE = 14;
 const DEFAULT_MONITOR_PANE_SIZE = 22;
 const DEFAULT_FILE_PANE_SIZE = 42;
 const DEFAULT_FILE_TREE_SIZE = 22;
+const enqueueSettingsWrite = createSerialQueue();
 
 export const useSettingsStore = defineStore("settings", {
   state: () => ({
     settings: null,
+    workspaceDir: null,
   }),
   getters: {
     locale: (state) => state.settings?.locale ?? "zh-CN",
@@ -45,7 +49,8 @@ export const useSettingsStore = defineStore("settings", {
     appearanceMode: (state) => normalizeAppearanceMode(state.settings?.appearanceMode),
   },
   actions: {
-    hydrate(settings) {
+    hydrate(settings, workspaceDir = this.workspaceDir) {
+      this.workspaceDir = workspaceDir;
       this.settings = {
         monitorRefreshSeconds: DEFAULT_MONITOR_REFRESH_SECONDS,
         ...settings,
@@ -57,29 +62,35 @@ export const useSettingsStore = defineStore("settings", {
       // 启动时 main.js 已按系统偏好画过，这里是拿到用户存的档后校准。
       applyAppearanceMode(this.appearanceMode);
     },
-    async patchSettings(partial) {
+    previewSettings(partial) {
       if (!this.settings) {
-        // no backend snapshot yet (e.g. browser dev): keep for this session only
         this.hydrate(partial);
-        return null;
+        return;
       }
+      Object.assign(this.settings, partial);
+      if (partial.locale) i18n.global.locale.value = partial.locale;
+      // 滑块预览很频繁，只有模式变化才需要同步原生窗口主题。
+      if (Object.hasOwn(partial, "appearanceMode")) applyAppearanceMode(this.appearanceMode);
+    },
+    // 内存立即采用最新输入；响应只确认落盘，不能拿旧响应覆盖之后的预览或修改。
+    async patchSettings(partial, workspaceDir = this.workspaceDir) {
+      if (workspaceDir !== this.workspaceDir) {
+        throw { code: "workspace.changed", message: "Workspace changed before saving" };
+      }
+      const patch = { ...partial };
+      if (Object.hasOwn(patch, "terminalBackground")) {
+        patch.terminalBackground = normalizeTerminalBackground(patch.terminalBackground);
+      }
+      this.previewSettings(patch);
+      if (!workspaceDir) return null;
 
-      const nextSettings = {
-        ...this.settings,
-        ...partial,
-      };
-      const snapshot = await saveSettings(nextSettings);
-      this.hydrate(snapshot.settings);
-      return snapshot;
+      return enqueueSettingsWrite(() => saveSettings(patch, workspaceDir));
     },
     // 布局/外观类偏好：先改内存立即生效，持久化失败不回滚（下次启动回落到旧值）
     applySettingsPatch(partial) {
-      if (this.settings) {
-        Object.assign(this.settings, partial);
-      }
-
       return this.patchSettings(partial).catch((error) => {
         console.warn("[Xin Terminal] settings patch failed", error);
+        useUiStore().setError(error);
         return null;
       });
     },
@@ -127,12 +138,12 @@ export const useSettingsStore = defineStore("settings", {
       });
     },
     // 全局终端背景图；单个连接可在外观面板里覆盖成自己的一张
-    setTerminalBackground(terminalBackground) {
-      return this.applySettingsPatch({ terminalBackground });
+    setTerminalBackground(terminalBackground, workspaceDir = this.workspaceDir) {
+      return this.patchSettings({ terminalBackground }, workspaceDir);
     },
     // 先落 DOM 再持久化：切换要立刻可见，存盘失败也不该把界面卡在旧模式
     setAppearanceMode(appearanceMode) {
-      const mode = applyAppearanceMode(appearanceMode);
+      const mode = normalizeAppearanceMode(appearanceMode);
       return this.applySettingsPatch({ appearanceMode: mode });
     },
   },

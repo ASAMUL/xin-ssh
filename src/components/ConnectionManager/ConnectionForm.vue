@@ -3,7 +3,6 @@ import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProfileStore } from "../../stores/profileStore";
-import { useAppStore } from "../../stores/appStore";
 import { useCredentialStore } from "../../stores/credentialStore";
 import { testConnection as testConnectionRequest } from "../../services/workspaceApi";
 import { errorCode, localizeError } from "../../utils/appError";
@@ -18,7 +17,6 @@ const props = defineProps({
 const emit = defineEmits(["close"]);
 const { t } = useI18n();
 const profileStore = useProfileStore();
-const appStore = useAppStore();
 const credentialStore = useCredentialStore();
 
 const error = ref("");
@@ -151,7 +149,7 @@ async function submitProfile() {
     const profileId = currentProfile?.id ?? crypto.randomUUID();
     const credentialRef = await resolveCredentialRef(currentProfile, profileId);
 
-    const workspaceSnapshot = await runSaveStep("profile.saveProgress.saveProfile", () =>
+    await runSaveStep("profile.saveProgress.saveProfile", () =>
       profileStore.saveProfile({
         id: profileId,
         syncId: currentProfile?.syncId ?? profileId,
@@ -164,16 +162,17 @@ async function submitProfile() {
         privateKeyPath: form.authMethod === "privateKey" ? form.privateKeyPath : null,
         credentialRef,
         defaultRemotePath: form.defaultRemotePath || "/",
-        sortOrder: currentProfile?.sortOrder ?? Math.max(-1, ...profileStore.activeProfiles.map((profile) => profile.sortOrder)) + 1,
-        favorite: currentProfile?.favorite ?? false,
-        lastConnectedAt: currentProfile?.lastConnectedAt ?? null,
-        createdAt: currentProfile?.createdAt ?? now,
-        updatedAt: now,
-        deletedAt: currentProfile?.deletedAt ?? null,
+        ...(!currentProfile ? {
+          sortOrder: Math.max(-1, ...profileStore.activeProfiles.map((profile) => profile.sortOrder)) + 1,
+          favorite: false,
+          lastConnectedAt: null,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+        } : {}),
       }),
     );
 
-    appStore.consumeSnapshot(workspaceSnapshot);
     emit("close");
   } catch (submitError) {
     // 凭据存储相关的失败额外加一句上下文：多半是本机密钥出了问题，不是填错了

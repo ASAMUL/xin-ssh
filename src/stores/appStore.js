@@ -36,7 +36,7 @@ export const useAppStore = defineStore("app", {
     consumeSnapshot(snapshot) {
       this.initialized = true;
       this.workspaceDir = snapshot.workspaceDir;
-      useSettingsStore().hydrate(snapshot.settings);
+      useSettingsStore().hydrate(snapshot.settings, snapshot.workspaceDir);
       useProfileStore().hydrate(snapshot);
     },
   },

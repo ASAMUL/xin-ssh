@@ -54,6 +54,8 @@ let resizeObserver = null;
 let disposeDataListener = null;
 let disposeResizeListener = null;
 let persistBackgroundTimer = null;
+let pendingBackgroundWrite = null;
+const backgroundSelections = new Map();
 
 // 终端内查找：addon 实例给面板用，面板经 Ctrl+Shift+F / 工具栏按钮开关
 const searchAddon = shallowRef(null);
@@ -198,17 +200,20 @@ watch(displayTheme, (theme) => {
 // 换图 / 换连接 / 清除都只是换 file 字段，这里跟着解析即可。
 watch(
   () => activeBackground.value?.file ?? null,
-  async (file) => {
+  async (file, _previous, onCleanup) => {
+    let stale = false;
+    onCleanup(() => { stale = true; });
+    backgroundUrl.value = null;
     if (!file) {
-      backgroundUrl.value = null;
       return;
     }
 
     try {
-      backgroundUrl.value = await resolveTerminalBackgroundUrl(file);
+      const url = await resolveTerminalBackgroundUrl(file);
+      if (!stale) backgroundUrl.value = url;
     } catch (error) {
       console.warn("[Xin Terminal] terminal background load failed", error);
-      backgroundUrl.value = null;
+      if (!stale) backgroundUrl.value = null;
     }
   },
   { immediate: true },
@@ -220,6 +225,8 @@ watch(isAppearanceOpen, (open) => {
 
   backgroundScope.value = profileBackground.value && activeProfile.value ? "profile" : "global";
 });
+
+watch([backgroundScope, () => activeProfile.value?.id], () => flushBackgroundWrite());
 
 watch(terminalFontStack, (stack) => {
   if (!terminal) return;
@@ -286,10 +293,7 @@ onBeforeUnmount(() => {
   disposeResizeListener?.dispose();
   terminal?.dispose();
   // 拖完滑块立刻切走时，防抖里那一次还没落盘——补写，别丢用户刚调的值
-  if (persistBackgroundTimer) {
-    clearTimeout(persistBackgroundTimer);
-    writeBackground(editingBackground.value);
-  }
+  flushBackgroundWrite();
 });
 
 function focusTerminal() {
@@ -460,20 +464,29 @@ function selectFontSize(fontSize) {
 // 这里只负责组装完整的 background 对象（后端字段有 serde default，但前端
 // 传半个对象会让 opacity/fit 悄悄回落到默认值，不如每次写全）。
 async function chooseBackgroundImage() {
+  const target = captureBackgroundTarget();
+  const targetKey = JSON.stringify(target);
+  const selection = Symbol();
+  backgroundSelections.set(targetKey, selection);
+  const current = editingBackground.value;
+  flushBackgroundWrite();
   try {
     const sourcePath = await pickBackgroundImage(t("terminal.background.pick"));
-    if (!sourcePath) return;
+    if (!sourcePath || backgroundSelections.get(targetKey) !== selection) return;
 
     const file = await importTerminalBackground(sourcePath);
-    const current = editingBackground.value;
+    // 导入期间可能已清除、调节或重新选图，迟到结果不能撤销用户的新操作。
+    if (backgroundSelections.get(targetKey) !== selection) return;
     await writeBackground({
       file,
       opacity: current?.opacity ?? 0.35,
       blur: current?.blur ?? 0,
       fit: current?.fit ?? "cover",
-    });
+    }, target);
   } catch (error) {
     uiStore.setError(error);
+  } finally {
+    if (backgroundSelections.get(targetKey) === selection) backgroundSelections.delete(targetKey);
   }
 }
 
@@ -482,54 +495,67 @@ function patchBackground(partial) {
   if (!current) return;
 
   const next = { ...current, ...partial };
+  const target = captureBackgroundTarget();
+  backgroundSelections.delete(JSON.stringify(target));
+  if (pendingBackgroundWrite && (
+    pendingBackgroundWrite.target.profileId !== target.profileId
+    || pendingBackgroundWrite.target.workspaceDir !== target.workspaceDir
+  )) flushBackgroundWrite();
   // 先就地改内存让终端立刻跟着变，落盘防抖 250ms——拖滑块每一格都写一次
   // settings.json / profiles.json 是没必要的磁盘与 IPC 开销
-  applyBackgroundLocally(next);
+  applyBackgroundLocally(next, target);
+  pendingBackgroundWrite = { background: next, target };
   clearTimeout(persistBackgroundTimer);
-  persistBackgroundTimer = setTimeout(() => writeBackground(next), 250);
+  persistBackgroundTimer = setTimeout(flushBackgroundWrite, 250);
 }
 
 function clearBackground() {
+  const target = captureBackgroundTarget();
+  backgroundSelections.delete(JSON.stringify(target));
+  flushBackgroundWrite();
+  writeBackground(null, target);
+}
+
+function captureBackgroundTarget() {
+  return {
+    scope: backgroundScope.value,
+    profileId: backgroundScope.value === "profile" ? activeProfile.value?.id : null,
+    workspaceDir: settingsStore.workspaceDir,
+  };
+}
+
+function applyBackgroundLocally(background, target) {
+  if (target.scope === "profile") {
+    profileStore.previewTerminalBackground(target.profileId, background);
+  } else {
+    settingsStore.previewSettings({ terminalBackground: background });
+  }
+}
+
+function flushBackgroundWrite() {
   clearTimeout(persistBackgroundTimer);
-  applyBackgroundLocally(null);
-  writeBackground(null);
+  persistBackgroundTimer = null;
+  const pending = pendingBackgroundWrite;
+  pendingBackgroundWrite = null;
+  if (pending) return writeBackground(pending.background, pending.target);
 }
 
-function applyBackgroundLocally(background) {
-  if (backgroundScope.value === "profile" && activeProfile.value) {
-    activeProfile.value.terminalBackground = background;
-    return;
-  }
-
-  if (settingsStore.settings) {
-    settingsStore.settings.terminalBackground = background;
-  }
-}
-
-async function writeBackground(background) {
+// 捕获发起时的工作区与连接；选图和防抖跨过切标签后，仍写回原目标。
+async function writeBackground(background, target) {
   try {
-    if (backgroundScope.value === "profile" && activeProfile.value) {
-      await profileStore.setTerminalBackground(activeProfile.value.id, background);
+    if (target.scope === "profile") {
+      await profileStore.setTerminalBackground(target.profileId, background, target.workspaceDir);
       return;
     }
 
-    await settingsStore.setTerminalBackground(background);
+    await settingsStore.setTerminalBackground(background, target.workspaceDir);
   } catch (error) {
     uiStore.setError(error);
   }
 }
 
 function applyAppearance(partial) {
-  if (settingsStore.settings) {
-    // optimistic: re-skin immediately, persistence follows
-    Object.assign(settingsStore.settings, partial);
-    settingsStore.patchSettings(partial).catch((error) => {
-      uiStore.setError(error);
-    });
-    return;
-  }
-
-  settingsStore.patchSettings(partial);
+  settingsStore.patchSettings(partial).catch((error) => uiStore.setError(error));
 }
 
 // 外观与片段共用右缘滑入位，互斥打开
@@ -589,7 +615,7 @@ async function savePendingCredential() {
     const profile = profileStore.profiles.find((item) => item.id === session.profileId);
     if (profile && profile.credentialRef !== credentialRef) {
       await profileStore.saveProfile({
-        ...profile,
+        id: profile.id,
         credentialRef,
       });
     }

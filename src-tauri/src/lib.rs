@@ -50,6 +50,7 @@ pub fn run() {
             workspace::save_group,
             workspace::save_profile,
             workspace::save_settings,
+            workspace::set_profile_background,
             workspace::save_snippet,
             workspace::save_tunnel_config,
             ssh::shell::send_terminal_input,

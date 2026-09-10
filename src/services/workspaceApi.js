@@ -80,8 +80,12 @@ export function retryDeletedCredentialCleanup() {
   return invoke("retry_deleted_credential_cleanup");
 }
 
-export function saveSettings(settings) {
-  return invoke("save_settings", { settings });
+export function saveSettings(patch, workspaceDir) {
+  return invoke("save_settings", { patch, workspaceDir });
+}
+
+export function setProfileBackground(profileId, terminalBackground, workspaceDir) {
+  return invoke("set_profile_background", { profileId, terminalBackground, workspaceDir });
 }
 
 export function saveCredential(request) {

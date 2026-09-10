@@ -89,6 +89,8 @@ pub mod codes {
     pub const WORKSPACE_NOT_INITIALIZED: &str = "workspace.notInitialized";
     pub const WORKSPACE_DIR_MISSING: &str = "workspace.dirMissing";
     pub const WORKSPACE_FILE_CORRUPT: &str = "workspace.fileCorrupt";
+    pub const WORKSPACE_CHANGED: &str = "workspace.changed";
+    pub const SETTINGS_INVALID: &str = "settings.invalid";
     pub const GROUP_DEFAULT_PROTECTED: &str = "group.defaultProtected";
     pub const GROUP_NAME_REQUIRED: &str = "group.nameRequired";
     pub const GROUP_NOT_FOUND: &str = "group.notFound";

@@ -3,7 +3,7 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Mutex, MutexGuard},
 };
 
 use tauri::{AppHandle, Manager};
@@ -12,7 +12,7 @@ use tempfile::NamedTempFile;
 use crate::error::{codes, io_error, AppError};
 use crate::models::{
     AppStateFile, AppStatus, ConnectionGroup, ConnectionProfile, ProfilesFile, Snippet,
-    SnippetsFile, TunnelConfig, TunnelsFile, WorkspaceSettings, WorkspaceSnapshot,
+    SnippetsFile, TerminalBackground, TunnelConfig, TunnelsFile, WorkspaceSettings, WorkspaceSnapshot,
 };
 use crate::util::{now_stamp, path_to_string};
 
@@ -22,8 +22,15 @@ const SETTINGS_FILE: &str = "settings.json";
 const TUNNELS_FILE: &str = "tunnels.json";
 const SNIPPETS_FILE: &str = "snippets.json";
 
-// 在线会话会同时更新最近连接时间，配置读改写需要串行，避免覆盖分组和删除结果。
-static PROFILES_WRITE_LOCK: Mutex<()> = Mutex::new(());
+// 快照读取也可能恢复损坏文件，和读改写共用一把锁，避免默认值覆盖刚保存的配置。
+static WORKSPACE_LOCK: Mutex<()> = Mutex::new(());
+static APP_STATE_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_workspace() -> MutexGuard<'static, ()> {
+    WORKSPACE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+}
 
 pub(crate) use crate::models::CURRENT_SCHEMA_VERSION;
 
@@ -47,6 +54,7 @@ pub async fn init_workspace(
     app: AppHandle,
     workspace_dir: Option<String>,
 ) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = lock_workspace();
     let workspace = match workspace_dir {
         Some(dir) if !dir.trim().is_empty() => PathBuf::from(dir),
         _ => default_workspace_dir(&app)?,
@@ -59,6 +67,7 @@ pub async fn init_workspace(
 
 #[tauri::command]
 pub async fn load_workspace(app: AppHandle) -> Result<Option<WorkspaceSnapshot>, AppError> {
+    let _guard = lock_workspace();
     let Some(state) = read_app_state(&app)? else {
         return Ok(None);
     };
@@ -80,6 +89,7 @@ pub async fn change_workspace_dir(
     app: AppHandle,
     workspace_dir: String,
 ) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = lock_workspace();
     let workspace = PathBuf::from(workspace_dir);
 
     ensure_workspace(&workspace)?;
@@ -92,9 +102,7 @@ pub async fn save_profile(
     app: AppHandle,
     profile: ConnectionProfile,
 ) -> Result<WorkspaceSnapshot, AppError> {
-    let _guard = PROFILES_WRITE_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut next_profile = profile;
@@ -105,6 +113,15 @@ pub async fn save_profile(
         .iter_mut()
         .find(|item| item.id == next_profile.id)
     {
+        if existing.deleted_at.is_some() {
+            return Err(AppError::new(
+                codes::PROFILE_NOT_FOUND,
+                "Connection profile not found",
+            ));
+        }
+        // 最近连接和背景由专用命令维护，旧表单快照不能把它们写回旧值或清空。
+        next_profile.last_connected_at = existing.last_connected_at.clone();
+        next_profile.terminal_background = existing.terminal_background.clone();
         *existing = next_profile;
     } else {
         profiles_file.profiles.push(next_profile);
@@ -120,9 +137,7 @@ pub async fn mark_profile_connected(
     app: AppHandle,
     profile_id: String,
 ) -> Result<WorkspaceSnapshot, AppError> {
-    let _guard = PROFILES_WRITE_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
 
@@ -143,9 +158,7 @@ pub async fn delete_profile(
     app: AppHandle,
     profile_id: String,
 ) -> Result<WorkspaceSnapshot, AppError> {
-    let _guard = PROFILES_WRITE_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let deleted_at = now_stamp();
@@ -223,9 +236,7 @@ fn cleanup_deleted_credentials(
 pub async fn retry_deleted_credential_cleanup(
     app: AppHandle,
 ) -> Result<WorkspaceSnapshot, AppError> {
-    let _guard = PROFILES_WRITE_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     cleanup_deleted_credentials(&workspace, &mut profiles_file).map_err(|_| {
@@ -243,9 +254,7 @@ pub async fn save_group(
     app: AppHandle,
     group: ConnectionGroup,
 ) -> Result<WorkspaceSnapshot, AppError> {
-    let _guard = PROFILES_WRITE_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut next_group = group;
@@ -283,9 +292,7 @@ pub async fn delete_group(
     group_id: String,
     delete_profiles: bool,
 ) -> Result<WorkspaceSnapshot, AppError> {
-    let _guard = PROFILES_WRITE_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _guard = lock_workspace();
     if group_id == default_group_id() {
         return Err(AppError::new(
             codes::GROUP_DEFAULT_PROTECTED,
@@ -343,9 +350,7 @@ pub async fn reorder_groups(
     app: AppHandle,
     group_ids: Vec<String>,
 ) -> Result<WorkspaceSnapshot, AppError> {
-    let _guard = PROFILES_WRITE_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut groups: Vec<_> = profiles_file
@@ -382,9 +387,7 @@ pub async fn move_profile(
     group_id: String,
     before_profile_id: Option<String>,
 ) -> Result<WorkspaceSnapshot, AppError> {
-    let _guard = PROFILES_WRITE_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
     if !profiles_file
@@ -443,17 +446,69 @@ pub async fn move_profile(
 #[tauri::command]
 pub async fn save_settings(
     app: AppHandle,
-    settings: WorkspaceSettings,
-) -> Result<WorkspaceSnapshot, AppError> {
-    let workspace = active_workspace_dir(&app)?;
+    patch: serde_json::Map<String, serde_json::Value>,
+    workspace_dir: String,
+) -> Result<WorkspaceSettings, AppError> {
+    let _guard = lock_workspace();
+    let workspace = expected_workspace_dir(&app, &workspace_dir)?;
+    // 只合并调用方改动的顶层字段，null 保留为显式清除背景，未传字段沿用最新存档。
+    let mut value = serde_json::to_value(read_settings_file(&workspace)?).map_err(io_error)?;
+    let fields = value
+        .as_object_mut()
+        .ok_or_else(|| invalid_settings("Expected an object"))?;
+    for (field, value) in patch {
+        if field == "schemaVersion" || !fields.contains_key(&field) {
+            return Err(invalid_settings(format!("Unknown setting: {field}")));
+        }
+        fields.insert(field, value);
+    }
+    let settings: WorkspaceSettings = serde_json::from_value(value).map_err(invalid_settings)?;
     write_settings_file(&workspace, &settings)?;
+    Ok(settings)
+}
+
+fn invalid_settings(detail: impl std::fmt::Display) -> AppError {
+    AppError::new(codes::SETTINGS_INVALID, "Invalid settings patch").with("detail", detail)
+}
+
+// 背景单独更新，防抖保存期间的连接打点、改名和分组调整都应保留。
+#[tauri::command]
+pub async fn set_profile_background(
+    app: AppHandle,
+    profile_id: String,
+    terminal_background: Option<TerminalBackground>,
+    workspace_dir: String,
+) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = lock_workspace();
+    let workspace = expected_workspace_dir(&app, &workspace_dir)?;
+    let mut profiles_file = read_profiles_file(&workspace)?;
+    let profile = profiles_file
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.id == profile_id && profile.deleted_at.is_none())
+        .ok_or_else(|| AppError::new(codes::PROFILE_NOT_FOUND, "Connection profile not found"))?;
+    profile.terminal_background = terminal_background;
+    profile.updated_at = now_stamp();
+    write_profiles_file(&workspace, &profiles_file)?;
     load_workspace_from_dir(&workspace)
+}
+
+fn expected_workspace_dir(app: &AppHandle, expected: &str) -> Result<PathBuf, AppError> {
+    let workspace = active_workspace_dir(app)?;
+    if workspace != PathBuf::from(expected) {
+        return Err(AppError::new(
+            codes::WORKSPACE_CHANGED,
+            "Workspace changed before saving",
+        ));
+    }
+    Ok(workspace)
 }
 
 // —— SSH 隧道配置（tunnels.json，按需创建；软删除同 profiles）——
 
 #[tauri::command]
 pub async fn list_tunnel_configs(app: AppHandle) -> Result<Vec<TunnelConfig>, AppError> {
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     Ok(valid_records(
         read_tunnels_file(&workspace)?.tunnels,
@@ -466,6 +521,7 @@ pub async fn save_tunnel_config(
     app: AppHandle,
     tunnel: TunnelConfig,
 ) -> Result<Vec<TunnelConfig>, AppError> {
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut tunnels_file = read_tunnels_file(&workspace)?;
     let mut next_tunnel = tunnel;
@@ -490,6 +546,7 @@ pub async fn delete_tunnel_config(
     app: AppHandle,
     tunnel_id: String,
 ) -> Result<Vec<TunnelConfig>, AppError> {
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut tunnels_file = read_tunnels_file(&workspace)?;
 
@@ -517,6 +574,7 @@ fn write_tunnels_file(workspace: &Path, tunnels_file: &TunnelsFile) -> Result<()
 
 #[tauri::command]
 pub async fn list_snippets(app: AppHandle) -> Result<Vec<Snippet>, AppError> {
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     Ok(valid_records(
         read_snippets_file(&workspace)?.snippets,
@@ -526,6 +584,7 @@ pub async fn list_snippets(app: AppHandle) -> Result<Vec<Snippet>, AppError> {
 
 #[tauri::command]
 pub async fn save_snippet(app: AppHandle, snippet: Snippet) -> Result<Vec<Snippet>, AppError> {
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut snippets_file = read_snippets_file(&workspace)?;
     let mut next_snippet = snippet;
@@ -547,6 +606,7 @@ pub async fn save_snippet(app: AppHandle, snippet: Snippet) -> Result<Vec<Snippe
 
 #[tauri::command]
 pub async fn delete_snippet(app: AppHandle, snippet_id: String) -> Result<Vec<Snippet>, AppError> {
+    let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut snippets_file = read_snippets_file(&workspace)?;
 
@@ -605,6 +665,9 @@ fn workspace_files_exist(workspace: &Path) -> bool {
 }
 
 fn read_app_state(app: &AppHandle) -> Result<Option<AppStateFile>, AppError> {
+    let _guard = APP_STATE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let path = app_state_path(app)?;
     if !path.exists() {
         return Ok(None);
@@ -620,6 +683,9 @@ fn read_app_state(app: &AppHandle) -> Result<Option<AppStateFile>, AppError> {
 }
 
 fn write_app_state(app: &AppHandle, workspace: &Path) -> Result<(), AppError> {
+    let _guard = APP_STATE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     write_json_file(
         &app_state_path(app)?,
         &AppStateFile {

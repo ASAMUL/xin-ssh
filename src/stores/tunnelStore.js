@@ -12,8 +12,10 @@ import { useProfileStore } from "./profileStore";
 import { useSettingsStore } from "./settingsStore";
 import { i18n } from "../i18n";
 import { localizeError } from "../utils/appError";
+import { createSerialQueue } from "../utils/serialQueue";
 
 const TUNNEL_EVENT_NAME = "tunnel-event";
+const enqueueTunnelConfigChange = createSerialQueue();
 
 export const useTunnelStore = defineStore("tunnels", {
   state: () => ({
@@ -59,19 +61,26 @@ export const useTunnelStore = defineStore("tunnels", {
     },
     async loadConfigs() {
       try {
-        this.configs = await listTunnelConfigs();
-        this.loaded = true;
+        await enqueueTunnelConfigChange(async () => {
+          this.configs = await listTunnelConfigs();
+          this.loaded = true;
+        });
       } catch (error) {
         console.warn("[Xin Terminal] tunnel configs unavailable", error);
       }
     },
     async saveConfig(tunnel) {
-      this.configs = await saveTunnelConfig(tunnel);
+      const next = { ...tunnel };
+      return enqueueTunnelConfigChange(async () => {
+        this.configs = await saveTunnelConfig(next);
+      });
     },
     async removeConfig(tunnelId) {
-      await this.stop(tunnelId);
-      this.configs = await deleteTunnelConfig(tunnelId);
-      delete this.runtime[tunnelId];
+      return enqueueTunnelConfigChange(async () => {
+        await this.stop(tunnelId);
+        this.configs = await deleteTunnelConfig(tunnelId);
+        delete this.runtime[tunnelId];
+      });
     },
     // credentials: { password, passphrase } —— 面板在无保存凭据时收集
     async start(tunnel, credentials = {}) {
