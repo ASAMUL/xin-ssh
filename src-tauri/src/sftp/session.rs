@@ -69,6 +69,7 @@ impl CachedSftp {
                     matches!(
                         error.code,
                         codes::SSH_CONNECTION | codes::SSH_DISCONNECTED | codes::IO_FAILED
+                            | codes::SFTP_FAILED | codes::SFTP_TIMED_OUT | codes::REMOTE_IO_FAILED
                     )
                 });
             if let Some(result) = result {

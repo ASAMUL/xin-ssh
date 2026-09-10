@@ -567,6 +567,7 @@ export const messages = {
         "validation.unsupportedCredentialKind": "不支持的凭据类型：{kind}",
 
         "auth.failed": "认证失败，请检查用户名、密码或密钥",
+        "auth.keyFile": "无法读取或解密私钥：{path}。请检查文件、格式和私钥口令。原因：{detail}",
         "hostKey.changed": "服务器主机密钥已变更",
 
         "session.notRunning": "会话未连接",
@@ -576,6 +577,12 @@ export const messages = {
         "timeout.operation": "{operation}超时（{seconds} 秒）",
 
         "remote.targetExists": "远程已存在同名项：{path}",
+        "remote.permissionDenied": "无权访问远端路径：{path}。请检查文件权限及父目录的访问权限。",
+        "remote.notFound": "远端路径不存在：{path}",
+        "remote.ioFailed": "远端文件读写失败（{path}）：{detail}",
+        "sftp.failed": "SFTP 操作失败：{detail}",
+        "sftp.timedOut": "SFTP 请求超时，请检查连接；如有修改操作，请刷新确认结果后再重试。",
+        "sftp.unsupported": "服务器不支持此 SFTP 操作：{detail}",
         "remote.isDirectory": "目标是一个目录，无法作为文本编辑：{path}",
         "remote.notDirectory": "远程路径不是目录：{path}",
         "remote.notRegularFile": "目标不是常规文件（可能是设备或管道），无法编辑：{path}",
@@ -634,6 +641,7 @@ export const messages = {
         "tunnel.portUnavailable": "本地端口 {port} 不可用：{detail}",
 
         "ssh.connection": "SSH 连接失败：{detail}",
+        "ssh.resolveFailed": "无法解析主机 {host}，请检查地址和 DNS 设置：{detail}",
         "ssh.disconnected": "与服务器的连接已断开",
 
         "io.failed": "本地读写失败：{detail}",
@@ -665,6 +673,9 @@ export const messages = {
         systemInfo: "系统信息采集",
         remoteSystemInfoCommand: "远程系统信息命令",
         testConnection: "连接测试",
+        connectSsh: "SSH 建连",
+        authenticateSsh: "SSH 认证",
+        openTerminal: "启动终端",
         openSftpChannel: "打开 SFTP 通道",
         createDirectory: "新建文件夹",
         createFile: "新建文件",
@@ -1245,6 +1256,7 @@ export const messages = {
         "validation.unsupportedCredentialKind": "Unsupported credential kind: {kind}",
 
         "auth.failed": "Authentication failed — check the username, password or key",
+        "auth.keyFile": "Could not read or decrypt the private key: {path}. Check the file, format and passphrase. Reason: {detail}",
         "hostKey.changed": "The server host key has changed",
 
         "session.notRunning": "The session is not connected",
@@ -1254,6 +1266,12 @@ export const messages = {
         "timeout.operation": "{operation} timed out after {seconds}s",
 
         "remote.targetExists": "A remote item with that name already exists: {path}",
+        "remote.permissionDenied": "Access denied to remote path: {path}. Check the file permissions and access to its parent directories.",
+        "remote.notFound": "Remote path does not exist: {path}",
+        "remote.ioFailed": "Remote file read/write failed ({path}): {detail}",
+        "sftp.failed": "SFTP operation failed: {detail}",
+        "sftp.timedOut": "The SFTP request timed out. Check the connection; for changes, refresh to confirm the result before retrying.",
+        "sftp.unsupported": "The server does not support this SFTP operation: {detail}",
         "remote.isDirectory": "The target is a directory and cannot be edited as text: {path}",
         "remote.notDirectory": "Remote path is not a directory: {path}",
         "remote.notRegularFile":
@@ -1314,6 +1332,7 @@ export const messages = {
         "tunnel.portUnavailable": "Local port {port} is unavailable: {detail}",
 
         "ssh.connection": "SSH connection failed: {detail}",
+        "ssh.resolveFailed": "Could not resolve host {host}. Check the address and DNS settings: {detail}",
         "ssh.disconnected": "The connection to the server was lost",
 
         "io.failed": "Local read/write failed: {detail}",
@@ -1345,6 +1364,9 @@ export const messages = {
         systemInfo: "system info sampling",
         remoteSystemInfoCommand: "the remote system info command",
         testConnection: "connection test",
+        connectSsh: "SSH connection setup",
+        authenticateSsh: "SSH authentication",
+        openTerminal: "starting the terminal",
         openSftpChannel: "opening the SFTP channel",
         createDirectory: "creating a folder",
         createFile: "creating a file",

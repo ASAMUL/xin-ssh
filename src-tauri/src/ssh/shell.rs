@@ -3,10 +3,10 @@ use std::sync::Arc;
 use russh::{ChannelMsg, Disconnect};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{mpsc, Mutex as AsyncMutex, Semaphore};
-use tokio::time::{Duration, Instant};
+use tokio::time::{timeout, Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
-use crate::error::{connection_error, required, AppError};
+use crate::error::{connection_error, required, timeout as timeout_error, AppError};
 use crate::models::{
     AuthMethod, TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest,
     TerminalStartRequest,
@@ -21,7 +21,7 @@ use crate::sftp::ops::{
 use crate::sftp::transfer::{
     remove_transfer_cancellation, run_download_transfer, run_upload_transfer,
 };
-use crate::ssh::client::{authenticate_session, connect_with_tofu};
+use crate::ssh::client::{authenticate_session, connect_with_tofu, disconnect_session};
 use crate::ssh::registry::{TerminalControl, TerminalRegistry};
 use crate::system_info::collect_system_info_on_session;
 use crate::util::shell_quote;
@@ -126,47 +126,51 @@ async fn run_terminal_shell(
     let mut close_reason = TERMINAL_CLOSE_REASON_REMOTE;
     let host = request.host.trim().to_string();
     let username = request.username.trim().to_string();
-    let mut session = connect_with_tofu(&app, &host, request.port, request.keepalive_seconds).await?;
-
-    authenticate_session(
-        &mut session,
-        username,
-        request.auth_method.clone(),
-        request.password,
-        request.private_key_path,
-        request.passphrase,
-    )
-    .await?;
-
-    let session = Arc::new(AsyncMutex::new(session));
-    let mut channel = {
-        let session_handle = session.lock().await;
-        session_handle
-            .channel_open_session()
-            .await
-            .map_err(connection_error)?
-    };
-    channel
-        .request_pty(
-            false,
-            "xterm-256color",
-            request.columns.max(1),
-            request.rows.max(1),
-            0,
-            0,
-            &[],
+    // 关闭或替换标签必须覆盖建连阶段，不能等握手结束才响应取消并短暂复活旧会话。
+    let setup = async {
+        let mut session = connect_with_tofu(&app, &host, request.port, request.keepalive_seconds).await?;
+        authenticate_session(
+            &mut session,
+            username,
+            request.auth_method.clone(),
+            request.password,
+            request.private_key_path,
+            request.passphrase,
         )
+        .await?;
+
+        let channel = timeout(Duration::from_secs(12), async {
+            let channel = session.channel_open_session().await.map_err(connection_error)?;
+            channel
+                .request_pty(
+                    false,
+                    "xterm-256color",
+                    request.columns.max(1),
+                    request.rows.max(1),
+                    0,
+                    0,
+                    &[],
+                )
+                .await
+                .map_err(connection_error)?;
+            // sshd 可能未放行 COLORTERM；真彩提示被忽略时，不能阻断终端启动。
+            let _ = channel.set_env(false, "COLORTERM", "truecolor").await;
+            channel.request_shell(true).await.map_err(connection_error)?;
+            Ok::<_, AppError>(channel)
+        })
         .await
-        .map_err(connection_error)?;
-    // 告诉远端我们支持真彩色。多数 sshd 的 AcceptEnv 只放行 LANG / LC_*，这条会被
-    // 直接忽略——所以 want_reply = false，被拒不影响连接；能过的话 bat / delta /
-    // neovim 这类工具会从 256 色近似切到 24 位真彩。TERM 已经是 xterm-256color，
-    // 所以即使这条被吞，ls / vim 的 16 色与 256 色一样正常。
-    let _ = channel.set_env(false, "COLORTERM", "truecolor").await;
-    channel
-        .request_shell(true)
-        .await
-        .map_err(connection_error)?;
+        .map_err(|_| timeout_error("openTerminal", 12))
+        .and_then(|result| result);
+        if channel.is_err() {
+            disconnect_session(&session, "terminal setup failed").await;
+        }
+        Ok::<_, AppError>((Arc::new(AsyncMutex::new(session)), channel?))
+    };
+    let (session, mut channel) = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => return Ok(()),
+        result = setup => result?,
+    };
 
     emit_terminal_event(
         &app,

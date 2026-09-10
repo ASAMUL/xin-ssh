@@ -12,7 +12,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::{timeout, Duration};
 
 use crate::error::{
-    codes, connection_error, io_error, remote_target_exists, required, root_forbidden,
+    codes, remote_target_exists, required, root_forbidden,
     timeout as timeout_error, AppError,
 };
 use crate::models::{
@@ -20,6 +20,7 @@ use crate::models::{
     RemoteDirectoryStreamRequest, RemoteFileContent, RemoteFileEntry, RemoteListDirectoryRequest,
     RemoteReadFileRequest, RemoteRenameRequest, RemoteWriteFileRequest,
 };
+use crate::sftp::error::{remote_io_error, sftp_error};
 use crate::sftp::path::normalize_remote_path;
 use crate::sftp::{open_raw_sftp_session, remote_file_entry, remote_file_entry_from_attrs};
 use crate::ssh::client::ConnectionTestClient;
@@ -228,7 +229,7 @@ async fn stream_directory_entries(
     let handle = raw
         .opendir(listing_path.clone())
         .await
-        .map_err(connection_error)?
+        .map_err(|error| sftp_error(error, &listing_path))?
         .handle;
 
     emit_directory_event(
@@ -264,7 +265,7 @@ async fn stream_directory_entries(
             Err(SftpError::Status(status)) if status.status_code == StatusCode::Eof => {
                 break Ok(());
             }
-            Err(error) => break Err(connection_error(error)),
+            Err(error) => break Err(sftp_error(error, &listing_path)),
         }
     };
 
@@ -292,12 +293,14 @@ pub(crate) async fn create_directory_on_session(
     if sftp
         .try_exists(path.clone())
         .await
-        .map_err(connection_error)?
+        .map_err(|error| sftp_error(error, &path))?
     {
         return Err(remote_target_exists(&path));
     }
 
-    sftp.create_dir(path).await.map_err(connection_error)
+    sftp.create_dir(path.clone())
+        .await
+        .map_err(|error| sftp_error(error, &path))
 }
 
 pub(crate) async fn create_file_on_session(
@@ -313,20 +316,22 @@ pub(crate) async fn create_file_on_session(
     if sftp
         .try_exists(path.clone())
         .await
-        .map_err(connection_error)?
+        .map_err(|error| sftp_error(error, &path))?
     {
         return Err(remote_target_exists(&path));
     }
 
     let mut file = sftp
         .open_with_flags(
-            path,
+            path.clone(),
             OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
         )
         .await
-        .map_err(connection_error)?;
+        .map_err(|error| sftp_error(error, &path))?;
 
-    file.shutdown().await.map_err(io_error)
+    file.shutdown()
+        .await
+        .map_err(|error| remote_io_error(error, &path))
 }
 
 pub(crate) async fn read_file_text_on_session(
@@ -338,7 +343,7 @@ pub(crate) async fn read_file_text_on_session(
     let metadata = sftp
         .metadata(path.clone())
         .await
-        .map_err(connection_error)?;
+        .map_err(|error| sftp_error(error, &path))?;
 
     if metadata.file_type().is_dir() {
         return Err(AppError::new(
@@ -362,11 +367,11 @@ pub(crate) async fn read_file_text_on_session(
         return Err(editable_file_too_large_error());
     }
 
-    let mut file = sftp.open(path.clone()).await.map_err(connection_error)?;
+    let mut file = sftp.open(path.clone()).await.map_err(|error| sftp_error(error, &path))?;
     let mut bytes = Vec::with_capacity(size as usize);
     let read_result = file.read_to_end(&mut bytes).await;
     let _ = file.shutdown().await;
-    read_result.map_err(io_error)?;
+    read_result.map_err(|error| remote_io_error(error, &path))?;
 
     // /proc 等虚拟文件 metadata 报 0，按实际读到的字节数兜底校验
     if bytes.len() as u64 > MAX_EDITABLE_FILE_BYTES {
@@ -404,18 +409,22 @@ pub(crate) async fn write_file_text_on_session(
     // 就地截断重写以保留权限与属主；不走“临时文件+改名”，SFTP rename 无法覆盖且会重置属主
     let mut file = sftp
         .open_with_flags(
-            path,
+            path.clone(),
             OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
         )
         .await
-        .map_err(connection_error)?;
+        .map_err(|error| sftp_error(error, &path))?;
 
     for chunk in content.as_bytes().chunks(EDITOR_WRITE_CHUNK_BYTES) {
-        file.write_all(chunk).await.map_err(io_error)?;
+        file.write_all(chunk)
+            .await
+            .map_err(|error| remote_io_error(error, &path))?;
     }
 
-    file.flush().await.map_err(io_error)?;
-    file.shutdown().await.map_err(io_error)
+    file.flush().await.map_err(|error| remote_io_error(error, &path))?;
+    file.shutdown()
+        .await
+        .map_err(|error| remote_io_error(error, &path))
 }
 
 // 目录树用的一次性列目录：走会话内缓存 SFTP 子通道，与流式面板列表互不影响
@@ -427,7 +436,7 @@ pub(crate) async fn list_directory_on_session(
     let read_dir = sftp
         .read_dir(listing_path.clone())
         .await
-        .map_err(connection_error)?;
+        .map_err(|error| sftp_error(error, &listing_path))?;
 
     Ok(read_dir
         .into_iter()
@@ -462,14 +471,14 @@ pub(crate) async fn rename_path_on_session(
     if sftp
         .try_exists(to_path.clone())
         .await
-        .map_err(connection_error)?
+        .map_err(|error| sftp_error(error, &to_path))?
     {
         return Err(remote_target_exists(&to_path));
     }
 
-    sftp.rename(from_path, to_path)
+    sftp.rename(from_path.clone(), to_path.clone())
         .await
-        .map_err(connection_error)
+        .map_err(|error| sftp_error(error, &from_path).with("target", &to_path))
 }
 
 fn directory_event(

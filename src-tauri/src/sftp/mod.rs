@@ -1,4 +1,5 @@
 pub(crate) mod delete;
+pub(crate) mod error;
 pub(crate) mod ops;
 pub(crate) mod path;
 pub(crate) mod session;
@@ -15,6 +16,7 @@ use tokio::sync::Mutex as AsyncMutex;
 
 use crate::error::{connection_error, AppError};
 use crate::models::RemoteFileEntry;
+use crate::sftp::error::sftp_error;
 use crate::sftp::path::normalize_remote_path;
 use crate::ssh::client::ConnectionTestClient;
 
@@ -36,7 +38,7 @@ pub(crate) async fn open_sftp_session(
 
     SftpSession::new(channel.into_stream())
         .await
-        .map_err(connection_error)
+        .map_err(|error| sftp_error(error, ""))
 }
 
 pub(crate) async fn open_raw_sftp_session(
@@ -56,7 +58,7 @@ pub(crate) async fn open_raw_sftp_session(
         .map_err(connection_error)?;
 
     let raw = RawSftpSession::new(channel.into_stream());
-    raw.init().await.map_err(connection_error)?;
+    raw.init().await.map_err(|error| sftp_error(error, ""))?;
 
     Ok(raw)
 }

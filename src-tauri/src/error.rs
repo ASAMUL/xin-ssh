@@ -52,6 +52,7 @@ pub mod codes {
     pub const VALIDATION_CREDENTIAL_KIND: &str = "validation.unsupportedCredentialKind";
 
     pub const AUTH_FAILED: &str = "auth.failed";
+    pub const AUTH_KEY_FILE: &str = "auth.keyFile";
     pub const HOST_KEY_CHANGED: &str = "hostKey.changed";
 
     pub const SESSION_NOT_RUNNING: &str = "session.notRunning";
@@ -61,6 +62,12 @@ pub mod codes {
     pub const TIMEOUT_OPERATION: &str = "timeout.operation";
 
     pub const REMOTE_TARGET_EXISTS: &str = "remote.targetExists";
+    pub const REMOTE_PERMISSION_DENIED: &str = "remote.permissionDenied";
+    pub const REMOTE_NOT_FOUND: &str = "remote.notFound";
+    pub const REMOTE_IO_FAILED: &str = "remote.ioFailed";
+    pub const SFTP_FAILED: &str = "sftp.failed";
+    pub const SFTP_TIMED_OUT: &str = "sftp.timedOut";
+    pub const SFTP_UNSUPPORTED: &str = "sftp.unsupported";
     pub const REMOTE_IS_DIRECTORY: &str = "remote.isDirectory";
     pub const REMOTE_NOT_DIRECTORY: &str = "remote.notDirectory";
     pub const REMOTE_NOT_REGULAR_FILE: &str = "remote.notRegularFile";
@@ -110,6 +117,7 @@ pub mod codes {
     pub const TUNNEL_PORT_UNAVAILABLE: &str = "tunnel.portUnavailable";
 
     pub const SSH_CONNECTION: &str = "ssh.connection";
+    pub const SSH_RESOLVE_FAILED: &str = "ssh.resolveFailed";
     pub const SSH_DISCONNECTED: &str = "ssh.disconnected";
 
     pub const IO_FAILED: &str = "io.failed";
@@ -186,11 +194,9 @@ pub fn io_error(error: impl Display) -> AppError {
     AppError::new(codes::IO_FAILED, error.to_string()).with("detail", error)
 }
 
-/// russh / russh-sftp / 网络层错误的统一包装。
+/// russh / 网络层仍未分类的错误包装；SFTP 状态与本地私钥错误在各自边界处理。
 ///
-/// 这里是**唯一**一处按文本判断错误性质的地方：底层库只给出 Display 字符串，
-/// 无法结构化。判断结果固化成 `ssh.disconnected` / `ssh.connection` 两个码，
-/// 前端只认码，不再自己匹配英文文本。
+/// 部分底层错误只剩 Display 文本，断线特征集中在这里兜底，前端只认稳定错误码。
 pub fn connection_error(error: impl Display) -> AppError {
     let message = error.to_string();
     let code = if is_disconnected_signature(&message) {

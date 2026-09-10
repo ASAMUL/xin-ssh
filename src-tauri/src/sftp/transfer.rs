@@ -10,7 +10,10 @@ use std::{
 
 use futures::stream::{self, StreamExt};
 use russh::client;
-use russh_sftp::{client::SftpSession, protocol::OpenFlags};
+use russh_sftp::{
+    client::{error::Error as SftpError, SftpSession},
+    protocol::{OpenFlags, StatusCode},
+};
 use tauri::{AppHandle, Emitter, State};
 use tokio::time::{Duration, Instant};
 use tokio::{
@@ -20,11 +23,12 @@ use tokio::{
 };
 
 use crate::error::{
-    codes, connection_error, io_error, lock_poisoned, required, AppError,
+    codes, io_error, lock_poisoned, required, AppError,
 };
 use crate::models::{
     RemoteDownloadRequest, RemoteTransferEntry, RemoteUploadRequest, TransferEventPayload,
 };
+use crate::sftp::error::{remote_io_error, sftp_error};
 use crate::sftp::open_sftp_session;
 use crate::sftp::path::{
     join_remote_path, local_file_name, normalize_remote_path, remote_basename, remote_parent_path,
@@ -291,7 +295,7 @@ async fn upload_file(
     let mut remote_file = sftp
         .open_with_flags(file.remote_path.clone(), open_flags)
         .await
-        .map_err(connection_error)?;
+        .map_err(|error| sftp_error(error, &file.remote_path))?;
     if file.offset > 0 {
         local_file
             .seek(SeekFrom::Start(file.offset))
@@ -300,7 +304,7 @@ async fn upload_file(
         remote_file
             .seek(SeekFrom::Start(file.offset))
             .await
-            .map_err(io_error)?;
+            .map_err(|error| remote_io_error(error, &file.remote_path))?;
     }
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
 
@@ -314,15 +318,17 @@ async fn upload_file(
         remote_file
             .write_all(&buffer[..read])
             .await
-            .map_err(io_error)?;
+            .map_err(|error| remote_io_error(error, &file.remote_path))?;
         with_progress(progress, |p| {
             p.bytes_transferred += read as u64;
             p.emit(app, "progress", Some(file.remote_path.clone()), false);
         })?;
     }
 
-    remote_file.flush().await.map_err(io_error)?;
-    remote_file.shutdown().await.map_err(io_error)?;
+    remote_file.flush().await.map_err(|error| remote_io_error(error, &file.remote_path))?;
+    remote_file.shutdown()
+        .await
+        .map_err(|error| remote_io_error(error, &file.remote_path))?;
     with_progress(progress, |p| {
         p.files_done += 1;
         // 不强制发送：海量小文件时靠节流合并，最终计数由 completed 事件兜底
@@ -345,7 +351,7 @@ async fn download_file(
     let mut remote_file = sftp
         .open(file.remote_path.clone())
         .await
-        .map_err(connection_error)?;
+        .map_err(|error| sftp_error(error, &file.remote_path))?;
     // 续传：本地不截断，双端 seek 到断点；整传保持 create 覆盖语义
     let mut local_file = if file.offset > 0 {
         async_fs::OpenOptions::new()
@@ -363,7 +369,7 @@ async fn download_file(
         remote_file
             .seek(SeekFrom::Start(file.offset))
             .await
-            .map_err(io_error)?;
+            .map_err(|error| remote_io_error(error, &file.remote_path))?;
         local_file
             .seek(SeekFrom::Start(file.offset))
             .await
@@ -373,7 +379,9 @@ async fn download_file(
 
     loop {
         ensure_transfer_active(cancellation)?;
-        let read = remote_file.read(&mut buffer).await.map_err(io_error)?;
+        let read = remote_file.read(&mut buffer)
+            .await
+            .map_err(|error| remote_io_error(error, &file.remote_path))?;
         if read == 0 {
             break;
         }
@@ -389,7 +397,9 @@ async fn download_file(
     }
 
     local_file.flush().await.map_err(io_error)?;
-    remote_file.shutdown().await.map_err(io_error)?;
+    remote_file.shutdown()
+        .await
+        .map_err(|error| remote_io_error(error, &file.remote_path))?;
     with_progress(progress, |p| {
         p.files_done += 1;
         p.emit(app, "progress", Some(file.remote_path.clone()), false);
@@ -569,7 +579,12 @@ async fn apply_remote_resume(sftp: &SftpSession, plan: &mut UploadPlan) -> Resul
                 plan.resumed_bytes += remote_size;
                 kept_files.push(file);
             }
-            _ => kept_files.push(file),
+            Ok(_) => kept_files.push(file),
+            Err(SftpError::Status(status)) if status.status_code == StatusCode::NoSuchFile => {
+                kept_files.push(file);
+            }
+            // 读不到属性不等于目标不存在，不能在权限或网络出错后退化为截断重传。
+            Err(error) => return Err(sftp_error(error, &file.remote_path)),
         }
     }
 
@@ -595,7 +610,9 @@ fn apply_local_resume(plan: &mut DownloadPlan) -> Result<(), AppError> {
                 plan.resumed_bytes += local_size;
                 kept_files.push(file);
             }
-            _ => kept_files.push(file),
+            Ok(_) => kept_files.push(file),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => kept_files.push(file),
+            Err(error) => return Err(io_error(error)),
         }
     }
 
@@ -613,7 +630,7 @@ async fn existing_remote_targets(
         if sftp
             .try_exists(target.clone())
             .await
-            .map_err(connection_error)?
+            .map_err(|error| sftp_error(error, target))?
         {
             conflicts.insert(target.clone());
         }
@@ -699,7 +716,7 @@ async fn unique_remote_target(sftp: &SftpSession, root: &str) -> Result<String, 
         if !sftp
             .try_exists(candidate.clone())
             .await
-            .map_err(connection_error)?
+            .map_err(|error| sftp_error(error, &candidate))?
         {
             return Ok(candidate);
         }
@@ -931,7 +948,7 @@ async fn plan_remote_download(
         let metadata = sftp
             .symlink_metadata(remote_path.clone())
             .await
-            .map_err(connection_error)?;
+            .map_err(|error| sftp_error(error, &remote_path))?;
         if metadata.file_type().is_dir() || entry.is_directory {
             directories.push(local_path.clone());
             let mut stack = vec![(remote_path, local_path)];
@@ -940,7 +957,7 @@ async fn plan_remote_download(
                 let read_dir = sftp
                     .read_dir(remote_dir.clone())
                     .await
-                    .map_err(connection_error)?;
+                    .map_err(|error| sftp_error(error, &remote_dir))?;
 
                 for child in read_dir {
                     let child_metadata = child.metadata();
@@ -1024,7 +1041,7 @@ async fn ensure_remote_directory(sftp: &SftpSession, path: &str) -> Result<(), A
             format!("Remote path is not a directory: {path}"),
         )
         .with("path", path)),
-        Err(_) => Err(connection_error(create_error)),
+        Err(_) => Err(sftp_error(create_error, path)),
     }
 }
 

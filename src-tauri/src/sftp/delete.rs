@@ -8,9 +8,10 @@ use tokio::time::{timeout, Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
 use crate::error::{
-    codes, connection_error, required, root_forbidden, timeout as timeout_error, AppError,
+    codes, required, root_forbidden, timeout as timeout_error, AppError,
 };
 use crate::models::{FileOperationEventPayload, RemoteDeleteRequest};
+use crate::sftp::error::sftp_error;
 use crate::sftp::{open_sftp_session, path::normalize_remote_path};
 use crate::ssh::{client::ConnectionTestClient, registry::TerminalRegistry};
 use crate::util::summarize_entry_errors;
@@ -121,19 +122,21 @@ async fn delete_path(
         progress.event.current_path = Some(path.clone());
         progress.emit(app, "progress", false);
         if remove_directory {
-            sftp.remove_dir(path).await.map_err(connection_error)?;
+            sftp.remove_dir(path.clone())
+                .await
+                .map_err(|error| sftp_error(error, &path))?;
         } else {
             // lstat 不跟随软链接，递归删除不得沿链接进入用户未选中的目录。
             let metadata = sftp
                 .symlink_metadata(path.clone())
                 .await
-                .map_err(connection_error)?;
+                .map_err(|error| sftp_error(error, &path))?;
             if metadata.file_type().is_dir() {
                 if recursive {
                     let children = sftp
                         .read_dir(path.clone())
                         .await
-                        .map_err(connection_error)?;
+                        .map_err(|error| sftp_error(error, &path))?;
                     pending.push((path, true));
                     for child in children {
                         // 远端文件名允许反斜杠和尾部空格，规范化会把它改成另一个删除目标。
@@ -141,9 +144,13 @@ async fn delete_path(
                     }
                     continue;
                 }
-                sftp.remove_dir(path).await.map_err(connection_error)?;
+                sftp.remove_dir(path.clone())
+                    .await
+                    .map_err(|error| sftp_error(error, &path))?;
             } else {
-                sftp.remove_file(path).await.map_err(connection_error)?;
+                sftp.remove_file(path.clone())
+                    .await
+                    .map_err(|error| sftp_error(error, &path))?;
             }
         }
         progress.event.completed_entries += 1;
