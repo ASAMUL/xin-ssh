@@ -167,6 +167,7 @@ async function copyText(text) {
 }
 
 function taskIcon(task) {
+  if (task.status === "planning") return "i-lucide-folder-search";
   if (task.status === "failed") return "i-lucide-circle-alert";
   if (task.status === "completed") return "i-lucide-circle-check";
   if (task.status === "canceled") return "i-lucide-circle-minus";
@@ -209,6 +210,7 @@ function taskMeta(task) {
 
   if (task.status === "canceling") return t("transfers.canceling");
   if (task.status === "queued") return t("transfers.queued");
+  if (task.status === "planning") return t("transfers.planningMeta", { count: task.filesTotal });
 
   const speed = task.speedBytesPerSecond ? `${formatBytes(task.speedBytesPerSecond)}/s` : "--";
   return t("transfers.progressMeta", {
@@ -302,6 +304,7 @@ function formatTaskTime(timestamp) {
           <small v-if="isFinished(task)" class="transfer-time">{{
             formatTaskTime(task.updatedAt)
           }}</small>
+          <small v-else-if="task.status === 'planning'">{{ t("transfers.planning") }}</small>
           <small v-else>{{ taskProgress(task) }}%</small>
 
           <UTooltip v-if="transferStore.isResumeCandidate(task)" :text="resumeHint(task)">

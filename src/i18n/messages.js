@@ -427,6 +427,8 @@ export const messages = {
       canceling: "正在取消",
       cancel: "取消传输",
       queued: "等待开始",
+      planning: "扫描中",
+      planningMeta: "正在准备传输，已发现 {count} 个文件",
       progressMeta: "{speed} · {done}/{total} 个文件",
       uploadFallback: "上传",
       downloadFallback: "下载",
@@ -610,6 +612,7 @@ export const messages = {
         "transfer.connectionChanged": "原连接的主机、端口或用户已变更，无法续传",
         "transfer.resumeRenamed": "此任务使用过自动重命名，无法确认续传目标，请重新选择文件传输",
         "transfer.partialFailure": "{count} 个条目失败：{detail}",
+        "transfer.metadataFailed": "无法保留文件权限或修改时间：{path}。{detail}",
 
         "file.tooLarge": "文件超过 {limitMb} MB，内置编辑器暂不支持，请下载后在本地编辑",
         "file.binary": "这是二进制文件，内置编辑器无法按文本打开",
@@ -1123,6 +1126,8 @@ export const messages = {
       canceling: "Canceling",
       cancel: "Cancel transfer",
       queued: "Waiting",
+      planning: "Scanning",
+      planningMeta: "Preparing transfer, {count} files found",
       progressMeta: "{speed} · {done}/{total} files",
       uploadFallback: "Upload",
       downloadFallback: "Download",
@@ -1307,6 +1312,7 @@ export const messages = {
         "transfer.connectionChanged": "The original host, port, or user has changed. This transfer cannot be resumed.",
         "transfer.resumeRenamed": "This task used automatic renaming, so its resume destination is uncertain. Select the files again to transfer them.",
         "transfer.partialFailure": "{count} items failed: {detail}",
+        "transfer.metadataFailed": "Could not preserve permissions or modification time for {path}. {detail}",
 
         "file.tooLarge": "This file is larger than {limitMb} MB. Download it to edit locally.",
         "file.binary": "This is a binary file and cannot be opened as text",

@@ -24,6 +24,8 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 futures = "0.3"
+# 跨平台恢复文件与目录时间，避免自行维护 Windows 目录句柄差异。
+filetime = "0.2"
 # 配置文件原子落盘：写临时文件 -> fsync -> 原子 rename（Windows 用 ReplaceFile 语义）
 tempfile = "3"
 russh = { version = "0.61.1", default-features = false, features = ["ring", "flate2", "rsa"] }

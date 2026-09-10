@@ -16,7 +16,8 @@ import {
 
 const TRANSFER_EVENT_NAME = "transfer-event";
 const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
-const ACTIVE_STATUSES = new Set(["queued", "running", "canceling"]);
+const ACTIVE_STATUSES = new Set(["queued", "planning", "running", "canceling"]);
+const speedSamples = new Map();
 // 已结束任务保留的条数上限：面板兼作跨会话的传输历史，放宽到 100 条
 const MAX_FINISHED_TASKS = 100;
 let historyLoading = null;
@@ -312,15 +313,9 @@ export const useTransferStore = defineStore("transfers", {
       const task = this.tasks.find((task) => task.backendTaskId === event.taskId
         && task.sessionId === event.sessionId && task.direction === event.direction);
       if (!task || FINISHED_STATUSES.has(task.status)) return;
-      const previousBytes = task?.bytesTransferred ?? 0;
-      const previousUpdatedAt = task?.updatedAt ?? now;
-      const elapsedSeconds = Math.max((now - previousUpdatedAt) / 1000, 0.001);
       const rootLabel = task?.rootLabel || task?.label || event.label || event.direction;
       const label = event.kind === "progress" ? (event.label || rootLabel) : rootLabel;
-      const speedBytesPerSecond =
-        event.kind === "progress"
-          ? Math.max(0, (event.bytesTransferred - previousBytes) / elapsedSeconds)
-          : (task?.speedBytesPerSecond ?? 0);
+      const speedBytesPerSecond = transferSpeed(event, task);
 
       this.upsertTask({
         id: task.id,
@@ -399,6 +394,7 @@ export const useTransferStore = defineStore("transfers", {
       const task = this.findTask(taskId);
       // 启动请求的拒绝可能晚于终态事件或下一次重试，只允许它结束自己的当前尝试。
       if (!task || task.backendTaskId !== backendTaskId || FINISHED_STATUSES.has(task.status)) return;
+      speedSamples.delete(backendTaskId);
 
       this.upsertTask({
         ...task,
@@ -473,11 +469,38 @@ export const useTransferStore = defineStore("transfers", {
 });
 
 function eventStatus(kind) {
+  if (kind === "planning") return "planning";
   if (kind === "completed") return "completed";
   if (kind === "failed") return "failed";
   if (kind === "canceled") return "canceled";
 
   return "running";
+}
+
+// 以单调时钟和时间加权 EMA 平滑速度；started 重置基线，已续传字节和扫描耗时不计入网速。
+function transferSpeed(event, task) {
+  const at = performance.now();
+  const bytes = event.bytesTransferred ?? task.bytesTransferred ?? 0;
+  const previous = speedSamples.get(event.taskId);
+  if (event.kind === "started") {
+    speedSamples.set(event.taskId, { at, bytes });
+    return 0;
+  }
+  if (event.kind !== "progress") {
+    speedSamples.delete(event.taskId);
+    return 0;
+  }
+  if (!previous || bytes < previous.bytes) {
+    speedSamples.set(event.taskId, { at, bytes });
+    return 0;
+  }
+  const seconds = (at - previous.at) / 1000;
+  if (seconds <= 0) return task.speedBytesPerSecond ?? 0;
+  speedSamples.set(event.taskId, { at, bytes });
+  const instantaneous = (bytes - previous.bytes) / seconds;
+  const weight = 1 - Math.exp(-seconds / 1.5);
+  const current = task.speedBytesPerSecond ?? 0;
+  return current + weight * (instantaneous - current);
 }
 
 function transferLabel(items, fallbackKey, multiKey) {

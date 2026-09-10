@@ -9,7 +9,7 @@ const LEGACY_KEY = "xin-terminal/transfer-history";
 const HISTORY_VERSION = 2;
 const enqueueHistoryWrite = createSerialQueue();
 const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
-const ACTIVE_STATUSES = new Set(["queued", "running", "canceling"]);
+const ACTIVE_STATUSES = new Set(["queued", "planning", "running", "canceling"]);
 
 // 旧格式没有连接标识，也无法证明 20 条路径是否被截断，只迁移展示数据，不猜测续传目标。
 export async function loadTransferHistory() {

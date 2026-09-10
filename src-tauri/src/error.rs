@@ -83,6 +83,7 @@ pub mod codes {
     pub const TRANSFER_DUPLICATE_UPLOAD_TARGET: &str = "transfer.duplicateUploadTarget";
     pub const TRANSFER_CANCELED: &str = "transfer.canceled";
     pub const TRANSFER_PARTIAL_FAILURE: &str = "transfer.partialFailure";
+    pub const TRANSFER_METADATA_FAILED: &str = "transfer.metadataFailed";
 
     pub const FILE_TOO_LARGE: &str = "file.tooLarge";
     pub const FILE_BINARY: &str = "file.binary";

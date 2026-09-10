@@ -4,6 +4,7 @@ pub(crate) mod ops;
 pub(crate) mod path;
 pub(crate) mod session;
 pub(crate) mod transfer;
+mod transfer_metadata;
 
 use std::sync::Arc;
 
