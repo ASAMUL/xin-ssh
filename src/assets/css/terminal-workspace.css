@@ -154,21 +154,6 @@
   transition: background 220ms ease;
 }
 
-.terminal-xterm {
-  width: 100%;
-  height: 100%;
-  /* 定位 + z-index：把文字抬到自定义背景图之上、显像管纹理之下 */
-  position: relative;
-  z-index: 1;
-}
-
-/* 磷光辉光：靠 CSS text-shadow 打在字上。xterm 这里跑的是 DOM renderer
-   （没挂 canvas / webgl addon），所以 CSS 能直接作用到字符上；哪天换渲染器
-   这行会静默失效，主题的 text.glow 也就一并没了效果。 */
-.terminal-xterm :deep(.xterm-rows) {
-  text-shadow: var(--term-text-glow, none);
-}
-
 /* —— 自定义背景图 ——
    图片层与压暗层都垫在 xterm 之下。模糊会把layer 边缘吸成半透明，所以按
    模糊半径向外扩一圈（父级 overflow: hidden 兜住溢出）。 */
@@ -201,28 +186,6 @@
   inset: 0;
   background: var(--term-screen-overlay, none);
   pointer-events: none;
-}
-
-/* 内边距放在 xterm 自身而不是外层挂载点：FitAddon 会读取并扣除 .xterm 的
-   padding，算出的列/行数才和实际可视区域一致，文本不会溢出或被裁半行。 */
-.terminal-xterm :deep(.xterm) {
-  width: 100%;
-  height: 100%;
-  padding: 14px 16px 20px;
-}
-
-/* xterm6 遗留元素：内容和滚动都已迁到 .xterm-scrollable-element，这个空壳只给
-   overview ruler 用，但 stock css 仍给它铺了不透明 #000 且绝对定位盖满终端，
-   会挡住玻璃/场景主题的透明背景 —— 必须压掉。 */
-.terminal-xterm :deep(.xterm-viewport) {
-  background-color: transparent !important;
-  overflow-y: hidden;
-}
-
-/* xterm6 的滚动条是自绘滑块（.xterm-scrollable-element > .scrollbar > .slider），
-   颜色由 theme.scrollbarSlider* 下发（见 buildXtermTheme），这里只调形状。 */
-.terminal-xterm :deep(.xterm-scrollable-element > .scrollbar > .slider) {
-  border-radius: 999px;
 }
 
 .terminal-output-real {

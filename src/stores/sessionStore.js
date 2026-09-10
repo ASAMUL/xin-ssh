@@ -28,14 +28,14 @@ const NETWORK_HISTORY_LIMIT = 30;
 const MAX_AUTO_RECONNECT_ATTEMPTS = 1;
 const STABLE_CONNECTION_RESET_MS = 30_000;
 const TERMINAL_CLOSE_REASON_CLIENT = "client";
-// 回放缓冲上限（字符数），与 xterm scrollback 8000 行同一量级；超限裁剪到低水位，避免频繁触发
+// 挂载前缓冲按字符数设上限；超限裁剪到低水位，避免频繁触发。
 const TERMINAL_BUFFER_MAX_CHARS = 2_000_000;
 const TERMINAL_BUFFER_TRIM_TO_CHARS = 1_500_000;
 
-// 终端输出回放缓冲：大字符串不进 Pinia 响应式状态，按会话隔离，只用于切换 tab 时回放
+// 仅缓存组件挂载前的输出；挂载后的完整终端状态由每个会话自己的 xterm 持有。
 const terminalBuffers = new Map();
-// 活跃终端的直写通道：输出事件直接写入 xterm，绕过响应式系统
-let terminalSink = null;
+// 隐藏会话也持续解析输出，切标签时不再重放被截断的 ANSI 字符流。
+const terminalSinks = new Map();
 
 export const useSessionStore = defineStore("sessions", {
   state: () => ({
@@ -71,16 +71,17 @@ export const useSessionStore = defineStore("sessions", {
         console.warn("[Xin Terminal] terminal event listener unavailable", error);
       }
     },
-    // 活跃终端注册直写函数后，输出事件直接写入 xterm；切换/卸载时解除
-    attachTerminalSink(sessionId, write) {
-      terminalSink =
-        sessionId && typeof write === "function" ? { sessionId, write } : null;
-    },
-    detachTerminalSink() {
-      terminalSink = null;
-    },
-    getTerminalSnapshot(sessionId) {
-      return readTerminalBuffer(sessionId);
+    // 同步接管挂载前的数据，旧组件延迟卸载时不能摘掉同一会话的新接收器。
+    attachTerminalSink(sessionId, revision, write) {
+      if (this.findSession(sessionId)?.terminalRevision !== revision) return () => {};
+      const sink = { revision, write };
+      terminalSinks.set(sessionId, sink);
+      const pending = readTerminalBuffer(sessionId);
+      if (pending) write(pending);
+      clearTerminalBuffer(sessionId);
+      return () => {
+        if (terminalSinks.get(sessionId) === sink) terminalSinks.delete(sessionId);
+      };
     },
     // forceNew: true 跳过复用总是新开终端（加号/快速连接）；默认聚焦已有会话，没有才新建（首页）
     openProfileSession(profile, { forceNew = false } = {}) {
@@ -158,9 +159,7 @@ export const useSessionStore = defineStore("sessions", {
       const closingIndex = this.sessions.findIndex((session) => session.id === sessionId);
       if (closingIndex < 0) return;
       clearTerminalBuffer(sessionId);
-      if (terminalSink?.sessionId === sessionId) {
-        terminalSink = null;
-      }
+      terminalSinks.delete(sessionId);
       this.sessions.splice(closingIndex, 1);
       if (this.activeSessionId !== sessionId) return;
 
@@ -185,8 +184,7 @@ export const useSessionStore = defineStore("sessions", {
       const session = this.activeSession;
       if (!session) return;
 
-      clearTerminalBuffer(session.id);
-      session.terminalRevision += 1;
+      resetTerminalBuffer(session);
     },
     requestCredentials(sessionId = this.activeSessionId) {
       const session = this.findSession(sessionId);
@@ -319,7 +317,10 @@ export const useSessionStore = defineStore("sessions", {
       return false;
     },
     async sendActiveTerminalInput(data) {
-      const session = this.activeSession;
+      return this.sendSessionTerminalInput(this.activeSessionId, data);
+    },
+    async sendSessionTerminalInput(sessionId, data) {
+      const session = this.findSession(sessionId);
       if (!session || session.status !== "connected" || !data) return;
 
       await sendTerminalInput({
@@ -328,7 +329,10 @@ export const useSessionStore = defineStore("sessions", {
       });
     },
     async resizeActiveTerminal(columns, rows) {
-      const session = this.activeSession;
+      return this.resizeSessionTerminal(this.activeSessionId, columns, rows);
+    },
+    async resizeSessionTerminal(sessionId, columns, rows) {
+      const session = this.findSession(sessionId);
       if (!session) return;
 
       session.terminalColumns = columns;
@@ -356,10 +360,9 @@ export const useSessionStore = defineStore("sessions", {
         const data = event.data ?? "";
         if (!data) return;
 
-        appendTerminalChunk(session.id, data);
-        if (terminalSink?.sessionId === session.id) {
-          terminalSink.write(data);
-        }
+        const sink = terminalSinks.get(session.id);
+        if (sink?.revision === session.terminalRevision) sink.write(data);
+        else appendTerminalChunk(session.id, data);
         return;
       }
 
@@ -540,6 +543,7 @@ function clearTerminalBuffer(sessionId) {
 
 function resetTerminalBuffer(session) {
   clearTerminalBuffer(session.id);
+  terminalSinks.delete(session.id);
   session.terminalRevision += 1;
 }
 

@@ -30,24 +30,26 @@ function persistMonitorPaneSize(event) {
 <template>
   <section class="workspace-layout" :class="{ 'connection-hub-layout': !hasActiveSession }">
     <Splitpanes
-      v-if="hasActiveSession"
+      v-if="sessionStore.sessions.length"
+      v-show="hasActiveSession"
       class="xin-split workspace-split"
       @resized="persistMonitorPaneSize"
     >
       <Pane
         v-if="settingsStore.showMonitorSidebar"
+        key="monitor"
         :size="settingsStore.monitorPaneSize"
         min-size="14"
         max-size="44"
       >
         <HostMonitorSidebar />
       </Pane>
-      <Pane :size="settingsStore.showMonitorSidebar ? 100 - settingsStore.monitorPaneSize : 100">
+      <Pane key="terminal" :size="settingsStore.showMonitorSidebar ? 100 - settingsStore.monitorPaneSize : 100">
         <TerminalWorkspace />
       </Pane>
     </Splitpanes>
 
-    <section v-else class="workspace-main">
+    <section v-if="!hasActiveSession" class="workspace-main">
       <HomeDashboard />
     </section>
 

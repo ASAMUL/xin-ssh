@@ -389,6 +389,16 @@ const emptyState = computed(() => {
   };
 });
 
+// 工作区保活后弹窗仍会传送到 body，切换目标时收起，避免在另一台主机上误提交。
+watch(() => props.activeSession?.id, () => {
+  nameDialog.open = false;
+  deleteDialog.open = false;
+  conflictDialog.open = false;
+  contextMenuEntry.value = null;
+  treeContextNode.value = null;
+  isDragOver.value = false;
+});
+
 watch(
   () => [props.activeSession?.id, props.activeSession?.status],
   () => {
@@ -940,7 +950,7 @@ async function copyContextPath() {
 }
 
 function handleWindowKeydown(event) {
-  if (uiStore.isWindowCloseOpen || event.defaultPrevented) return;
+  if (!props.activeSession || uiStore.isWindowCloseOpen || event.defaultPrevented) return;
   if (event.key === "Escape") {
     if (nameDialog.open) closeNameDialog();
     else if (deleteDialog.open) closeDeleteDialog();

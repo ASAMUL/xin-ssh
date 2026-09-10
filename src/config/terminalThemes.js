@@ -160,8 +160,7 @@ const MILKY_WAY =
   "linear-gradient(125deg, transparent 29%, rgba(186, 202, 255, 0.05) 40%, rgba(228, 218, 255, 0.078) 48%, rgba(186, 202, 255, 0.045) 56%, transparent 67%)";
 
 // 文字处理的默认档。主题只写和默认不同的那几项，其余走这里。
-// glow 走 CSS text-shadow 压在 .xterm-rows 上——xterm 这里用的是 DOM renderer
-// （没挂 canvas / webgl addon），所以 CSS 能直接作用到字上；换渲染器会失效。
+// glow 走 CSS text-shadow 压在 .xterm-rows 上，有辉光的主题保留 DOM renderer。
 // weight / cursorStyle 是 xterm 选项，两者都不改变字符测量结果，切主题不必 refit。
 const DEFAULT_TYPOGRAPHY = {
   glow: null,

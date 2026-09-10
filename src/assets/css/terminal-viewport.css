@@ -1,0 +1,35 @@
+.terminal-viewport {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.terminal-xterm {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+/* 磷光主题继续使用 DOM 渲染，避免 WebGL 让文字辉光消失。 */
+.terminal-xterm :deep(.xterm-rows) {
+  text-shadow: var(--term-text-glow, none);
+}
+
+/* FitAddon 会扣除 xterm 自身的 padding，外层留白会导致 PTY 行列数偏大。 */
+.terminal-xterm :deep(.xterm) {
+  width: 100%;
+  height: 100%;
+  padding: 14px 16px 20px;
+}
+
+/* xterm 6 的旧 viewport 仅用于 overview ruler，不能遮挡透明背景。 */
+.terminal-xterm :deep(.xterm-viewport) {
+  background-color: transparent !important;
+  overflow-y: hidden;
+}
+
+.terminal-xterm :deep(.xterm-scrollable-element > .scrollbar > .slider) {
+  border-radius: 999px;
+}

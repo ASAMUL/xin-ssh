@@ -1,14 +1,10 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from "vue";
-import { FitAddon } from "@xterm/addon-fit";
-import { SearchAddon } from "@xterm/addon-search";
-import { Terminal } from "@xterm/xterm";
-import "@xterm/xterm/css/xterm.css";
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
 import FileExplorer from "../FileExplorer.vue";
 import SnippetPanel from "./SnippetPanel.vue";
-import TerminalSearchPanel from "./TerminalSearchPanel.vue";
+import TerminalViewport from "./TerminalViewport.vue";
 import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -20,7 +16,6 @@ import {
   TERMINAL_FONT_SIZES,
   TERMINAL_THEMES,
   TERMINAL_THEME_GROUPS,
-  buildXtermTheme,
   getTerminalTheme,
   getThemePreviewBackground,
   getThemeTypography,
@@ -40,7 +35,10 @@ const sessionStore = useSessionStore();
 const settingsStore = useSettingsStore();
 const uiStore = useUiStore();
 const credentialStore = useCredentialStore();
-const terminalMount = ref(null);
+const terminalViews = ref([]);
+const activeTerminal = computed(() =>
+  terminalViews.value.find((view) => view.sessionId === sessionStore.activeSessionId),
+);
 const credentialInput = ref(null);
 const shouldSaveCredential = ref(false);
 const pendingCredentialSave = ref(null);
@@ -48,19 +46,11 @@ const credentials = reactive({
   password: "",
   passphrase: "",
 });
-let terminal = null;
-let fitAddon = null;
-let resizeObserver = null;
-let disposeDataListener = null;
-let disposeResizeListener = null;
 let persistBackgroundTimer = null;
 let pendingBackgroundWrite = null;
 const backgroundSelections = new Map();
 
-// 终端内查找：addon 实例给面板用，面板经 Ctrl+Shift+F / 工具栏按钮开关
-const searchAddon = shallowRef(null);
-const searchPanel = ref(null);
-const isSearchOpen = ref(false);
+const isSearchOpen = computed(() => activeTerminal.value?.isSearchOpen ?? false);
 
 const activeSession = computed(() => sessionStore.activeSession);
 const isAppearanceOpen = ref(false);
@@ -147,7 +137,7 @@ const saveCredentialLabel = computed(() =>
 );
 
 watch(
-  // 会话切换或 terminalRevision 变化（连接重开 / 清屏）都需要全量重建终端内容
+  // 切换只处理凭据和焦点，终端解析状态由独立组件持续持有。
   () => [activeSession.value?.id, activeSession.value?.terminalRevision],
   async ([sessionId], previous = []) => {
     const [previousSessionId] = previous;
@@ -156,14 +146,17 @@ watch(
       credentials.passphrase = "";
       shouldSaveCredential.value = Boolean(activeSession.value?.credentialRef);
       pendingCredentialSave.value = null;
-      closeTerminalSearch({ refocus: false });
+      if (!sessionId) {
+        isAppearanceOpen.value = false;
+        isSnippetsOpen.value = false;
+        hoveredThemeId.value = null;
+      }
     }
 
     await nextTick();
-    resyncTerminal();
-    fitTerminal();
     focusActiveInput();
   },
+  { immediate: true },
 );
 
 watch(needsCredentials, async () => {
@@ -185,16 +178,6 @@ watch(
     }
   },
 );
-
-watch(displayTheme, (theme) => {
-  if (!terminal) return;
-
-  const text = getThemeTypography(theme);
-  terminal.options.theme = buildXtermTheme(theme);
-  // 字重与光标形状都不改变 xterm 的字符测量结果，所以切主题不必 refit
-  terminal.options.fontWeight = text.weight;
-  terminal.options.cursorStyle = text.cursorStyle;
-});
 
 // 背景图字节走 IPC 读一次转 Blob URL，之后由 backgroundApi 缓存；
 // 换图 / 换连接 / 清除都只是换 file 字段，这里跟着解析即可。
@@ -228,70 +211,7 @@ watch(isAppearanceOpen, (open) => {
 
 watch([backgroundScope, () => activeProfile.value?.id], () => flushBackgroundWrite());
 
-watch(terminalFontStack, (stack) => {
-  if (!terminal) return;
-
-  terminal.options.fontFamily = stack;
-  refitAfterFontLoad();
-});
-
-watch(
-  () => settingsStore.terminalFontSize,
-  (size) => {
-    if (!terminal) return;
-
-    terminal.options.fontSize = size;
-    refitAfterFontLoad();
-  },
-);
-
-onMounted(async () => {
-  terminal = new Terminal({
-    // addon-search 的匹配高亮依赖 registerDecoration（experimental API，受此开关拦截）
-    allowProposedApi: true,
-    allowTransparency: true,
-    cursorBlink: true,
-    cursorStyle: getThemeTypography(displayTheme.value).cursorStyle,
-    fontFamily: terminalFontStack.value,
-    fontSize: settingsStore.terminalFontSize,
-    fontWeight: getThemeTypography(displayTheme.value).weight,
-    lineHeight: 1.18,
-    scrollback: 8000,
-    theme: buildXtermTheme(displayTheme.value),
-  });
-  fitAddon = new FitAddon();
-  terminal.loadAddon(fitAddon);
-  searchAddon.value = new SearchAddon();
-  terminal.loadAddon(searchAddon.value);
-  terminal.open(terminalMount.value);
-  setupClipboardShortcuts();
-
-  disposeDataListener = terminal.onData((data) => {
-    sessionStore.sendActiveTerminalInput(data).catch(() => { });
-  });
-  disposeResizeListener = terminal.onResize(({ cols, rows }) => {
-    sessionStore.resizeActiveTerminal(cols, rows);
-  });
-
-  resizeObserver = new ResizeObserver(() => {
-    fitTerminal();
-  });
-  resizeObserver.observe(terminalMount.value);
-
-  await nextTick();
-  resyncTerminal();
-  fitTerminal();
-  focusActiveInput();
-  // webfont metrics may land after the terminal measured itself
-  document.fonts?.ready?.then(() => fitTerminal());
-});
-
 onBeforeUnmount(() => {
-  sessionStore.detachTerminalSink();
-  resizeObserver?.disconnect();
-  disposeDataListener?.dispose();
-  disposeResizeListener?.dispose();
-  terminal?.dispose();
   // 拖完滑块立刻切走时，防抖里那一次还没落盘——补写，别丢用户刚调的值
   flushBackgroundWrite();
 });
@@ -299,7 +219,7 @@ onBeforeUnmount(() => {
 function focusTerminal() {
   if (needsCredentials.value) return;
 
-  terminal?.focus();
+  activeTerminal.value?.focus();
 }
 
 function focusCredentialInput() {
@@ -315,104 +235,8 @@ function focusActiveInput() {
   focusTerminal();
 }
 
-function fitTerminal() {
-  if (!terminal || !fitAddon || !terminalMount.value) return;
-
-  fitAddon.fit();
-}
-
-// Ctrl+C 有选区时复制而不发送中断;Ctrl+V 交给原生 paste 事件送入 xterm;
-// Ctrl+Shift+F 打开终端内查找（Ctrl+F 留给 shell 的光标前移）
-function setupClipboardShortcuts() {
-  terminal.attachCustomKeyEventHandler((event) => {
-    if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) {
-      return true;
-    }
-
-    const key = event.key.toLowerCase();
-
-    if (key === "f" && event.shiftKey) {
-      openTerminalSearch();
-      return false;
-    }
-
-    if (key === "c" && terminal.hasSelection()) {
-      copyTerminalSelection();
-      return false;
-    }
-
-    if (key === "v") {
-      return false;
-    }
-
-    return true;
-  });
-}
-
-function copyTerminalSelection() {
-  const selection = terminal?.getSelection();
-  if (!selection) return;
-
-  navigator.clipboard?.writeText(selection).catch(() => { });
-  // 清掉选区作为“已复制”的视觉反馈，下一次 Ctrl+C 恢复为中断信号
-  terminal.clearSelection();
-}
-
-async function openTerminalSearch() {
-  // 单行短选区作为搜索词预填，贴近编辑器查找的手感
-  const selection = terminal?.getSelection()?.trim() ?? "";
-  const seed = selection && !selection.includes("\n") && selection.length <= 200 ? selection : "";
-
-  isSearchOpen.value = true;
-  await nextTick();
-  searchPanel.value?.activate(seed);
-}
-
-function closeTerminalSearch({ refocus = true } = {}) {
-  if (!isSearchOpen.value) {
-    if (!refocus) searchAddon.value?.clearDecorations();
-    return;
-  }
-
-  isSearchOpen.value = false;
-  searchAddon.value?.clearDecorations();
-  if (refocus) focusTerminal();
-}
-
 function toggleTerminalSearch() {
-  if (isSearchOpen.value) {
-    closeTerminalSearch();
-    return;
-  }
-
-  openTerminalSearch();
-}
-
-// 会话切换 / 清屏 / 重连时全量重建：回放有界缓冲快照，然后注册直写通道，
-// 后续输出事件由 sessionStore 直接写入 xterm，不经过响应式状态
-function resyncTerminal() {
-  if (!terminal) return;
-
-  sessionStore.detachTerminalSink();
-  terminal.reset();
-  // 装饰随 buffer 重置失效，但引擎的缓存词与结果集仍在——一并清掉，
-  // 否则切会话后面板会显示旧会话的计数，且同词重搜不会重建高亮
-  searchAddon.value?.clearDecorations();
-
-  const session = activeSession.value;
-  if (!session) return;
-
-  const snapshot = sessionStore.getTerminalSnapshot(session.id);
-  if (snapshot) {
-    // 回放分片解析，写完回调里再重算搜索，避免只搜到部分回放内容
-    terminal.write(snapshot, () => {
-      if (isSearchOpen.value) searchPanel.value?.refresh();
-    });
-  }
-
-  sessionStore.attachTerminalSink(session.id, (data) => {
-    terminal?.write(data);
-  });
+  activeTerminal.value?.toggleSearch();
 }
 
 function startTerminal() {
@@ -578,11 +402,6 @@ function persistFilePaneSize(event) {
   settingsStore.applySettingsPatch({ filePaneSize: panes[panes.length - 1].size });
 }
 
-function refitAfterFontLoad() {
-  fitTerminal();
-  document.fonts?.ready?.then(() => fitTerminal());
-}
-
 function themePreviewColors(theme) {
   const { red, yellow, green, cyan, blue, magenta } = theme.xterm;
   return [red, yellow, green, cyan, blue, magenta];
@@ -628,6 +447,7 @@ async function savePendingCredential() {
 <template>
   <Splitpanes horizontal class="xin-split terminal-split" @resized="persistFilePaneSize">
     <Pane
+      key="terminal"
       :size="settingsStore.showFileExplorer ? 100 - settingsStore.filePaneSize : 100"
       min-size="26"
     >
@@ -707,7 +527,17 @@ async function savePendingCredential() {
           <div class="terminal-screen-scrim" aria-hidden="true"></div>
         </template>
 
-        <div ref="terminalMount" class="terminal-xterm"></div>
+        <TerminalViewport
+          v-for="session in sessionStore.sessions"
+          :key="`${session.id}:${session.terminalRevision}`"
+          ref="terminalViews"
+          :session-id="session.id"
+          :revision="session.terminalRevision"
+          :active="session.id === activeSession?.id"
+          :theme="displayTheme"
+          :font-family="terminalFontStack"
+          :font-size="settingsStore.terminalFontSize"
+        />
 
         <!-- 扫描线 / 暗角这类「显像管」纹理必须压在字之上才有味道，故单独一层 -->
         <div
@@ -715,16 +545,6 @@ async function savePendingCredential() {
           class="terminal-screen-overlay"
           aria-hidden="true"
         ></div>
-
-        <Transition name="terminal-search-pop">
-          <TerminalSearchPanel
-            v-if="isSearchOpen"
-            ref="searchPanel"
-            :search-addon="searchAddon"
-            @click.stop
-            @close="closeTerminalSearch"
-          />
-        </Transition>
 
         <form v-if="needsCredentials" class="terminal-auth-panel" @click.stop @submit.prevent="startTerminal">
           <div class="auth-panel-copy">
@@ -1037,6 +857,7 @@ async function savePendingCredential() {
 
     <Pane
       v-if="settingsStore.showFileExplorer"
+      key="files"
       :size="settingsStore.filePaneSize"
       min-size="16"
       max-size="72"

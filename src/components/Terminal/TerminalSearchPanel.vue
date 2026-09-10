@@ -169,12 +169,13 @@ function focusField() {
   searchInput.value?.inputRef?.select();
 }
 
-// 会话切换后由父组件调用：在新会话的内容上重算匹配（不抢焦点）
-function refresh() {
-  runSearch();
+// 隐藏终端时立即撤销延迟搜索，不能等退场动画结束后才停止，否则旧搜索会移动视口。
+function deactivate() {
+  cancelPendingSearch();
+  props.searchAddon?.clearDecorations();
 }
 
-defineExpose({ activate, refresh });
+defineExpose({ activate, deactivate });
 </script>
 
 <template>

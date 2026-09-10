@@ -1,0 +1,255 @@
+<script setup>
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { Terminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import TerminalSearchPanel from "./TerminalSearchPanel.vue";
+import { buildXtermTheme, getThemeTypography } from "../../config/terminalThemes";
+import { useSessionStore } from "../../stores/sessionStore";
+import { useUiStore } from "../../stores/uiStore";
+
+const props = defineProps({
+  sessionId: { type: String, required: true },
+  revision: { type: Number, required: true },
+  active: { type: Boolean, default: false },
+  theme: { type: Object, required: true },
+  fontFamily: { type: String, required: true },
+  fontSize: { type: Number, required: true },
+});
+
+const sessionStore = useSessionStore();
+const uiStore = useUiStore();
+const session = computed(() => sessionStore.findSession(props.sessionId));
+// 后台终端仍需向原会话回复光标/设备查询；不能因不可见而关闭整个输入通道。
+const canSendData = computed(() => session.value?.status === "connected"
+  && session.value.terminalRevision === props.revision);
+const terminalMount = ref(null);
+const searchAddon = shallowRef(null);
+const searchPanel = ref(null);
+const isSearchOpen = ref(false);
+let terminal = null;
+let fitAddon = null;
+let webglAddon = null;
+let webglContextListener = null;
+let webglUnavailable = false;
+let resizeObserver = null;
+let detachSink = null;
+let layoutFrame = null;
+let disposed = false;
+const listeners = [];
+
+// 实例只在会话关闭、清屏或重连时销毁；隐藏期间仍解析输出，保留光标和 alternate screen。
+onMounted(() => {
+  const typography = getThemeTypography(props.theme);
+  terminal = new Terminal({
+    allowProposedApi: true,
+    allowTransparency: true,
+    cursorBlink: true,
+    cursorStyle: typography.cursorStyle,
+    fontFamily: props.fontFamily,
+    fontSize: props.fontSize,
+    fontWeight: typography.weight,
+    lineHeight: 1.18,
+    scrollback: 8000,
+    cols: session.value?.terminalColumns ?? 120,
+    rows: session.value?.terminalRows ?? 32,
+    disableStdin: !canSendData.value,
+    theme: buildXtermTheme(props.theme),
+  });
+  fitAddon = new FitAddon();
+  searchAddon.value = new SearchAddon();
+  terminal.loadAddon(fitAddon);
+  terminal.loadAddon(searchAddon.value);
+  terminal.loadAddon(new Unicode11Addon());
+  terminal.unicode.activeVersion = "11";
+  terminal.loadAddon(new WebLinksAddon(openTerminalLink));
+  terminal.open(terminalMount.value);
+  terminal.attachCustomKeyEventHandler(handleTerminalKey);
+  listeners.push(
+    terminal.onData((data) => {
+      if (canSendData.value) {
+        sessionStore.sendSessionTerminalInput(props.sessionId, data).catch((error) => uiStore.setError(error));
+      }
+    }),
+    terminal.onResize(({ cols, rows }) => {
+      if (session.value?.terminalRevision === props.revision) {
+        sessionStore.resizeSessionTerminal(props.sessionId, cols, rows);
+      }
+    }),
+  );
+  detachSink = sessionStore.attachTerminalSink(props.sessionId, props.revision, (data) => terminal.write(data));
+  resizeObserver = new ResizeObserver(scheduleLayout);
+  resizeObserver.observe(terminalMount.value);
+  updateAppearance();
+  document.fonts?.ready.then(scheduleLayout);
+});
+
+onBeforeUnmount(() => {
+  disposed = true;
+  cancelAnimationFrame(layoutFrame);
+  detachSink?.();
+  resizeObserver?.disconnect();
+  listeners.forEach((listener) => listener.dispose());
+  releaseWebgl();
+  terminal?.dispose();
+});
+
+watch(canSendData, (enabled) => {
+  if (!terminal) return;
+  terminal.options.disableStdin = !enabled;
+  // 握手期间 fit 只更新本地记录，连上后必须再送一次，远端 PTY 才能追上当前尺寸。
+  if (enabled) sessionStore.resizeSessionTerminal(props.sessionId, terminal.cols, terminal.rows);
+}, { flush: "sync" });
+watch(() => props.active, (active) => {
+  if (active) updateAppearance();
+  else {
+    closeSearch(false);
+    terminal?.blur();
+    releaseWebgl();
+  }
+}, { flush: "post" });
+watch(() => [props.theme, props.fontFamily, props.fontSize], updateAppearance);
+
+// 隐藏节点的尺寸为零，不能拿来覆盖 PTY 大小；字体完成加载后再量一次可见区域。
+function scheduleLayout() {
+  if (disposed || !props.active || layoutFrame !== null) return;
+  layoutFrame = requestAnimationFrame(() => {
+    layoutFrame = null;
+    const mount = terminalMount.value;
+    if (disposed || !props.active || !mount?.clientWidth || !mount.clientHeight) return;
+    fitAddon.fit();
+    updateRenderer();
+  });
+}
+
+function updateAppearance() {
+  if (!terminal || !props.active || disposed) return;
+  const typography = getThemeTypography(props.theme);
+  terminal.options.theme = buildXtermTheme(props.theme);
+  terminal.options.fontWeight = typography.weight;
+  terminal.options.cursorStyle = typography.cursorStyle;
+  terminal.options.fontFamily = props.fontFamily;
+  terminal.options.fontSize = props.fontSize;
+  scheduleLayout();
+  document.fonts?.ready.then(scheduleLayout);
+}
+
+// 每个可见终端才占用 GPU 上下文；磷光主题依赖 DOM text-shadow，保留原有渲染效果。
+function updateRenderer() {
+  const glow = getThemeTypography(props.theme).glow;
+  if (!props.active || (glow && glow !== "none")) {
+    releaseWebgl();
+    return;
+  }
+  if (webglAddon || webglUnavailable) return;
+  let addon = null;
+  try {
+    addon = new WebglAddon();
+    terminal.loadAddon(addon);
+    webglAddon = addon;
+    webglContextListener = addon.onContextLoss(() => {
+      webglUnavailable = true;
+      releaseWebgl();
+    });
+  } catch (error) {
+    // WebView/GPU 不支持时终端仍需可用，该实例后续保持 DOM 渲染。
+    webglUnavailable = true;
+    addon?.dispose();
+    console.warn("[Xin Terminal] WebGL unavailable, using DOM renderer", error);
+  }
+}
+
+function releaseWebgl() {
+  webglContextListener?.dispose();
+  webglContextListener = null;
+  const addon = webglAddon;
+  webglAddon = null;
+  addon?.dispose();
+}
+
+function focus() {
+  if (props.active && !isSearchOpen.value && session.value?.status !== "authRequired") terminal?.focus();
+}
+
+function handleTerminalKey(event) {
+  if (!props.active) return false;
+  if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) return true;
+  const key = event.key.toLowerCase();
+  if (key === "f" && event.shiftKey) {
+    event.preventDefault();
+    openSearch();
+    return false;
+  }
+  if (key === "c" && terminal.hasSelection()) {
+    event.preventDefault();
+    copySelection();
+    return false;
+  }
+  // 保留浏览器的原生 paste 事件，交给 xterm 处理 bracketed paste。
+  return key !== "v";
+}
+
+async function copySelection() {
+  const selection = terminal.getSelection();
+  if (!selection) return;
+  try {
+    await navigator.clipboard.writeText(selection);
+    if (!disposed && terminal.getSelection() === selection) terminal.clearSelection();
+  } catch (error) {
+    uiStore.setError(error);
+  }
+}
+
+function openTerminalLink(event, uri) {
+  event.preventDefault();
+  const url = new URL(uri);
+  if (!["http:", "https:"].includes(url.protocol)) return;
+  openUrl(url.href).catch((error) => uiStore.setError(error));
+}
+
+async function openSearch() {
+  if (!props.active || disposed) return;
+  const selection = terminal?.getSelection()?.trim() ?? "";
+  const seed = selection && !selection.includes("\n") && selection.length <= 200 ? selection : "";
+  isSearchOpen.value = true;
+  await nextTick();
+  if (props.active && !disposed && isSearchOpen.value) searchPanel.value?.activate(seed);
+}
+
+function closeSearch(refocus = true) {
+  if (!isSearchOpen.value) return;
+  searchPanel.value?.deactivate();
+  isSearchOpen.value = false;
+  searchAddon.value?.clearDecorations();
+  if (refocus) focus();
+}
+
+function toggleSearch() {
+  if (isSearchOpen.value) closeSearch();
+  else openSearch();
+}
+
+defineExpose({ sessionId: props.sessionId, focus, toggleSearch, isSearchOpen });
+</script>
+
+<template>
+  <div v-show="active" class="terminal-viewport" :inert="!active">
+    <div ref="terminalMount" class="terminal-xterm"></div>
+    <Transition name="terminal-search-pop">
+      <TerminalSearchPanel
+        v-if="isSearchOpen"
+        ref="searchPanel"
+        :search-addon="searchAddon"
+        @click.stop
+        @close="closeSearch()"
+      />
+    </Transition>
+  </div>
+</template>
+
+<style scoped src="../../assets/css/terminal-viewport.css"></style>

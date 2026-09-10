@@ -267,6 +267,11 @@ const loadAverageLabel = computed(() => {
   return loadAverage.map((value) => value.toFixed(2)).join(" / ");
 });
 
+// 首页只隐藏工作区，传送到 body 的详情弹窗需随会话目标变化主动收起。
+watch(() => activeSession.value?.id, () => {
+  isSystemInfoDetailsOpen.value = false;
+});
+
 watch(
   () => [
     activeSession.value?.id,
