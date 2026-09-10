@@ -9,7 +9,16 @@ import {
   trustHostKey,
 } from "../services/workspaceApi";
 import { i18n } from "../i18n";
-import { connectionIdentity } from "../utils/connectionIdentity";
+import { connectionIdentity, sameConnection } from "../utils/connectionIdentity";
+import {
+  clearSessionCredentials,
+  confirmSessionCredentials,
+  discardPendingCredentials,
+  readSessionCredentials,
+  sameCredentialScope,
+  sessionCredentialScope,
+  stageSessionCredentials,
+} from "../services/sessionCredentials";
 import {
   CONNECTION_LOST_CODES,
   ERROR_CODES,
@@ -20,6 +29,7 @@ import {
 import { useCredentialStore } from "./credentialStore";
 import { useProfileStore } from "./profileStore";
 import { useSettingsStore } from "./settingsStore";
+import { useUiStore } from "./uiStore";
 
 const TERMINAL_EVENT_NAME = "terminal-event";
 const INITIAL_TERMINAL_COLUMNS = 120;
@@ -36,6 +46,10 @@ const TERMINAL_BUFFER_TRIM_TO_CHARS = 1_500_000;
 const terminalBuffers = new Map();
 // 隐藏会话也持续解析输出，切标签时不再重放被截断的 ANSI 字符流。
 const terminalSinks = new Map();
+// 关闭必须等已提交的启动请求完成登记，避免 IPC 乱序留下无标签的 SSH 连接。
+const terminalStartRequests = new Map();
+const terminalCloseRequests = new Map();
+let terminalListening = null;
 
 export const useSessionStore = defineStore("sessions", {
   state: () => ({
@@ -62,13 +76,17 @@ export const useSessionStore = defineStore("sessions", {
   actions: {
     async startListening() {
       if (this.unlistenTerminal) return;
-
-      try {
-        this.unlistenTerminal = await listen(TERMINAL_EVENT_NAME, (event) => {
+      // App 挂载与快速连接可能同时请求监听，只安装一次，并把失败交给调用方展示。
+      if (!terminalListening) {
+        terminalListening = listen(TERMINAL_EVENT_NAME, (event) => {
           this.handleTerminalEvent(event.payload);
-        });
-      } catch (error) {
-        console.warn("[Xin Terminal] terminal event listener unavailable", error);
+        }).then((unlisten) => { this.unlistenTerminal = unlisten; });
+      }
+      const pending = terminalListening;
+      try {
+        await pending;
+      } finally {
+        if (terminalListening === pending) terminalListening = null;
       }
     },
     // 同步接管挂载前的数据，旧组件延迟卸载时不能摘掉同一会话的新接收器。
@@ -86,7 +104,8 @@ export const useSessionStore = defineStore("sessions", {
     // forceNew: true 跳过复用总是新开终端（加号/快速连接）；默认聚焦已有会话，没有才新建（首页）
     openProfileSession(profile, { forceNew = false } = {}) {
       if (!forceNew) {
-        const existingSession = this.sessions.find((session) => session.profileId === profile.id);
+        const existingSession = this.sessions.find((session) => session.profileId === profile.id
+          && session.workspaceDir === useSettingsStore().workspaceDir && !session.isClosing);
         if (existingSession) {
           syncSessionFromProfile(existingSession, profile);
           this.activeSessionId = existingSession.id;
@@ -113,6 +132,7 @@ export const useSessionStore = defineStore("sessions", {
         credentialRef: profile.credentialRef ?? null,
         remotePath: profile.defaultRemotePath || "/",
         status: "authRequired",
+        isClosing: false,
         error: null,
         hostKeyChange: null,
         savedCredentialAutoStarted: false,
@@ -147,24 +167,41 @@ export const useSessionStore = defineStore("sessions", {
     showConnectionHub() {
       this.activeSessionId = null;
     },
+    // 同一标签的并发关闭共用结果，删除配置必须等后端关闭成功才能继续。
     async closeSession(sessionId, { requireDisconnect = false } = {}) {
-      if (!this.sessions.some((session) => session.id === sessionId)) return;
-
-      try {
-        await closeTerminalSession(sessionId);
-      } catch (error) {
-        if (requireDisconnect) throw error;
+      const session = this.findSession(sessionId);
+      if (!session) return;
+      let closing = terminalCloseRequests.get(sessionId);
+      if (!closing) {
+        session.isClosing = true;
+        closing = (async () => {
+          await terminalStartRequests.get(sessionId)?.catch(() => {});
+          await closeTerminalSession(sessionId);
+          const closingIndex = this.sessions.findIndex((session) => session.id === sessionId);
+          clearSessionCredentials(sessionId);
+          clearTerminalBuffer(sessionId);
+          terminalSinks.delete(sessionId);
+          if (closingIndex < 0) return;
+          this.sessions.splice(closingIndex, 1);
+          if (this.activeSessionId === sessionId) {
+            const nextSession = this.sessions[closingIndex] ?? this.sessions[closingIndex - 1] ?? null;
+            this.activeSessionId = nextSession?.id ?? null;
+          }
+        })();
+        terminalCloseRequests.set(sessionId, closing);
       }
-      // 等待关闭期间其他标签也可能被移除，必须重新定位，避免删错标签。
-      const closingIndex = this.sessions.findIndex((session) => session.id === sessionId);
-      if (closingIndex < 0) return;
-      clearTerminalBuffer(sessionId);
-      terminalSinks.delete(sessionId);
-      this.sessions.splice(closingIndex, 1);
-      if (this.activeSessionId !== sessionId) return;
-
-      const nextSession = this.sessions[closingIndex] ?? this.sessions[closingIndex - 1] ?? null;
-      this.activeSessionId = nextSession?.id ?? null;
+      try {
+        await closing;
+      } catch (error) {
+        session.isClosing = false;
+        discardPendingCredentials(sessionId, session.currentAttemptId);
+        session.status = "error";
+        session.error = localizeError(error);
+        if (requireDisconnect) throw error;
+        useUiStore().setError(localizeError(error));
+      } finally {
+        if (terminalCloseRequests.get(sessionId) === closing) terminalCloseRequests.delete(sessionId);
+      }
     },
     // 删除连接配置时，它已打开的终端一并关掉，不留下指向已删配置的孤儿 tab
     async closeSessionsForProfile(profileId) {
@@ -188,140 +225,125 @@ export const useSessionStore = defineStore("sessions", {
     },
     requestCredentials(sessionId = this.activeSessionId) {
       const session = this.findSession(sessionId);
-      if (!session) return;
+      if (!session || session.isClosing || ["connecting", "connected"].includes(session.status)) return;
 
       session.status = "authRequired";
       session.error = null;
     },
     async startActiveTerminal(credentials = {}) {
-      await this.startTerminalForSession(this.activeSessionId, credentials, {
+      return this.startTerminalForSession(this.activeSessionId, credentials, {
         resetReconnectAttempts: true,
       });
     },
+    // 输入、已保存凭据和重连共用尝试管理，所有异步边界都核对原会话与目标。
     async startTerminalForSession(sessionId, credentials = {}, options = {}) {
       const session = this.findSession(sessionId);
-      if (!session || session.status === "connecting") return;
+      if (!session || session.isClosing || session.status === "connecting"
+        || (session.status === "connected" && !options.force)) return false;
 
       const attemptId = createTerminalAttemptId(session.id);
+      const credentialSource = options.credentialSource ?? "provided";
+      discardPendingCredentials(sessionId, session.currentAttemptId);
       session.status = "connecting";
       session.error = null;
       session.hostKeyChange = null;
-      resetTerminalBuffer(session);
       session.currentAttemptId = attemptId;
       session.connectedAt = null;
       session.lastDisconnectReason = null;
+      session.systemInfo = null;
+      session.systemInfoLoading = false;
+      session.systemInfoError = null;
+      session.systemInfoUpdatedAt = null;
+      session.networkHistory = [];
       if (options.resetReconnectAttempts !== false) {
         session.autoReconnectAttempts = 0;
       }
-
+      let startRequest;
       try {
+        const profile = currentSessionProfile(session);
+        const previousScope = sessionCredentialScope(session);
+        syncSessionFromProfile(session, profile);
+        const scope = sessionCredentialScope(session);
+        if (!sameCredentialScope(previousScope, scope)) throw sessionConnectionChanged();
+        const credentialRef = session.credentialRef;
+        const provided = { password: credentials.password, passphrase: credentials.passphrase };
+        await this.startListening();
+        if (session.isClosing || session.status !== "connecting"
+          || this.findSession(sessionId)?.currentAttemptId !== attemptId) return false;
+        const resolved = await resolveSessionCredentials(session, provided, credentialSource);
+        const latestSession = this.findSession(sessionId);
+        if (!latestSession || latestSession.isClosing || latestSession.status !== "connecting"
+          || latestSession.currentAttemptId !== attemptId) return false;
+        const latestProfile = currentSessionProfile(latestSession);
+        const latestScope = sessionCredentialScope({
+          ...latestProfile, profileId: latestProfile.id, workspaceDir: latestSession.workspaceDir,
+        });
+        if (!sameCredentialScope(scope, latestScope)
+          || !sameCredentialScope(scope, sessionCredentialScope(latestSession))
+          || credentialRef !== (latestProfile.credentialRef ?? null)) {
+          syncSessionFromProfile(latestSession, latestProfile);
+          throw sessionConnectionChanged();
+        }
+        if (!resolved) {
+          latestSession.status = "authRequired";
+          return false;
+        }
+        resetTerminalBuffer(session);
         // 配置可以在终端存活时被修改，传输必须记录本次真正发给后端的连接地址。
-        session.connectionTarget = connectionIdentity(session);
-        await startTerminalSession({
+        session.connectionTarget = connectionIdentity(scope);
+        stageSessionCredentials(sessionId, attemptId, scope, resolved);
+        startRequest = startTerminalSession({
           sessionId: session.id,
           attemptId,
           ...session.connectionTarget,
           authMethod: session.authMethod,
-          password: credentials.password || null,
+          password: resolved.password || null,
           privateKeyPath: session.privateKeyPath || null,
-          passphrase: credentials.passphrase || null,
+          passphrase: resolved.passphrase || null,
           defaultRemotePath: session.remotePath,
           columns: session.terminalColumns,
           rows: session.terminalRows,
           keepaliveSeconds: useSettingsStore().sshKeepaliveSeconds,
         });
-      } catch (error) {
-        const latestSession = this.findSession(session.id);
-        if (latestSession && latestSession.currentAttemptId === attemptId) {
-          latestSession.status = options.fallbackStatus ?? "authRequired";
-          latestSession.error = localizeError(error);
-          latestSession.lastDisconnectReason = "error";
-        }
-      }
-    },
-    async startSessionWithSavedCredential(sessionId = this.activeSessionId, options = {}) {
-      const session = this.findSession(sessionId);
-      if (
-        !session?.credentialRef ||
-        session.status === "connecting" ||
-        (session.status === "connected" && !options.force)
-      ) {
-        return false;
-      }
-
-      const attemptId = createTerminalAttemptId(session.id);
-      session.status = "connecting";
-      session.error = null;
-      session.hostKeyChange = null;
-      resetTerminalBuffer(session);
-      session.savedCredentialAutoStarted = true;
-      session.currentAttemptId = attemptId;
-      session.connectedAt = null;
-      session.lastDisconnectReason = null;
-      if (options.resetReconnectAttempts !== false) {
-        session.autoReconnectAttempts = 0;
-      }
-
-      try {
-        const credentialStore = useCredentialStore();
-        const credentials = await readSavedCredentials(credentialStore, session);
-
-        // 读取凭据期间可能已关会话或重新连接，旧尝试不能覆盖新的连接目标。
-        if (this.findSession(sessionId)?.currentAttemptId !== attemptId) return false;
-
-        if (session.authMethod === "password" && !credentials.password) {
-          throw new Error(i18n.global.t("terminal.savedCredentialMissing"));
-        }
-
-        session.connectionTarget = connectionIdentity(session);
-        await startTerminalSession({
-          sessionId: session.id,
-          attemptId,
-          ...session.connectionTarget,
-          authMethod: session.authMethod,
-          password: credentials.password || null,
-          privateKeyPath: session.privateKeyPath || null,
-          passphrase: credentials.passphrase || null,
-          defaultRemotePath: session.remotePath,
-          columns: session.terminalColumns,
-          rows: session.terminalRows,
-          keepaliveSeconds: useSettingsStore().sshKeepaliveSeconds,
-        });
+        terminalStartRequests.set(sessionId, startRequest);
+        await startRequest;
         return true;
       } catch (error) {
+        discardPendingCredentials(sessionId, attemptId);
         const latestSession = this.findSession(session.id);
-        if (latestSession && latestSession.currentAttemptId === attemptId) {
-          latestSession.status = options.fallbackStatus ?? "authRequired";
+        if (latestSession && !latestSession.isClosing && latestSession.currentAttemptId === attemptId
+          && latestSession.status === "connecting") {
+          const requiresCredentials = hasErrorCode(error, [ERROR_CODES.authFailed, ERROR_CODES.authKeyFile,
+            ERROR_CODES.sessionConnectionChanged]);
+          if (requiresCredentials) clearSessionCredentials(sessionId);
+          latestSession.status = requiresCredentials ? "authRequired" : (options.fallbackStatus ?? "authRequired");
           latestSession.error = localizeError(error);
           latestSession.lastDisconnectReason = "error";
         }
         return false;
+      } finally {
+        if (terminalStartRequests.get(sessionId) === startRequest) terminalStartRequests.delete(sessionId);
       }
+    },
+    startSessionWithSavedCredential(sessionId = this.activeSessionId, options = {}) {
+      const session = this.findSession(sessionId);
+      if (!session?.credentialRef) return false;
+      return this.startTerminalForSession(sessionId, {}, { ...options, credentialSource: "saved" });
     },
     reconnectActiveTerminal() {
       return this.reconnectSession(this.activeSessionId);
     },
     reconnectSession(sessionId = this.activeSessionId) {
-      const session = this.findSession(sessionId);
-      if (!session) return;
-
-      session.autoReconnectAttempts = 0;
-      if (session.credentialRef) {
-        return this.startSessionWithSavedCredential(session.id, {
-          force: true,
-          resetReconnectAttempts: true,
-        });
-      }
-
-      this.requestCredentials(session.id);
-      return false;
+      return this.startTerminalForSession(sessionId, {}, {
+        credentialSource: "reconnect", force: true, resetReconnectAttempts: true,
+      });
     },
     async sendActiveTerminalInput(data) {
       return this.sendSessionTerminalInput(this.activeSessionId, data);
     },
     async sendSessionTerminalInput(sessionId, data) {
       const session = this.findSession(sessionId);
-      if (!session || session.status !== "connected" || !data) return;
+      if (!session || session.isClosing || session.status !== "connected" || !data) return;
 
       await sendTerminalInput({
         sessionId: session.id,
@@ -337,7 +359,7 @@ export const useSessionStore = defineStore("sessions", {
 
       session.terminalColumns = columns;
       session.terminalRows = rows;
-      if (session.status !== "connected") return;
+      if (session.isClosing || session.status !== "connected") return;
 
       await resizeTerminal({
         sessionId: session.id,
@@ -353,7 +375,7 @@ export const useSessionStore = defineStore("sessions", {
     },
     handleTerminalEvent(event) {
       const session = this.findSession(event.sessionId);
-      if (!session) return;
+      if (!session || session.isClosing) return;
       if (isStaleTerminalEvent(session, event)) return;
 
       if (event.kind === "output") {
@@ -367,13 +389,16 @@ export const useSessionStore = defineStore("sessions", {
       }
 
       if (event.kind === "connected") {
+        confirmSessionCredentials(session.id, event.attemptId);
         session.status = "connected";
         session.error = null;
         session.hostKeyChange = null;
         session.connectedAt = Date.now();
         session.lastDisconnectReason = null;
         // 首页「最近连接」打点，失败不影响会话
-        useProfileStore().markConnected(session.profileId);
+        if (session.workspaceDir === useSettingsStore().workspaceDir) {
+          useProfileStore().markConnected(session.profileId);
+        }
         return;
       }
 
@@ -385,6 +410,7 @@ export const useSessionStore = defineStore("sessions", {
       }
 
       if (event.kind === "closed") {
+        discardPendingCredentials(session.id, event.attemptId);
         const reason = event.reason ?? "remote";
         session.status = "closed";
         session.lastDisconnectReason = reason;
@@ -394,13 +420,16 @@ export const useSessionStore = defineStore("sessions", {
 
       if (event.kind === "error") {
         const wasConnected = session.status === "connected";
-        session.status = "error";
+        const authenticationFailed = hasErrorCode(event.error, [ERROR_CODES.authFailed, ERROR_CODES.authKeyFile]);
+        discardPendingCredentials(session.id, event.attemptId);
+        if (authenticationFailed) clearSessionCredentials(session.id);
+        session.status = authenticationFailed ? "authRequired" : "error";
         session.hostKeyChange = parseHostKeyChange(event.error);
         session.error = session.hostKeyChange
           ? i18n.global.t("terminal.hostKeyChangedTitle")
           : localizeError(event.error) || i18n.global.t("terminal.genericError");
         session.lastDisconnectReason = event.reason ?? "error";
-        if (wasConnected) {
+        if (wasConnected && !authenticationFailed && !session.hostKeyChange) {
           this.maybeAutoReconnect(session, session.lastDisconnectReason);
         }
       }
@@ -408,20 +437,29 @@ export const useSessionStore = defineStore("sessions", {
     async trustHostKeyAndReconnect(sessionId = this.activeSessionId) {
       const session = this.findSession(sessionId);
       const hostKeyChange = session?.hostKeyChange;
-      if (!session || !hostKeyChange) return false;
+      if (!session || session.isClosing || !hostKeyChange) return false;
+      const attemptId = session.currentAttemptId;
+      const isCurrentRequest = () => !session.isClosing
+        && this.findSession(sessionId)?.currentAttemptId === attemptId
+        && session.hostKeyChange === hostKeyChange;
 
       try {
+        // 指纹来自已提交的连接目标，编辑配置后不能把旧指纹信任给另一台主机。
+        const profile = currentSessionProfile(session);
+        if (!sameConnection(session.connectionTarget, profile)
+          || !sameConnection(session.connectionTarget, session)) throw sessionConnectionChanged();
         await trustHostKey({
-          host: session.host,
-          port: session.port,
+          host: session.connectionTarget.host,
+          port: session.connectionTarget.port,
           fingerprint: hostKeyChange.actualFingerprint,
           algorithm: null,
         });
       } catch (error) {
-        session.error = localizeError(error);
+        if (isCurrentRequest()) session.error = localizeError(error);
         return false;
       }
 
+      if (!isCurrentRequest()) return false;
       session.hostKeyChange = null;
       session.error = null;
       return this.reconnectSession(session.id);
@@ -430,7 +468,7 @@ export const useSessionStore = defineStore("sessions", {
       if (!hasErrorCode(error, CONNECTION_LOST_CODES)) return false;
 
       const session = this.findSession(sessionId);
-      if (!session) return false;
+      if (!session || session.isClosing || session.status !== "connected") return false;
 
       session.status = "closed";
       session.error = localizeError(error);
@@ -438,7 +476,9 @@ export const useSessionStore = defineStore("sessions", {
       return this.maybeAutoReconnect(session, "remote");
     },
     maybeAutoReconnect(session, reason = "remote") {
-      if (!session || reason === TERMINAL_CLOSE_REASON_CLIENT || !session.credentialRef) {
+      if (!session || session.isClosing || session.hostKeyChange || reason === TERMINAL_CLOSE_REASON_CLIENT
+        || !["closed", "error"].includes(session.status)
+        || (!readSessionCredentials(session) && !session.credentialRef)) {
         return false;
       }
 
@@ -451,7 +491,8 @@ export const useSessionStore = defineStore("sessions", {
       }
 
       session.autoReconnectAttempts += 1;
-      this.startSessionWithSavedCredential(session.id, {
+      this.startTerminalForSession(session.id, {}, {
+        credentialSource: "reconnect",
         force: true,
         fallbackStatus: "error",
         resetReconnectAttempts: false,
@@ -460,7 +501,8 @@ export const useSessionStore = defineStore("sessions", {
     },
     async refreshSystemInfo(sessionId = this.activeSessionId) {
       const session = this.findSession(sessionId);
-      if (!session || session.status !== "connected" || session.systemInfoLoading) return null;
+      if (!session || session.isClosing || session.status !== "connected" || session.systemInfoLoading) return null;
+      const attemptId = session.currentAttemptId;
 
       ensureSystemInfoState(session);
       session.systemInfoLoading = true;
@@ -469,7 +511,7 @@ export const useSessionStore = defineStore("sessions", {
       try {
         const snapshot = await getRemoteSystemInfo({ sessionId: session.id });
         const latestSession = this.findSession(session.id);
-        if (!latestSession) return null;
+        if (!latestSession || latestSession.isClosing || latestSession.currentAttemptId !== attemptId) return null;
 
         latestSession.systemInfo = normalizeSystemInfoSnapshot(snapshot);
         latestSession.systemInfoUpdatedAt = Date.now();
@@ -477,14 +519,14 @@ export const useSessionStore = defineStore("sessions", {
         return latestSession.systemInfo;
       } catch (error) {
         const latestSession = this.findSession(session.id);
-        if (latestSession) {
+        if (latestSession && !latestSession.isClosing && latestSession.currentAttemptId === attemptId) {
           latestSession.systemInfoError = localizeError(error);
           this.handleConnectionOperationError(latestSession.id, error);
         }
         return null;
       } finally {
         const latestSession = this.findSession(session.id);
-        if (latestSession) {
+        if (latestSession && latestSession.currentAttemptId === attemptId) {
           latestSession.systemInfoLoading = false;
         }
       }
@@ -569,11 +611,14 @@ function syncSessionFromProfile(session, profile) {
   session.privateKeyPath = profile.privateKeyPath;
   session.credentialRef = profile.credentialRef ?? null;
   session.remotePath = session.remotePath || profile.defaultRemotePath || "/";
+  // 主机、用户或认证方式改变后，旧连接成功过的秘密不能被发给新目标。
+  readSessionCredentials(session);
 }
 
 function shouldAutoConnectWithSavedCredential(session) {
   return (
     Boolean(session?.credentialRef) &&
+    !session.isClosing &&
     !session.savedCredentialAutoStarted &&
     ["authRequired", "closed", "error"].includes(session.status)
   );
@@ -605,6 +650,35 @@ function isStaleTerminalEvent(session, event) {
       session.currentAttemptId &&
       event.attemptId !== session.currentAttemptId,
   );
+}
+
+function currentSessionProfile(session) {
+  if (session.workspaceDir !== useSettingsStore().workspaceDir) {
+    throw { code: "workspace.changed", message: "Workspace changed before connecting" };
+  }
+  const profile = useProfileStore().activeProfiles.find((profile) => profile.id === session.profileId);
+  if (!profile) throw { code: "profile.notFound", message: "Connection profile not found" };
+  return profile;
+}
+
+function sessionConnectionChanged() {
+  return { code: ERROR_CODES.sessionConnectionChanged, message: "Connection changed while preparing authentication" };
+}
+
+// 仅重连优先复用本标签已验证的凭据；首次打开仍遵循用户是否保存凭据的选择。
+async function resolveSessionCredentials(session, provided, source) {
+  if (source === "provided") return { password: provided.password, passphrase: provided.passphrase };
+  if (source === "reconnect") {
+    const cached = readSessionCredentials(session);
+    if (cached) return cached;
+  }
+  if (!session.credentialRef) return null;
+  session.savedCredentialAutoStarted = true;
+  const credentials = await readSavedCredentials(useCredentialStore(), session);
+  if (session.authMethod === "password" && !credentials.password) {
+    throw new Error(i18n.global.t("terminal.savedCredentialMissing"));
+  }
+  return credentials;
 }
 
 async function readSavedCredentials(credentialStore, session) {

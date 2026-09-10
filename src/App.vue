@@ -139,7 +139,7 @@ watch(
 onMounted(() => {
   appStore.bootstrap();
   // 终端事件监听挂在应用层：切到连接中心（终端组件卸载）时也不丢会话状态事件
-  sessionStore.startListening();
+  sessionStore.startListening().catch((error) => uiStore.setError(error));
   transferStore.loadHistory();
   transferStore.startListening().catch((error) => uiStore.setError(error));
   fileExplorerStore.startListening();

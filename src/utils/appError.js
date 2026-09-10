@@ -6,13 +6,16 @@ import { i18n } from "../i18n";
 
 const UNKNOWN_CODE = "internal.unknown";
 
-// 前端会据此分支的错误码，必须与 src-tauri/src/error.rs 的 `codes` 模块保持一致。
+// 前端会据此分支的错误码；来自后端的码须与 src-tauri/src/error.rs 保持一致。
 // 只列出真正被判断的码；纯展示用的码不需要出现在这里。
 export const ERROR_CODES = Object.freeze({
   hostKeyChanged: "hostKey.changed",
   sessionNotRunning: "session.notRunning",
   sessionNotAccepting: "session.notAccepting",
   sessionRequestCanceled: "session.requestCanceled",
+  sessionConnectionChanged: "session.connectionChanged",
+  authFailed: "auth.failed",
+  authKeyFile: "auth.keyFile",
   sshDisconnected: "ssh.disconnected",
   remoteTargetExists: "remote.targetExists",
   remoteIsDirectory: "remote.isDirectory",

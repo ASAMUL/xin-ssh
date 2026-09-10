@@ -575,6 +575,7 @@ export const messages = {
         "hostKey.changed": "服务器主机密钥已变更",
 
         "session.notRunning": "会话未连接",
+        "session.connectionChanged": "连接目标或认证配置已变更，请核对后重新输入凭据",
         "session.notAccepting": "会话已断开，无法继续{kind}",
         "session.requestCanceled": "{operation}已被取消",
 
@@ -1274,6 +1275,7 @@ export const messages = {
         "hostKey.changed": "The server host key has changed",
 
         "session.notRunning": "The session is not connected",
+        "session.connectionChanged": "The connection target or authentication settings changed. Review them and enter credentials again.",
         "session.notAccepting": "The session disconnected and cannot continue {kind}",
         "session.requestCanceled": "{operation} was canceled",
 
