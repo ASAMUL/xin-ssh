@@ -177,10 +177,12 @@ export const messages = {
       credentialsNeeded: "该连接未保存凭据，输入后启动",
       passphraseOptional: "私钥 Passphrase（无则留空）",
       genericError: "隧道出错",
+      stopBeforeEdit: "请先停止隧道再编辑",
       profileMissing: "找不到该隧道使用的连接配置",
       status: {
         stopped: "未启动",
         starting: "启动中",
+        stopping: "停止中",
         running: "转发中",
         error: "出错",
       },
@@ -639,6 +641,10 @@ export const messages = {
 
         "tunnel.alreadyRunning": "该隧道已在运行",
         "tunnel.portUnavailable": "本地端口 {port} 不可用：{detail}",
+        "tunnel.listenerFailed": "本地端口 {port} 监听失败：{detail}",
+        "tunnel.stopFailed": "停止隧道失败，请重试：{detail}",
+        "tunnel.configBusy": "隧道正在运行或配置正在保存，请先停止隧道并等待保存完成。",
+        "tunnel.connectionChanged": "连接配置已变更，请重新启动隧道。",
 
         "ssh.connection": "SSH 连接失败：{detail}",
         "ssh.resolveFailed": "无法解析主机 {host}，请检查地址和 DNS 设置：{detail}",
@@ -653,6 +659,7 @@ export const messages = {
         requestId: "请求 ID",
         taskId: "任务 ID",
         tunnelId: "隧道 ID",
+        attemptId: "启动尝试 ID",
         credentialRef: "凭据引用",
         fingerprint: "指纹",
         host: "主机",
@@ -865,10 +872,12 @@ export const messages = {
       credentialsNeeded: "No saved credentials for this connection — enter them to start",
       passphraseOptional: "Private key passphrase (leave empty if none)",
       genericError: "Tunnel error",
+      stopBeforeEdit: "Stop the tunnel before editing",
       profileMissing: "The connection profile for this tunnel is missing",
       status: {
         stopped: "Stopped",
         starting: "Starting",
+        stopping: "Stopping",
         running: "Forwarding",
         error: "Error",
       },
@@ -1330,6 +1339,10 @@ export const messages = {
 
         "tunnel.alreadyRunning": "That tunnel is already running",
         "tunnel.portUnavailable": "Local port {port} is unavailable: {detail}",
+        "tunnel.listenerFailed": "Listener on local port {port} failed: {detail}",
+        "tunnel.stopFailed": "Could not stop the tunnel. Retry: {detail}",
+        "tunnel.configBusy": "The tunnel is active or its configuration is being saved. Stop it and wait for the save to finish.",
+        "tunnel.connectionChanged": "The connection settings changed. Start the tunnel again.",
 
         "ssh.connection": "SSH connection failed: {detail}",
         "ssh.resolveFailed": "Could not resolve host {host}. Check the address and DNS settings: {detail}",
@@ -1344,6 +1357,7 @@ export const messages = {
         requestId: "request id",
         taskId: "task id",
         tunnelId: "tunnel id",
+        attemptId: "startup attempt id",
         credentialRef: "credential reference",
         fingerprint: "fingerprint",
         host: "host",

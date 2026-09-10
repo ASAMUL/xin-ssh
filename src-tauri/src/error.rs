@@ -115,6 +115,8 @@ pub mod codes {
 
     pub const TUNNEL_ALREADY_RUNNING: &str = "tunnel.alreadyRunning";
     pub const TUNNEL_PORT_UNAVAILABLE: &str = "tunnel.portUnavailable";
+    pub const TUNNEL_LISTENER_FAILED: &str = "tunnel.listenerFailed";
+    pub const TUNNEL_STOP_FAILED: &str = "tunnel.stopFailed";
 
     pub const SSH_CONNECTION: &str = "ssh.connection";
     pub const SSH_RESOLVE_FAILED: &str = "ssh.resolveFailed";

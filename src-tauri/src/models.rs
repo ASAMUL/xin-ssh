@@ -309,6 +309,7 @@ pub fn default_tunnel_remote_host() -> String {
 #[serde(rename_all = "camelCase")]
 pub struct TunnelStartRequest {
     pub tunnel_id: String,
+    pub attempt_id: String,
     pub host: String,
     pub port: u16,
     pub username: String,
@@ -327,6 +328,7 @@ pub struct TunnelStartRequest {
 #[serde(rename_all = "camelCase")]
 pub struct TunnelEventPayload {
     pub tunnel_id: String,
+    pub attempt_id: String,
     pub kind: String,
     pub error: Option<AppError>,
 }

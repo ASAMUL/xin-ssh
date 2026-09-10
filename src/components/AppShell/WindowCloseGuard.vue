@@ -30,7 +30,7 @@ const sessionCount = computed(() => sessionStore.sessions.filter(
 const transferCount = computed(() => transferStore.summary.activeCount);
 const operationCount = computed(() => fileOperationStore.activeCount);
 const tunnelCount = computed(() => Object.values(tunnelStore.runtime).filter(
-  (tunnel) => ["running", "starting"].includes(tunnel.status),
+  (tunnel) => ["running", "starting", "stopping"].includes(tunnel.status),
 ).length);
 const needsConfirmation = computed(() => hasUnsavedFile.value || editorStore.isSaving
   || sessionCount.value || transferCount.value || tunnelCount.value || operationCount.value);

@@ -144,7 +144,7 @@ onMounted(() => {
   transferStore.startListening().catch((error) => uiStore.setError(error));
   fileExplorerStore.startListening();
   fileOperationStore.startListening().catch((error) => uiStore.setError(error));
-  tunnelStore.startListening();
+  tunnelStore.startListening().catch((error) => uiStore.setError(error));
 });
 </script>
 

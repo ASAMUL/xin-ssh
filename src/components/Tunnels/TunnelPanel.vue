@@ -1,14 +1,16 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useProfileStore } from "../../stores/profileStore";
 import { useTunnelStore } from "../../stores/tunnelStore";
+import { useUiStore } from "../../stores/uiStore";
 import { localizeError } from "../../utils/appError";
 
 const emit = defineEmits(["close"]);
 const { t } = useI18n();
 const profileStore = useProfileStore();
 const tunnelStore = useTunnelStore();
+const uiStore = useUiStore();
 
 const mode = ref("list");
 const editingTunnelId = ref(null);
@@ -31,7 +33,7 @@ const form = reactive({
 
 const profileOptions = computed(() =>
   profileStore.activeProfiles.map((profile) => ({
-    label: `${profile.name}（${profile.username}@${profile.host}）`,
+    label: `${profile.name} (${profile.username}@${profile.host})`,
     value: profile.id,
   })),
 );
@@ -46,6 +48,10 @@ const canSave = computed(
 
 onMounted(() => {
   tunnelStore.loadConfigs();
+});
+
+onBeforeUnmount(() => {
+  clearTimeout(armedDeleteTimer);
 });
 
 function isValidPort(port) {
@@ -81,6 +87,7 @@ function openCreateForm() {
 }
 
 function openEditForm(tunnel) {
+  if (!tunnelStore.canEditConfig(tunnel.id)) return;
   editingTunnelId.value = tunnel.id;
   form.name = tunnel.name ?? "";
   form.profileId = tunnel.profileId;
@@ -127,6 +134,7 @@ async function submitForm() {
 }
 
 function requestStart(tunnel) {
+  if (!tunnelStore.canEditConfig(tunnel.id)) return;
   const profile = profileOf(tunnel);
   if (!profile) return;
 
@@ -159,10 +167,12 @@ function cancelPendingStart() {
 }
 
 function requestDelete(tunnel) {
+  if (tunnelStore.busyConfigs[tunnel.id]) return;
   if (armedDeleteId.value === tunnel.id) {
     clearTimeout(armedDeleteTimer);
     armedDeleteId.value = null;
-    tunnelStore.removeConfig(tunnel.id).catch(() => {});
+    if (pendingStartId.value === tunnel.id) cancelPendingStart();
+    tunnelStore.removeConfig(tunnel.id).catch((error) => uiStore.setError(error));
     return;
   }
 
@@ -171,6 +181,10 @@ function requestDelete(tunnel) {
   armedDeleteTimer = setTimeout(() => {
     armedDeleteId.value = null;
   }, 3000);
+}
+
+function stopTunnel(tunnel) {
+  tunnelStore.stop(tunnel.id).catch((error) => uiStore.setError(error));
 }
 </script>
 
@@ -227,7 +241,7 @@ function requestDelete(tunnel) {
                 icon="i-lucide-play"
                 :aria-label="t('tunnel.start')"
                 :title="t('tunnel.start')"
-                :disabled="!profileOf(tunnel)"
+                :disabled="!profileOf(tunnel) || !tunnelStore.canEditConfig(tunnel.id)"
                 @click="requestStart(tunnel)"
               />
               <UButton
@@ -236,10 +250,10 @@ function requestDelete(tunnel) {
                 variant="soft"
                 size="xs"
                 icon="i-lucide-square"
-                :loading="statusOf(tunnel).status === 'starting'"
+                :loading="statusOf(tunnel).status === 'stopping'"
                 :aria-label="t('tunnel.stop')"
                 :title="t('tunnel.stop')"
-                @click="tunnelStore.stop(tunnel.id)"
+                @click="stopTunnel(tunnel)"
               />
               <UButton
                 color="neutral"
@@ -247,7 +261,8 @@ function requestDelete(tunnel) {
                 size="xs"
                 icon="i-lucide-pencil"
                 :aria-label="t('tunnel.edit')"
-                :title="t('tunnel.edit')"
+                :title="tunnelStore.canEditConfig(tunnel.id) ? t('tunnel.edit') : t('tunnel.stopBeforeEdit')"
+                :disabled="!tunnelStore.canEditConfig(tunnel.id)"
                 @click="openEditForm(tunnel)"
               />
               <UButton
@@ -255,6 +270,7 @@ function requestDelete(tunnel) {
                 :variant="armedDeleteId === tunnel.id ? 'soft' : 'ghost'"
                 size="xs"
                 icon="i-lucide-trash-2"
+                :disabled="Boolean(tunnelStore.busyConfigs[tunnel.id])"
                 :aria-label="t('tunnel.delete')"
                 :title="armedDeleteId === tunnel.id ? t('tunnel.deleteArmed') : t('tunnel.delete')"
                 @click="requestDelete(tunnel)"

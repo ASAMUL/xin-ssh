@@ -44,8 +44,8 @@ export function startTunnel(request) {
   return invoke("start_tunnel", { request });
 }
 
-export function stopTunnel(tunnelId) {
-  return invoke("stop_tunnel", { tunnelId });
+export function stopTunnel(tunnelId, attemptId) {
+  return invoke("stop_tunnel", { tunnelId, attemptId });
 }
 
 export function listSnippets() {

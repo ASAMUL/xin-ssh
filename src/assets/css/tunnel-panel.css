@@ -55,7 +55,8 @@
   --status-soft: rgb(var(--xin-success-rgb) / 0.15);
 }
 
-.tunnel-item.starting {
+.tunnel-item.starting,
+.tunnel-item.stopping {
   --status-color: var(--xin-warning);
   --status-soft: rgb(var(--xin-warning-rgb) / 0.14);
 }
