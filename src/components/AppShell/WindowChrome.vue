@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import SessionTabs from "../SessionTabs.vue";
+import FileOperationPanel from "../FileOperationPanel.vue";
 import { useAppStore } from "../../stores/appStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useTransferStore } from "../../stores/transferStore";
@@ -41,10 +42,10 @@ async function toggleMaximizeWindow() {
   await appWindow.toggleMaximize();
 }
 
-async function closeWindow() {
+function closeWindow() {
   if (!appWindow) return;
 
-  await appWindow.close();
+  uiStore.requestWindowClose();
 }
 </script>
 
@@ -68,6 +69,7 @@ async function closeWindow() {
     <div v-else class="window-drag-space"></div>
 
     <div v-if="!appStore.isLoading" class="window-tools" @mousedown.stop>
+      <FileOperationPanel />
       <UChip
         :show="transferStore.summary.activeCount > 0"
         :text="transferStore.summary.activeCount"

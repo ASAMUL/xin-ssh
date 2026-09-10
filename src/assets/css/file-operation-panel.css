@@ -1,0 +1,75 @@
+.file-operation-panel {
+  width: min(390px, calc(100vw - 32px));
+  max-height: min(580px, calc(100vh - 90px));
+  display: flex;
+  flex-direction: column;
+  color: var(--xin-text);
+}
+
+.file-operation-header,
+.file-operation-heading,
+.file-operation-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.file-operation-header {
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--xin-border);
+  font-size: 14px;
+}
+
+.file-operation-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.file-operation-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.file-operation-item + .file-operation-item {
+  border-top: 1px solid var(--xin-border);
+}
+
+.file-operation-heading > strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.file-operation-meta {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+  color: var(--xin-text-muted);
+  font-size: 12px;
+}
+
+.file-operation-path,
+.file-operation-count,
+.file-operation-note {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--xin-text-muted);
+}
+
+.file-operation-path {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.file-operation-note {
+  padding: 10px 14px;
+  border-top: 1px solid var(--xin-border);
+}

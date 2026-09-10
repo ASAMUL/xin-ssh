@@ -23,6 +23,7 @@ export const ERROR_CODES = Object.freeze({
   fileTooLarge: "file.tooLarge",
   fileBinary: "file.binary",
   fileNotUtf8: "file.notUtf8",
+  fileOperationCanceled: "fileOperation.canceled",
   credentialEncryptFailed: "credential.encryptFailed",
   credentialDecryptFailed: "credential.decryptFailed",
   credentialKeyFailed: "credential.keyFailed",

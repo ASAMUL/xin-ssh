@@ -5,11 +5,13 @@ import CodeMirrorEditor from "./CodeMirrorEditor.vue";
 import { TERMINAL_FONTS } from "../../config/terminalThemes";
 import { useEditorStore } from "../../stores/editorStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useUiStore } from "../../stores/uiStore";
 import { errorCode, localizeError } from "../../utils/appError";
 
 const { t, locale } = useI18n();
 const editorStore = useEditorStore();
 const settingsStore = useSettingsStore();
+const uiStore = useUiStore();
 const editorRef = ref(null);
 const editorLanguage = ref("");
 const editorCursor = ref({ line: 1, column: 1, selectionLength: 0 });
@@ -73,21 +75,17 @@ watch(
 );
 
 onMounted(() => {
+  editorStore.attachContentReader(() => editorRef.value?.getContent());
   window.addEventListener("keydown", handleWindowKeydown);
 });
 
 onBeforeUnmount(() => {
+  editorStore.attachContentReader(null);
   window.removeEventListener("keydown", handleWindowKeydown);
 });
 
 function save(options = {}) {
-  if (!editorStore.hasDocument || editorStore.isSaving) return;
-  if (!editorStore.isDirty && !options.closeAfter) return;
-
-  const content = editorRef.value?.getContent();
-  if (content == null) return;
-
-  editorStore.saveFile(content, options);
+  return editorStore.saveCurrentFile(options);
 }
 
 function saveAndClose() {
@@ -100,7 +98,7 @@ function saveAndClose() {
 }
 
 function handleWindowKeydown(event) {
-  if (!editorStore.isOpen || event.defaultPrevented) return;
+  if (!editorStore.isOpen || uiStore.isWindowCloseOpen || event.defaultPrevented) return;
 
   if ((event.ctrlKey || event.metaKey) && event.key?.toLowerCase() === "s") {
     event.preventDefault();

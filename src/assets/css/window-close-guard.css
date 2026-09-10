@@ -1,0 +1,5 @@
+.window-close-details {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}

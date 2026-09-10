@@ -3,7 +3,6 @@ import { listen } from "@tauri-apps/api/event";
 import {
   createRemoteDirectory,
   createRemoteFile,
-  deleteRemoteEntries,
   listRemoteDirectory,
   renameRemotePath,
   streamRemoteDirectory,
@@ -233,22 +232,10 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       this.refreshTreeChildren(session, parentRemotePath(fromPath));
       this.refreshTreeChildren(session, parentRemotePath(toPath));
     },
-    async deleteEntries(session, entries, recursive = false) {
-      if (!session || session.status !== "connected" || !entries?.length) return;
-
-      await deleteRemoteEntries({
-        sessionId: session.id,
-        entries: entries.map((entry) => ({
-          path: entry.path,
-          name: entry.name,
-          isDirectory: entry.isDirectory,
-          size: entry.size,
-        })),
-        recursive,
-      });
+    async refreshAfterDeletion(session, paths) {
       await this.refreshDirectory(session);
 
-      const parentPaths = new Set(entries.map((entry) => parentRemotePath(entry.path)));
+      const parentPaths = new Set(paths.map(parentRemotePath));
       for (const parentPath of parentPaths) {
         this.refreshTreeChildren(session, parentPath);
       }

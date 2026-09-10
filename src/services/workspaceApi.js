@@ -136,8 +136,12 @@ export function renameRemotePath(request) {
   return invoke("rename_remote_path", { request });
 }
 
-export function deleteRemoteEntries(request) {
-  return invoke("delete_remote_entries", { request });
+export function startRemoteDelete(request) {
+  return invoke("start_remote_delete", { request });
+}
+
+export function cancelRemoteDelete(taskId) {
+  return invoke("cancel_remote_delete", { taskId });
 }
 
 export function streamRemoteDirectory(request) {

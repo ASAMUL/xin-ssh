@@ -17,15 +17,13 @@ use crate::error::{
 };
 use crate::models::{
     DirectoryEventPayload, RemoteCreateDirectoryRequest, RemoteCreateFileRequest,
-    RemoteDeleteRequest, RemoteDirectoryStreamRequest, RemoteFileContent, RemoteFileEntry,
-    RemoteListDirectoryRequest, RemoteReadFileRequest, RemoteRenameRequest, RemoteTransferEntry,
-    RemoteWriteFileRequest,
+    RemoteDirectoryStreamRequest, RemoteFileContent, RemoteFileEntry, RemoteListDirectoryRequest,
+    RemoteReadFileRequest, RemoteRenameRequest, RemoteWriteFileRequest,
 };
 use crate::sftp::path::normalize_remote_path;
 use crate::sftp::{open_raw_sftp_session, remote_file_entry, remote_file_entry_from_attrs};
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
-use crate::util::summarize_entry_errors;
 
 const DIRECTORY_EVENT: &str = "directory-event";
 // 内置编辑器单文件上限：内容走内存与 IPC 字符串往返，超限引导用户下载后编辑
@@ -68,7 +66,7 @@ pub async fn create_remote_directory(
         registry.create_directory(&request.session_id, normalize_remote_path(&request.path)),
     )
     .await
-    .map_err(|_| timeout_error("createDirectory", 12))?
+    .map_err(|_| modification_timeout("createDirectory", 12))?
 }
 
 #[tauri::command]
@@ -83,7 +81,7 @@ pub async fn create_remote_file(
         registry.create_file(&request.session_id, normalize_remote_path(&request.path)),
     )
     .await
-    .map_err(|_| timeout_error("createFile", 12))?
+    .map_err(|_| modification_timeout("createFile", 12))?
 }
 
 #[tauri::command]
@@ -132,7 +130,7 @@ pub async fn write_remote_file_text(
         ),
     )
     .await
-    .map_err(|_| timeout_error("writeFile", 60))?
+    .map_err(|_| modification_timeout("writeFile", 60))?
 }
 
 #[tauri::command]
@@ -151,22 +149,16 @@ pub async fn rename_remote_path(
         ),
     )
     .await
-    .map_err(|_| timeout_error("rename", 12))?
+    .map_err(|_| modification_timeout("rename", 12))?
 }
 
-#[tauri::command]
-pub async fn delete_remote_entries(
-    registry: State<'_, TerminalRegistry>,
-    request: RemoteDeleteRequest,
-) -> Result<(), AppError> {
-    validate_delete_request(&request)?;
-
-    timeout(
-        Duration::from_secs(30),
-        registry.delete_paths(&request.session_id, request.entries, request.recursive),
+fn modification_timeout(operation: &str, seconds: u64) -> AppError {
+    AppError::new(
+        codes::REMOTE_OPERATION_TIMED_OUT,
+        "Remote operation timed out; refresh before retrying",
     )
-    .await
-    .map_err(|_| timeout_error("delete", 30))?
+    .with("operation", operation)
+    .with("seconds", seconds)
 }
 
 pub(crate) async fn stream_directory_on_session(
@@ -480,89 +472,6 @@ pub(crate) async fn rename_path_on_session(
         .map_err(connection_error)
 }
 
-pub(crate) async fn delete_paths_on_session(
-    sftp: &SftpSession,
-    entries: &[RemoteTransferEntry],
-    recursive: bool,
-) -> Result<(), AppError> {
-    let mut errors = Vec::new();
-
-    for entry in entries {
-        let path = normalize_remote_path(&entry.path);
-        if let Err(error) = delete_remote_path(sftp, &path, recursive).await {
-            errors.push((entry.name.clone(), error));
-        }
-    }
-
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(summarize_entry_errors(errors))
-    }
-}
-
-async fn delete_remote_path(
-    sftp: &SftpSession,
-    path: &str,
-    recursive: bool,
-) -> Result<(), AppError> {
-    if path == "/" {
-        return Err(root_forbidden("delete"));
-    }
-
-    let metadata = sftp
-        .symlink_metadata(path.to_string())
-        .await
-        .map_err(connection_error)?;
-
-    if metadata.file_type().is_dir() {
-        if recursive {
-            delete_remote_directory_recursive(sftp, path).await
-        } else {
-            sftp.remove_dir(path.to_string())
-                .await
-                .map_err(connection_error)
-        }
-    } else {
-        sftp.remove_file(path.to_string())
-            .await
-            .map_err(connection_error)
-    }
-}
-
-async fn delete_remote_directory_recursive(
-    sftp: &SftpSession,
-    root_path: &str,
-) -> Result<(), AppError> {
-    let mut pending_dirs = vec![normalize_remote_path(root_path)];
-    let mut dirs_to_remove = Vec::new();
-
-    while let Some(current_dir) = pending_dirs.pop() {
-        dirs_to_remove.push(current_dir.clone());
-        let read_dir = sftp
-            .read_dir(current_dir.clone())
-            .await
-            .map_err(connection_error)?;
-
-        for child in read_dir {
-            let child_path = normalize_remote_path(&child.path());
-            if child.metadata().file_type().is_dir() {
-                pending_dirs.push(child_path);
-            } else {
-                sftp.remove_file(child_path)
-                    .await
-                    .map_err(connection_error)?;
-            }
-        }
-    }
-
-    for dir in dirs_to_remove.into_iter().rev() {
-        sftp.remove_dir(dir).await.map_err(connection_error)?;
-    }
-
-    Ok(())
-}
-
 fn directory_event(
     session_id: &str,
     request_id: &str,
@@ -702,29 +611,6 @@ fn validate_rename_request(request: &RemoteRenameRequest) -> Result<(), AppError
 
     if normalize_remote_path(&request.from_path) == "/" {
         return Err(root_forbidden("rename"));
-    }
-
-    Ok(())
-}
-
-fn validate_delete_request(request: &RemoteDeleteRequest) -> Result<(), AppError> {
-    if request.session_id.trim().is_empty() {
-        return Err(required("sessionId"));
-    }
-
-    if request.entries.is_empty() {
-        return Err(AppError::new(
-            codes::VALIDATION_SELECT_REMOTE_ITEM,
-            "Choose at least one remote item",
-        ));
-    }
-
-    if request
-        .entries
-        .iter()
-        .any(|entry| normalize_remote_path(&entry.path) == "/")
-    {
-        return Err(root_forbidden("delete"));
     }
 
     Ok(())

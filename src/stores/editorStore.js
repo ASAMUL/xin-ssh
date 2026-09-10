@@ -6,6 +6,8 @@ import { useSessionStore } from "./sessionStore";
 
 // 与后端 MAX_EDITABLE_FILE_BYTES 保持一致
 export const EDITOR_MAX_FILE_BYTES = 5 * 1024 * 1024;
+// 内容仍由 CodeMirror 持有，只在保存时读取，避免每次输入都复制整份文档。
+let readEditorContent = null;
 
 // 常见二进制扩展名：双击时直接提示，避免整份拉取后才失败。
 // 这里构造的错误与后端 AppError 同形（code/message/params），组件按同一套逻辑本地化。
@@ -30,6 +32,7 @@ export const useEditorStore = defineStore("editor", {
     isLoading: false,
     isSaving: false,
     isDirty: false,
+    editRevision: 0,
     confirmingClose: false,
     loadError: null,
     saveError: null,
@@ -45,6 +48,16 @@ export const useEditorStore = defineStore("editor", {
     },
   },
   actions: {
+    attachContentReader(reader) {
+      readEditorContent = reader;
+    },
+    async saveCurrentFile(options = {}) {
+      if (!this.hasDocument || this.isSaving) return false;
+      if (!this.isDirty) return true;
+      const content = readEditorContent?.();
+      if (content == null) return false;
+      return this.saveFile(content, options);
+    },
     async openFile(session, entry) {
       if (!session || session.status !== "connected" || !entry || entry.isDirectory) return;
 
@@ -57,6 +70,7 @@ export const useEditorStore = defineStore("editor", {
       this.size = Number(entry.size ?? 0);
       this.initialContent = "";
       this.isDirty = false;
+      this.editRevision = 0;
       this.confirmingClose = false;
       this.loadError = null;
       this.saveError = null;
@@ -108,16 +122,18 @@ export const useEditorStore = defineStore("editor", {
       });
     },
     async saveFile(content, options = {}) {
-      if (!this.hasDocument || this.isSaving || typeof content !== "string") return;
+      if (!this.hasDocument || this.isSaving || typeof content !== "string") return false;
 
       const session = this.session;
       if (!session || session.status !== "connected") {
         this.saveError = { code: ERROR_CODES.sessionNotRunning, message: "", params: {} };
-        return;
+        return false;
       }
 
       this.isSaving = true;
       this.saveError = null;
+      const requestToken = this.requestToken;
+      const editRevision = this.editRevision;
 
       try {
         await writeRemoteFileText({
@@ -126,25 +142,31 @@ export const useEditorStore = defineStore("editor", {
           content,
         });
 
-        this.initialContent = content;
-        this.size = content.length;
-        this.isDirty = false;
+        if (this.requestToken !== requestToken) return false;
+        this.isDirty = this.editRevision !== editRevision;
+        // 保存期间的新输入不能被旧快照覆盖，也不能被“保存后退出”一起丢弃。
+        if (!this.isDirty) this.initialContent = content;
+        this.size = new TextEncoder().encode(content).length;
         this.lastSavedAt = Date.now();
 
         // 刷新文件列表里的大小/修改时间；失败不影响保存结果
         useFileExplorerStore().refreshDirectory(session);
 
-        if (options.closeAfter) {
+        if (options.closeAfter && !this.isDirty) {
           this.close();
         }
+        return !this.isDirty;
       } catch (error) {
+        if (this.requestToken !== requestToken) return false;
         this.saveError = error;
         useSessionStore().handleConnectionOperationError(this.sessionId, error);
+        return false;
       } finally {
         this.isSaving = false;
       }
     },
     markDirty() {
+      this.editRevision += 1;
       if (!this.isDirty) this.isDirty = true;
       if (this.saveError) this.saveError = null;
     },

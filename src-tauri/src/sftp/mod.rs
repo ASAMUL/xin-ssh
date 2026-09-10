@@ -1,5 +1,7 @@
+pub(crate) mod delete;
 pub(crate) mod ops;
 pub(crate) mod path;
+pub(crate) mod session;
 pub(crate) mod transfer;
 
 use std::sync::Arc;
@@ -57,19 +59,6 @@ pub(crate) async fn open_raw_sftp_session(
     raw.init().await.map_err(connection_error)?;
 
     Ok(raw)
-}
-
-pub(crate) async fn ensure_sftp_session<'a>(
-    cached: &'a mut Option<SftpSession>,
-    session: &Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
-) -> Result<&'a SftpSession, AppError> {
-    Ok(match cached {
-        Some(sftp) => sftp,
-        None => {
-            let sftp = open_sftp_session(Arc::clone(session)).await?;
-            cached.insert(sftp)
-        }
-    })
 }
 
 pub(crate) fn remote_file_entry(parent_path: &str, file: &File) -> RemoteFileEntry {

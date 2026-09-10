@@ -80,6 +80,9 @@ pub mod codes {
     pub const FILE_TOO_LARGE: &str = "file.tooLarge";
     pub const FILE_BINARY: &str = "file.binary";
     pub const FILE_NOT_UTF8: &str = "file.notUtf8";
+    pub const FILE_OPERATION_CANCELED: &str = "fileOperation.canceled";
+    pub const FILE_OPERATION_DUPLICATE: &str = "fileOperation.duplicate";
+    pub const REMOTE_OPERATION_TIMED_OUT: &str = "remote.operationTimedOut";
 
     pub const DIRECTORY_LISTING_CANCELED: &str = "directory.listingCanceled";
 

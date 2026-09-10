@@ -7,12 +7,19 @@ export const useUiStore = defineStore("ui", {
     editingProfileId: null,
     isSettingsOpen: false,
     isTunnelPanelOpen: false,
+    isWindowCloseOpen: false,
     error: null,
     // 首页导航：home | all | favorites | recents；groupFilter 为分组 id 或 null
     homeNav: "home",
     homeGroupFilter: null,
   }),
   actions: {
+    requestWindowClose() {
+      this.isWindowCloseOpen = true;
+    },
+    cancelWindowClose() {
+      this.isWindowCloseOpen = false;
+    },
     setHomeNav(nav) {
       this.homeNav = nav;
       this.homeGroupFilter = null;

@@ -5,10 +5,12 @@ import { useToast } from "@nuxt/ui/composables";
 import { en, zh_cn } from "@nuxt/ui/locale";
 import TransferPanel from "./components/TransferPanel.vue";
 import WindowChrome from "./components/AppShell/WindowChrome.vue";
+import WindowCloseGuard from "./components/AppShell/WindowCloseGuard.vue";
 import WorkspaceShell from "./components/AppShell/WorkspaceShell.vue";
 import { revealTaskInFolder } from "./services/localOpener";
 import { useAppStore } from "./stores/appStore";
 import { useFileExplorerStore } from "./stores/fileExplorerStore";
+import { useFileOperationStore } from "./stores/fileOperationStore";
 import { useSessionStore } from "./stores/sessionStore";
 import { useTransferStore } from "./stores/transferStore";
 import { useTunnelStore } from "./stores/tunnelStore";
@@ -20,6 +22,7 @@ const { t, locale } = useI18n();
 const toast = useToast();
 const appStore = useAppStore();
 const fileExplorerStore = useFileExplorerStore();
+const fileOperationStore = useFileOperationStore();
 const sessionStore = useSessionStore();
 const transferStore = useTransferStore();
 const tunnelStore = useTunnelStore();
@@ -139,6 +142,7 @@ onMounted(() => {
   sessionStore.startListening();
   transferStore.startListening();
   fileExplorerStore.startListening();
+  fileOperationStore.startListening().catch((error) => uiStore.setError(error));
   tunnelStore.startListening();
 });
 </script>
@@ -161,5 +165,6 @@ onMounted(() => {
         <TransferPanel v-if="transferStore.panelOpen" />
       </section>
     </main>
+    <WindowCloseGuard />
   </UApp>
 </template>

@@ -1,19 +1,20 @@
 use std::sync::Arc;
 
 use russh::{ChannelMsg, Disconnect};
-use russh_sftp::client::SftpSession;
 use tauri::{AppHandle, Emitter, State};
-use tokio::sync::{mpsc, Mutex as AsyncMutex};
+use tokio::sync::{mpsc, Mutex as AsyncMutex, Semaphore};
 use tokio::time::{Duration, Instant};
+use tokio_util::sync::CancellationToken;
 
 use crate::error::{connection_error, required, AppError};
 use crate::models::{
     AuthMethod, TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest,
     TerminalStartRequest,
 };
-use crate::sftp::ensure_sftp_session;
+use crate::sftp::delete::run_delete_task;
+use crate::sftp::session::CachedSftp;
 use crate::sftp::ops::{
-    create_directory_on_session, create_file_on_session, delete_paths_on_session,
+    create_directory_on_session, create_file_on_session,
     list_directory_on_session, read_file_text_on_session, rename_path_on_session,
     stream_directory_on_session, write_file_text_on_session,
 };
@@ -43,7 +44,8 @@ pub async fn start_terminal_session(
 
     let session_id = request.session_id.clone();
     let (control_sender, control_receiver) = mpsc::unbounded_channel();
-    registry.replace(session_id.clone(), control_sender)?;
+    let cancellation = CancellationToken::new();
+    registry.replace(session_id.clone(), control_sender, cancellation.clone())?;
     let registry_handle = registry.inner().clone();
 
     let attempt_id = request.attempt_id.clone();
@@ -60,7 +62,7 @@ pub async fn start_terminal_session(
 
     tauri::async_runtime::spawn(async move {
         if let Err(error) =
-            run_terminal_shell(app.clone(), request, control_receiver, registry_handle).await
+            run_terminal_shell(app.clone(), request, control_receiver, registry_handle, cancellation).await
         {
             emit_terminal_event(
                 &app,
@@ -115,7 +117,10 @@ async fn run_terminal_shell(
     request: TerminalStartRequest,
     mut control_receiver: mpsc::UnboundedReceiver<TerminalControl>,
     registry: TerminalRegistry,
+    cancellation: CancellationToken,
 ) -> Result<(), AppError> {
+    // 包括握手失败和事件循环提前返回在内，任何退出都必须停止所属文件操作。
+    let _cancel_on_exit = cancellation.clone().drop_guard();
     let session_id = request.session_id.clone();
     let attempt_id = request.attempt_id.clone();
     let mut close_reason = TERMINAL_CLOSE_REASON_REMOTE;
@@ -181,9 +186,9 @@ async fn run_terminal_shell(
             .map_err(connection_error)?;
     }
 
-    // 复用同一个 SFTP 子通道处理目录小操作，出错时丢弃下次重建；
-    // 操作在独立任务里执行（共享缓存加锁），慢操作（如递归删除）不会阻塞终端事件循环
-    let cached_sftp: Arc<AsyncMutex<Option<SftpSession>>> = Arc::new(AsyncMutex::new(None));
+    let cached_sftp = CachedSftp::new(Arc::clone(&session), cancellation.clone());
+    // 删除独占子通道，并单独限流，不能让大目录删除占满普通操作的并发名额。
+    let delete_permits = Arc::new(Semaphore::new(2));
     let mut output_buffer: Vec<u8> = Vec::new();
     let mut flush_deadline: Option<Instant> = None;
 
@@ -197,6 +202,11 @@ async fn run_terminal_shell(
         };
 
         tokio::select! {
+            _ = cancellation.cancelled() => {
+                close_reason = TERMINAL_CLOSE_REASON_CLIENT;
+                let _ = channel.close().await;
+                break;
+            }
             Some(control) = control_receiver.recv() => {
                 match control {
                     TerminalControl::Input(data) => {
@@ -246,63 +256,23 @@ async fn run_terminal_shell(
                         });
                     }
                     TerminalControl::CreateDirectory { path, responder } => {
-                        let session = Arc::clone(&session);
-                        let cached_sftp = Arc::clone(&cached_sftp);
-                        tauri::async_runtime::spawn(async move {
-                            let mut cached = cached_sftp.lock().await;
-                            let result = match ensure_sftp_session(&mut cached, &session).await {
-                                Ok(sftp) => create_directory_on_session(sftp, &path).await,
-                                Err(error) => Err(error),
-                            };
-                            if result.is_err() {
-                                *cached = None;
-                            }
-                            let _ = responder.send(result);
+                        cached_sftp.spawn(responder, true, |sftp| async move {
+                            create_directory_on_session(&sftp, &path).await
                         });
                     }
                     TerminalControl::CreateFile { path, responder } => {
-                        let session = Arc::clone(&session);
-                        let cached_sftp = Arc::clone(&cached_sftp);
-                        tauri::async_runtime::spawn(async move {
-                            let mut cached = cached_sftp.lock().await;
-                            let result = match ensure_sftp_session(&mut cached, &session).await {
-                                Ok(sftp) => create_file_on_session(sftp, &path).await,
-                                Err(error) => Err(error),
-                            };
-                            if result.is_err() {
-                                *cached = None;
-                            }
-                            let _ = responder.send(result);
+                        cached_sftp.spawn(responder, true, |sftp| async move {
+                            create_file_on_session(&sftp, &path).await
                         });
                     }
                     TerminalControl::ListDirectory { path, responder } => {
-                        let session = Arc::clone(&session);
-                        let cached_sftp = Arc::clone(&cached_sftp);
-                        tauri::async_runtime::spawn(async move {
-                            let mut cached = cached_sftp.lock().await;
-                            let result = match ensure_sftp_session(&mut cached, &session).await {
-                                Ok(sftp) => list_directory_on_session(sftp, &path).await,
-                                Err(error) => Err(error),
-                            };
-                            if result.is_err() {
-                                *cached = None;
-                            }
-                            let _ = responder.send(result);
+                        cached_sftp.spawn(responder, false, |sftp| async move {
+                            list_directory_on_session(&sftp, &path).await
                         });
                     }
                     TerminalControl::ReadFileText { path, responder } => {
-                        let session = Arc::clone(&session);
-                        let cached_sftp = Arc::clone(&cached_sftp);
-                        tauri::async_runtime::spawn(async move {
-                            let mut cached = cached_sftp.lock().await;
-                            let result = match ensure_sftp_session(&mut cached, &session).await {
-                                Ok(sftp) => read_file_text_on_session(sftp, &path).await,
-                                Err(error) => Err(error),
-                            };
-                            if result.is_err() {
-                                *cached = None;
-                            }
-                            let _ = responder.send(result);
+                        cached_sftp.spawn(responder, false, |sftp| async move {
+                            read_file_text_on_session(&sftp, &path).await
                         });
                     }
                     TerminalControl::WriteFileText {
@@ -310,18 +280,8 @@ async fn run_terminal_shell(
                         content,
                         responder,
                     } => {
-                        let session = Arc::clone(&session);
-                        let cached_sftp = Arc::clone(&cached_sftp);
-                        tauri::async_runtime::spawn(async move {
-                            let mut cached = cached_sftp.lock().await;
-                            let result = match ensure_sftp_session(&mut cached, &session).await {
-                                Ok(sftp) => write_file_text_on_session(sftp, &path, &content).await,
-                                Err(error) => Err(error),
-                            };
-                            if result.is_err() {
-                                *cached = None;
-                            }
-                            let _ = responder.send(result);
+                        cached_sftp.spawn(responder, true, |sftp| async move {
+                            write_file_text_on_session(&sftp, &path, &content).await
                         });
                     }
                     TerminalControl::RenamePath {
@@ -329,37 +289,25 @@ async fn run_terminal_shell(
                         to_path,
                         responder,
                     } => {
-                        let session = Arc::clone(&session);
-                        let cached_sftp = Arc::clone(&cached_sftp);
-                        tauri::async_runtime::spawn(async move {
-                            let mut cached = cached_sftp.lock().await;
-                            let result = match ensure_sftp_session(&mut cached, &session).await {
-                                Ok(sftp) => rename_path_on_session(sftp, &from_path, &to_path).await,
-                                Err(error) => Err(error),
-                            };
-                            if result.is_err() {
-                                *cached = None;
-                            }
-                            let _ = responder.send(result);
+                        cached_sftp.spawn(responder, true, |sftp| async move {
+                            rename_path_on_session(&sftp, &from_path, &to_path).await
                         });
                     }
                     TerminalControl::DeletePaths {
-                        entries,
-                        recursive,
+                        request,
+                        cancellation,
                         responder,
                     } => {
+                        let app = app.clone();
                         let session = Arc::clone(&session);
-                        let cached_sftp = Arc::clone(&cached_sftp);
+                        let permits = Arc::clone(&delete_permits);
+                        let registry = registry.clone();
+                        let task_id = request.task_id.clone();
                         tauri::async_runtime::spawn(async move {
-                            let mut cached = cached_sftp.lock().await;
-                            let result = match ensure_sftp_session(&mut cached, &session).await {
-                                Ok(sftp) => delete_paths_on_session(sftp, &entries, recursive).await,
-                                Err(error) => Err(error),
-                            };
-                            if result.is_err() {
-                                *cached = None;
+                            if responder.send(Ok(())).is_ok() {
+                                run_delete_task(app, session, request, cancellation, permits).await;
                             }
-                            let _ = responder.send(result);
+                            registry.finish_delete(&task_id);
                         });
                     }
                     TerminalControl::StartUpload {
@@ -455,9 +403,7 @@ async fn run_terminal_shell(
         );
     }
 
-    if let Some(sftp) = cached_sftp.try_lock().ok().and_then(|mut cached| cached.take()) {
-        let _ = sftp.close().await;
-    }
+    cached_sftp.close().await;
 
     let _ = session
         .lock()

@@ -7,18 +7,29 @@ use std::{
 };
 
 use tokio::sync::{mpsc, oneshot};
+use tokio::time::{timeout, Duration};
+use tokio_util::sync::CancellationToken;
 
-use crate::error::{lock_poisoned, not_accepting, request_canceled, session_not_running, AppError};
+use crate::error::{
+    codes, lock_poisoned, not_accepting, request_canceled, session_not_running,
+    timeout as timeout_error, AppError,
+};
 use crate::models::{
-    RemoteDownloadRequest, RemoteFileContent, RemoteFileEntry, RemoteSystemSnapshot,
-    RemoteTransferEntry, RemoteUploadRequest,
+    RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent, RemoteFileEntry,
+    RemoteSystemSnapshot, RemoteUploadRequest,
 };
 
 #[derive(Clone, Default)]
 pub struct TerminalRegistry {
-    sessions: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<TerminalControl>>>>,
+    sessions: Arc<Mutex<HashMap<String, TerminalHandle>>>,
     pub(crate) transfer_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     directory_streams: Arc<Mutex<HashMap<String, (String, Arc<AtomicBool>)>>>,
+    delete_cancellations: Arc<Mutex<HashMap<String, CancellationToken>>>,
+}
+
+struct TerminalHandle {
+    sender: mpsc::UnboundedSender<TerminalControl>,
+    cancellation: CancellationToken,
 }
 
 pub(crate) enum TerminalControl {
@@ -62,8 +73,8 @@ pub(crate) enum TerminalControl {
         responder: oneshot::Sender<Result<(), AppError>>,
     },
     DeletePaths {
-        entries: Vec<RemoteTransferEntry>,
-        recursive: bool,
+        request: RemoteDeleteRequest,
+        cancellation: CancellationToken,
         responder: oneshot::Sender<Result<(), AppError>>,
     },
     StartUpload {
@@ -82,12 +93,14 @@ impl TerminalRegistry {
         &self,
         session_id: String,
         sender: mpsc::UnboundedSender<TerminalControl>,
+        cancellation: CancellationToken,
     ) -> Result<(), AppError> {
         self.cancel_directory_stream(&session_id);
 
         let mut sessions = self.sessions.lock().map_err(|_| lock_poisoned())?;
-        if let Some(existing) = sessions.insert(session_id, sender) {
-            let _ = existing.send(TerminalControl::Close);
+        if let Some(existing) = sessions.insert(session_id, TerminalHandle { sender, cancellation }) {
+            existing.cancellation.cancel();
+            let _ = existing.sender.send(TerminalControl::Close);
         }
 
         Ok(())
@@ -97,7 +110,7 @@ impl TerminalRegistry {
         let sessions = self.sessions.lock().map_err(|_| lock_poisoned())?;
         let sender = sessions.get(session_id).ok_or_else(session_not_running)?;
 
-        sender.send(control).map_err(|_| not_accepting("input"))
+        sender.sender.send(control).map_err(|_| not_accepting("input"))
     }
 
     pub(crate) fn close(&self, session_id: &str) -> Result<(), AppError> {
@@ -110,7 +123,8 @@ impl TerminalRegistry {
             .remove(session_id);
 
         if let Some(sender) = sender {
-            let _ = sender.send(TerminalControl::Close);
+            sender.cancellation.cancel();
+            let _ = sender.sender.send(TerminalControl::Close);
         }
 
         Ok(())
@@ -125,7 +139,7 @@ impl TerminalRegistry {
             .lock()
             .map_err(|_| lock_poisoned())?
             .get(session_id)
-            .cloned()
+            .map(|handle| handle.sender.clone())
             .ok_or_else(session_not_running)
     }
 
@@ -306,24 +320,71 @@ impl TerminalRegistry {
         receiver.await.map_err(|_| request_canceled("rename"))?
     }
 
-    pub(crate) async fn delete_paths(
-        &self,
-        session_id: &str,
-        entries: Vec<RemoteTransferEntry>,
-        recursive: bool,
-    ) -> Result<(), AppError> {
-        let sender = self.sender_for(session_id)?;
+    // 先登记任务再投递，取消、关会话和重连都能覆盖尚未启动的删除。
+    pub(crate) async fn start_delete(&self, request: RemoteDeleteRequest) -> Result<(), AppError> {
+        let (sender, cancellation) = {
+            let sessions = self.sessions.lock().map_err(|_| lock_poisoned())?;
+            let handle = sessions
+                .get(&request.session_id)
+                .ok_or_else(session_not_running)?;
+            (handle.sender.clone(), handle.cancellation.child_token())
+        };
+        let task_id = request.task_id.clone();
+        {
+            let mut tasks = self
+                .delete_cancellations
+                .lock()
+                .map_err(|_| lock_poisoned())?;
+            if tasks.contains_key(&task_id) {
+                return Err(AppError::new(
+                    codes::FILE_OPERATION_DUPLICATE,
+                    "File operation is already running",
+                ));
+            }
+            tasks.insert(task_id.clone(), cancellation.clone());
+        }
         let (responder, receiver) = oneshot::channel();
+        let result = async {
+            sender
+                .send(TerminalControl::DeletePaths {
+                    request,
+                    cancellation: cancellation.clone(),
+                    responder,
+                })
+                .map_err(|_| not_accepting("file"))?;
+            // 这里只限制任务接收确认，不限制删除总时长；超时后接收端消失，任务不得启动。
+            tokio::select! {
+                biased;
+                _ = cancellation.cancelled() => Err(AppError::new(
+                    codes::FILE_OPERATION_CANCELED,
+                    "File operation was canceled",
+                )),
+                received = timeout(Duration::from_secs(12), receiver) => {
+                    received.map_err(|_| timeout_error("delete", 12))?
+                        .map_err(|_| request_canceled("delete"))?
+                }
+            }
+        }
+        .await;
+        if result.is_err() {
+            cancellation.cancel();
+            self.finish_delete(&task_id);
+        }
+        result
+    }
 
-        sender
-            .send(TerminalControl::DeletePaths {
-                entries,
-                recursive,
-                responder,
-            })
-            .map_err(|_| not_accepting("file"))?;
+    pub(crate) fn cancel_delete(&self, task_id: &str) -> Result<(), AppError> {
+        let tasks = self.delete_cancellations.lock().map_err(|_| lock_poisoned())?;
+        if let Some(cancellation) = tasks.get(task_id) {
+            cancellation.cancel();
+        }
+        Ok(())
+    }
 
-        receiver.await.map_err(|_| request_canceled("delete"))?
+    pub(crate) fn finish_delete(&self, task_id: &str) {
+        if let Ok(mut tasks) = self.delete_cancellations.lock() {
+            tasks.remove(task_id);
+        }
     }
 
     pub(crate) fn start_upload(&self, request: RemoteUploadRequest) -> Result<(), AppError> {

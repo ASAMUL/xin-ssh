@@ -6,6 +6,7 @@ import { useVirtualizer } from "@tanstack/vue-virtual";
 import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
+import { useFileOperationStore } from "../stores/fileOperationStore";
 import { useEditorStore } from "../stores/editorStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useTransferStore } from "../stores/transferStore";
@@ -23,6 +24,7 @@ const props = defineProps({
 
 const { t, locale } = useI18n();
 const fileExplorerStore = useFileExplorerStore();
+const fileOperationStore = useFileOperationStore();
 const editorStore = useEditorStore();
 const settingsStore = useSettingsStore();
 const transferStore = useTransferStore();
@@ -52,6 +54,7 @@ const deleteDialog = reactive({
   error: "",
   isSubmitting: false,
 });
+let showOperationsAfterDelete = false;
 const conflictDialog = reactive({
   open: false,
   taskId: null,
@@ -819,11 +822,12 @@ async function submitDeleteDialog() {
   deleteDialog.error = "";
 
   try {
-    await fileExplorerStore.deleteEntries(
+    await fileOperationStore.startDelete(
       props.activeSession,
       deleteDialog.entries,
       deleteDialog.recursive,
     );
+    showOperationsAfterDelete = true;
     deleteDialog.open = false;
     deleteDialog.entries = [];
     deleteDialog.recursive = false;
@@ -833,6 +837,13 @@ async function submitDeleteDialog() {
   } finally {
     deleteDialog.isSubmitting = false;
   }
+}
+
+function handleDeleteDialogLeave() {
+  if (!showOperationsAfterDelete) return;
+  showOperationsAfterDelete = false;
+  // 退场动画完成后焦点锁才释放，DOM 更新完成并不代表浮层已经退出。
+  fileOperationStore.panelOpen = true;
 }
 
 function openTransferConflictDialog(task) {
@@ -929,6 +940,7 @@ async function copyContextPath() {
 }
 
 function handleWindowKeydown(event) {
+  if (uiStore.isWindowCloseOpen || event.defaultPrevented) return;
   if (event.key === "Escape") {
     if (nameDialog.open) closeNameDialog();
     else if (deleteDialog.open) closeDeleteDialog();
@@ -1412,6 +1424,9 @@ function fileTypeLabel(entry) {
       v-model:open="deleteDialog.open"
       :title="deleteDialogTitle"
       :description="t('files.deleteDescription')"
+      @after:leave="handleDeleteDialogLeave"
+      :dismissible="!deleteDialog.isSubmitting"
+      :close="!deleteDialog.isSubmitting"
       :ui="{ footer: 'justify-end' }"
     >
       <template #body>
@@ -1423,6 +1438,7 @@ function fileTypeLabel(entry) {
           <UCheckbox
             v-if="deleteHasDirectory"
             v-model="deleteDialog.recursive"
+            :disabled="deleteDialog.isSubmitting"
             :label="t('files.recursiveDelete')"
             :description="t('files.recursiveDeleteDescription')"
           />
@@ -1436,7 +1452,7 @@ function fileTypeLabel(entry) {
         </div>
       </template>
       <template #footer>
-        <UButton color="neutral" variant="outline" :label="t('common.cancel')" @click="closeDeleteDialog" />
+        <UButton color="neutral" variant="outline" :label="t('common.cancel')" :disabled="deleteDialog.isSubmitting" @click="closeDeleteDialog" />
         <UButton
           color="error"
           icon="i-lucide-trash-2"

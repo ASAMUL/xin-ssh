@@ -10,6 +10,20 @@ export const messages = {
       minimize: "最小化",
       maximize: "最大化",
       close: "关闭",
+      exit: {
+        title: "退出 Xin Terminal？",
+        description: "退出将关闭当前窗口及其远程连接。",
+        unsavedFile: "文件有未保存的修改",
+        saving: "正在保存文件，请等待保存完成后再退出。",
+        transfers: "{count} 个传输任务将被中断",
+        operations: "{count} 个删除任务将被中断，已删除内容不会恢复",
+        sessions: "{count} 个连接将被关闭",
+        tunnels: "{count} 个 SSH 隧道将被关闭",
+        saveIncomplete: "文件尚未保存完成，已取消退出。",
+        discard: "放弃修改并退出",
+        confirm: "退出",
+        save: "保存并退出",
+      },
     },
     common: {
       cancel: "取消",
@@ -381,6 +395,22 @@ export const messages = {
         other: "其他",
       },
     },
+    fileOperations: {
+      title: "文件操作",
+      clearFinished: "清空已结束记录",
+      remove: "移除记录",
+      items: "删除 {count} 个选中项",
+      deletedCount: "已确认删除 {count} 个文件或目录",
+      cancelHint: "取消后已删除内容不会恢复，已发送的远端请求仍可能完成。",
+      status: {
+        queued: "排队中",
+        running: "正在删除",
+        canceling: "正在取消",
+        completed: "已完成",
+        canceled: "已取消",
+        failed: "删除失败",
+      },
+    },
     transfers: {
       title: "文件传输",
       summary: "{count} 条记录",
@@ -549,6 +579,7 @@ export const messages = {
         "remote.notDirectory": "远程路径不是目录：{path}",
         "remote.notRegularFile": "目标不是常规文件（可能是设备或管道），无法编辑：{path}",
         "remote.rootForbidden": "根目录不允许{operation}",
+        "remote.operationTimedOut": "{operation}超时（{seconds} 秒），已停止后续操作。远端可能已执行部分请求，请刷新确认后再重试。",
         "remote.uniqueNameFailed": "无法为 {path} 生成不重名的远程名称",
         "remote.commandFailed": "远程命令执行失败",
 
@@ -564,6 +595,8 @@ export const messages = {
         "file.tooLarge": "文件超过 {limitMb} MB，内置编辑器暂不支持，请下载后在本地编辑",
         "file.binary": "这是二进制文件，内置编辑器无法按文本打开",
         "file.notUtf8": "这不是 UTF-8 文本文件，内置编辑器无法打开",
+        "fileOperation.canceled": "文件操作已取消",
+        "fileOperation.duplicate": "该文件操作正在执行，请勿重复提交",
 
         "directory.listingCanceled": "目录加载已取消",
 
@@ -642,6 +675,20 @@ export const messages = {
       minimize: "Minimize",
       maximize: "Maximize",
       close: "Close",
+      exit: {
+        title: "Quit Xin Terminal?",
+        description: "Quitting closes this window and its remote connections.",
+        unsavedFile: "This file has unsaved changes",
+        saving: "A file is being saved. Wait for it to finish before quitting.",
+        transfers: "Transfers to interrupt: {count}",
+        operations: "Deletion tasks to interrupt: {count}. Deleted items will not be restored.",
+        sessions: "Connections to close: {count}",
+        tunnels: "SSH tunnels to close: {count}",
+        saveIncomplete: "The file was not fully saved. The window will stay open.",
+        discard: "Discard and quit",
+        confirm: "Quit",
+        save: "Save and quit",
+      },
     },
     common: {
       cancel: "Cancel",
@@ -1014,6 +1061,22 @@ export const messages = {
         other: "Other",
       },
     },
+    fileOperations: {
+      title: "File operations",
+      clearFinished: "Clear finished records",
+      remove: "Remove record",
+      items: "Delete {count} selected items",
+      deletedCount: "Confirmed deletions: {count} files or directories",
+      cancelHint: "Cancellation does not restore deleted items. Requests already sent may still complete.",
+      status: {
+        queued: "Queued",
+        running: "Deleting",
+        canceling: "Canceling",
+        completed: "Completed",
+        canceled: "Canceled",
+        failed: "Deletion failed",
+      },
+    },
     transfers: {
       title: "File transfers",
       summary: "{count} records",
@@ -1183,6 +1246,7 @@ export const messages = {
         "remote.notRegularFile":
           "The target is not a regular file (device or pipe) and cannot be edited: {path}",
         "remote.rootForbidden": "{operation} is not allowed on the root path",
+        "remote.operationTimedOut": "{operation} timed out after {seconds} seconds. No further operations will be sent. Some requests may have completed remotely; refresh before retrying.",
         "remote.uniqueNameFailed": "Could not find an unused remote name for {path}",
         "remote.commandFailed": "The remote command failed",
 
@@ -1198,6 +1262,8 @@ export const messages = {
         "file.tooLarge": "This file is larger than {limitMb} MB. Download it to edit locally.",
         "file.binary": "This is a binary file and cannot be opened as text",
         "file.notUtf8": "This is not a UTF-8 text file, so the built-in editor cannot open it",
+        "fileOperation.canceled": "File operation canceled",
+        "fileOperation.duplicate": "This file operation is already running",
 
         "directory.listingCanceled": "Directory listing canceled",
 

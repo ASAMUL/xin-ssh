@@ -494,9 +494,21 @@ pub struct RemoteRenameRequest {
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteDeleteRequest {
+    pub task_id: String,
     pub session_id: String,
     pub entries: Vec<RemoteTransferEntry>,
     pub recursive: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileOperationEventPayload {
+    pub task_id: String,
+    pub session_id: String,
+    pub kind: String,
+    pub current_path: Option<String>,
+    pub completed_entries: u64,
+    pub error: Option<AppError>,
 }
 
 #[derive(Clone, Serialize)]
