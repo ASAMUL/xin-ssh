@@ -30,6 +30,7 @@ import { useCredentialStore } from "./credentialStore";
 import { useProfileStore } from "./profileStore";
 import { useSettingsStore } from "./settingsStore";
 import { useUiStore } from "./uiStore";
+import { useFileExplorerStore } from "./fileExplorerStore";
 
 const TERMINAL_EVENT_NAME = "terminal-event";
 const INITIAL_TERMINAL_COLUMNS = 120;
@@ -181,6 +182,7 @@ export const useSessionStore = defineStore("sessions", {
           clearSessionCredentials(sessionId);
           clearTerminalBuffer(sessionId);
           terminalSinks.delete(sessionId);
+          useFileExplorerStore().removeSessionState(sessionId);
           if (closingIndex < 0) return;
           this.sessions.splice(closingIndex, 1);
           if (this.activeSessionId === sessionId) {
@@ -248,6 +250,7 @@ export const useSessionStore = defineStore("sessions", {
       session.error = null;
       session.hostKeyChange = null;
       session.currentAttemptId = attemptId;
+      useFileExplorerStore().invalidateSessionState(sessionId, attemptId);
       session.connectedAt = null;
       session.lastDisconnectReason = null;
       session.systemInfo = null;

@@ -390,7 +390,7 @@ const emptyState = computed(() => {
 });
 
 // 工作区保活后弹窗仍会传送到 body，切换目标时收起，避免在另一台主机上误提交。
-watch(() => props.activeSession?.id, () => {
+watch(() => [props.activeSession?.id, props.activeSession?.currentAttemptId], () => {
   nameDialog.open = false;
   deleteDialog.open = false;
   conflictDialog.open = false;
@@ -400,12 +400,13 @@ watch(() => props.activeSession?.id, () => {
 });
 
 watch(
-  () => [props.activeSession?.id, props.activeSession?.status],
+  () => [props.activeSession?.id, props.activeSession?.currentAttemptId, props.activeSession?.status],
   () => {
     const session = props.activeSession;
     if (!session) return;
 
     const state = fileExplorerStore.ensureSessionState(session);
+    if (!state) return;
     pathInput.value = state.currentPath;
 
     if (session.status === "connected" && !state.hasLoaded && !state.isLoading) {

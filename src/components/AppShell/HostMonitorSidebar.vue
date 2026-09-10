@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useSessionStore } from "../../stores/sessionStore";
+import { useSystemInfoPolling } from "../../composables/useSystemInfoPolling";
 
 const PROCESS_ROW_LIMIT = 5;
 const SPARKLINE_WIDTH = 72;
@@ -12,7 +13,7 @@ const SPARKLINE_PADDING = 3;
 const { t } = useI18n();
 const sessionStore = useSessionStore();
 const settingsStore = useSettingsStore();
-let refreshTimer = null;
+const { refresh: refreshCurrentSystemInfo } = useSystemInfoPolling(sessionStore, settingsStore);
 
 const cardUi = {
   root: "monitor-card-root",
@@ -268,47 +269,9 @@ const loadAverageLabel = computed(() => {
 });
 
 // 首页只隐藏工作区，传送到 body 的详情弹窗需随会话目标变化主动收起。
-watch(() => activeSession.value?.id, () => {
+watch(() => [activeSession.value?.id, activeSession.value?.currentAttemptId], () => {
   isSystemInfoDetailsOpen.value = false;
 });
-
-watch(
-  () => [
-    activeSession.value?.id,
-    activeSession.value?.status,
-    settingsStore.monitorRefreshSeconds,
-  ],
-  () => restartRefreshLoop(),
-  { immediate: true },
-);
-
-onBeforeUnmount(() => {
-  stopRefreshLoop();
-});
-
-function restartRefreshLoop() {
-  stopRefreshLoop();
-  if (!isConnected.value) return;
-
-  refreshCurrentSystemInfo();
-  refreshTimer = window.setInterval(
-    () => refreshCurrentSystemInfo(),
-    Math.max(settingsStore.monitorRefreshSeconds, 2) * 1000,
-  );
-}
-
-function stopRefreshLoop() {
-  if (!refreshTimer) return;
-
-  window.clearInterval(refreshTimer);
-  refreshTimer = null;
-}
-
-function refreshCurrentSystemInfo() {
-  if (!activeSession.value || !isConnected.value) return;
-
-  sessionStore.refreshSystemInfo(activeSession.value.id);
-}
 
 function openSystemInfoDetails() {
   isSystemInfoDetailsOpen.value = true;

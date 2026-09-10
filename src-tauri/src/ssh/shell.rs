@@ -23,7 +23,7 @@ use crate::sftp::transfer::{
 };
 use crate::ssh::client::{authenticate_session, connect_with_tofu, disconnect_session};
 use crate::ssh::registry::{TerminalControl, TerminalRegistry};
-use crate::system_info::collect_system_info_on_session;
+use crate::system_info::{collect_system_info_on_session, SystemInfoSampler};
 use crate::util::shell_quote;
 
 const TERMINAL_EVENT: &str = "terminal-event";
@@ -193,6 +193,7 @@ async fn run_terminal_shell(
     let cached_sftp = CachedSftp::new(Arc::clone(&session), cancellation.clone());
     // 删除独占子通道，并单独限流，不能让大目录删除占满普通操作的并发名额。
     let delete_permits = Arc::new(Semaphore::new(2));
+    let system_info_sampler = Arc::new(AsyncMutex::new(SystemInfoSampler::default()));
     let mut output_buffer: Vec<u8> = Vec::new();
     let mut flush_deadline: Option<Instant> = None;
 
@@ -247,15 +248,22 @@ async fn run_terminal_shell(
                             registry.finish_directory_stream(&session_id, &request_id);
                         });
                     }
-                    TerminalControl::GetSystemInfo { responder } => {
+                    TerminalControl::GetSystemInfo { mut responder } => {
                         let session = Arc::clone(&session);
                         let session_id = session_id.clone();
+                        let sampler = Arc::clone(&system_info_sampler);
+                        let cancellation = cancellation.clone();
                         tauri::async_runtime::spawn(async move {
-                            let result = collect_system_info_on_session(
-                                &session_id,
-                                session,
-                            )
-                            .await;
+                            // 同一连接串行采样，接收方超时或关闭连接后不再排队执行远端命令。
+                            let result = tokio::select! {
+                                biased;
+                                _ = cancellation.cancelled() => return,
+                                _ = responder.closed() => return,
+                                result = async {
+                                    let mut sampler = sampler.lock().await;
+                                    collect_system_info_on_session(&session_id, session, &mut sampler).await
+                                } => result,
+                            };
                             let _ = responder.send(result);
                         });
                     }

@@ -44,13 +44,35 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       }
     },
     ensureSessionState(session) {
-      if (!session) return EMPTY_FILE_STATE;
+      const current = useSessionStore().findSession(session?.id);
+      if (!current || current.isClosing || session.currentAttemptId !== current.currentAttemptId) return null;
 
       if (!this.sessionStates[session.id]) {
-        this.sessionStates[session.id] = createFileState(session.remotePath || DEFAULT_REMOTE_PATH);
+        this.sessionStates[session.id] = createFileState(session.remotePath || DEFAULT_REMOTE_PATH, current.currentAttemptId);
+      } else if (this.sessionStates[session.id].attemptId !== current.currentAttemptId) {
+        this.invalidateSessionState(session.id, current.currentAttemptId);
       }
 
       return this.sessionStates[session.id];
+    },
+    // 重连保留浏览位置和历史，但远端内容必须重新读取，旧请求持有的状态对象随之失效。
+    invalidateSessionState(sessionId, attemptId) {
+      const state = this.sessionStates[sessionId];
+      if (!state) return;
+      this.sessionStates[sessionId] = {
+        ...createFileState(state.currentPath, attemptId),
+        query: state.query,
+        history: [...state.history],
+        historyIndex: state.historyIndex,
+      };
+    },
+    removeSessionState(sessionId) {
+      delete this.sessionStates[sessionId];
+    },
+    isCurrentState(sessionId, state) {
+      const session = useSessionStore().findSession(sessionId);
+      return Boolean(state && session && !session.isClosing && session.status === "connected"
+        && session.currentAttemptId === state.attemptId && this.sessionStates[sessionId] === state);
     },
     setQuery(sessionId, query) {
       const state = this.sessionStates[sessionId];
@@ -86,10 +108,12 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
         state.selectedPaths = [...state.selectedPaths, entryPath];
       }
     },
+    // 流式结果同时绑定请求与连接尝试，重连后旧批次不得写回或触发自动重连。
     async loadDirectory(session, path, options = {}) {
       if (!session) return;
 
       const state = this.ensureSessionState(session);
+      if (!state) return;
       if (session.status !== "connected") {
         state.entries = [];
         state.error = null;
@@ -115,8 +139,9 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
           path: targetPath,
         });
       } catch (error) {
-        if (state.requestToken !== requestId) return;
+        if (!this.isCurrentState(session.id, state) || state.requestToken !== requestId) return;
 
+        state.requestToken = null;
         state.isLoading = false;
         state.entries = [];
         state.error = localizeError(error);
@@ -126,7 +151,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
     },
     handleDirectoryEvent(event) {
       const state = this.sessionStates[event.sessionId];
-      if (!state || state.requestToken !== event.requestId) return;
+      if (!this.isCurrentState(event.sessionId, state) || state.requestToken !== event.requestId) return;
 
       if (event.kind === "started") {
         const listedPath = normalizeRemotePath(event.path);
@@ -148,6 +173,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       }
 
       if (event.kind === "completed") {
+        state.requestToken = null;
         state.entries = sortRemoteEntries([...state.entries]);
         state.isLoading = false;
         state.hasLoaded = true;
@@ -156,11 +182,13 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       }
 
       if (event.kind === "canceled") {
+        state.requestToken = null;
         state.isLoading = false;
         return;
       }
 
       if (event.kind === "failed") {
+        state.requestToken = null;
         state.entries = [];
         state.error = localizeError(event.error);
         state.isLoading = false;
@@ -170,6 +198,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
     },
     refreshDirectory(session) {
       const state = this.ensureSessionState(session);
+      if (!state) return;
       return this.loadDirectory(session, state.currentPath, { pushHistory: false });
     },
     openEntry(session, entry) {
@@ -181,6 +210,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
     },
     goToParent(session) {
       const state = this.ensureSessionState(session);
+      if (!state) return;
       const parentPath = parentRemotePath(state.currentPath);
 
       if (parentPath === state.currentPath) return;
@@ -189,62 +219,73 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
     },
     goBack(session) {
       const state = this.ensureSessionState(session);
-      if (state.historyIndex <= 0) return;
+      if (!state || state.historyIndex <= 0) return;
 
       state.historyIndex -= 1;
       return this.loadDirectory(session, state.history[state.historyIndex], { pushHistory: false });
     },
     goForward(session) {
       const state = this.ensureSessionState(session);
-      if (state.historyIndex >= state.history.length - 1) return;
+      if (!state || state.historyIndex >= state.history.length - 1) return;
 
       state.historyIndex += 1;
       return this.loadDirectory(session, state.history[state.historyIndex], { pushHistory: false });
     },
     async createDirectory(session, directoryPath) {
-      if (!session || session.status !== "connected") return;
+      const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
 
       await createRemoteDirectory({
         sessionId: session.id,
         path: directoryPath,
       });
+      if (!this.isCurrentState(session.id, state)) return;
       await this.refreshDirectory(session);
-      this.refreshTreeChildren(session, parentRemotePath(directoryPath));
+      if (this.isCurrentState(session.id, state)) {
+        this.refreshTreeChildren(session, parentRemotePath(directoryPath));
+      }
     },
     async createFile(session, filePath) {
-      if (!session || session.status !== "connected") return;
+      const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
 
       await createRemoteFile({
         sessionId: session.id,
         path: filePath,
       });
+      if (!this.isCurrentState(session.id, state)) return;
       await this.refreshDirectory(session);
     },
     async renameEntry(session, fromPath, toPath) {
-      if (!session || session.status !== "connected") return;
+      const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
 
       await renameRemotePath({
         sessionId: session.id,
         fromPath,
         toPath,
       });
+      if (!this.isCurrentState(session.id, state)) return;
       await this.refreshDirectory(session);
+      if (!this.isCurrentState(session.id, state)) return;
       this.refreshTreeChildren(session, parentRemotePath(fromPath));
       this.refreshTreeChildren(session, parentRemotePath(toPath));
     },
     async refreshAfterDeletion(session, paths) {
+      const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
       await this.refreshDirectory(session);
+      if (!this.isCurrentState(session.id, state)) return;
 
       const parentPaths = new Set(paths.map(parentRemotePath));
       for (const parentPath of parentPaths) {
         this.refreshTreeChildren(session, parentPath);
       }
     },
-    // ---- 目录树（懒加载，仅目录；与面板流式列表互不影响） ----
+    // 目录树独立加载，慢请求只更新自己发起时的缓存，避免填回重连后的新树。
     async loadTreeChildren(session, path, options = {}) {
-      if (!session || session.status !== "connected") return;
-
       const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
       const node = ensureTreeNode(state, path);
       if (node.loading || (node.loaded && !options.force)) return;
 
@@ -256,6 +297,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
           sessionId: session.id,
           path: node.path,
         });
+        if (!this.isCurrentState(session.id, state)) return;
         node.childDirs = entries
           .filter((entry) => entry.isDirectory)
           .sort((left, right) => left.name.toLowerCase().localeCompare(right.name.toLowerCase()))
@@ -271,14 +313,16 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
 
         node.loaded = true;
       } catch (error) {
+        if (!this.isCurrentState(session.id, state)) return;
         node.error = localizeError(error);
         useSessionStore().handleConnectionOperationError(session.id, error);
       } finally {
-        node.loading = false;
+        if (this.isCurrentState(session.id, state)) node.loading = false;
       }
     },
     async toggleTreeNode(session, path) {
       const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
       const node = ensureTreeNode(state, path);
 
       node.expanded = !node.expanded;
@@ -288,9 +332,8 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
     },
     // 面板路径变化时展开目录树上的祖先链，让当前目录在树里可见
     async revealTreePath(session, targetPath) {
-      if (!session || session.status !== "connected") return;
-
       const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
       const path = normalizeRemotePath(targetPath);
       const ancestorPaths = ["/"];
       const segments = path === "/" ? [] : path.slice(1).split("/");
@@ -302,6 +345,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       }
 
       for (const ancestorPath of ancestorPaths) {
+        if (!this.isCurrentState(session.id, state)) return;
         const node = ensureTreeNode(state, ancestorPath);
         node.expanded = true;
         if (!node.loaded) {
@@ -311,7 +355,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
     },
     refreshTreeChildren(session, parentPath) {
       const state = this.sessionStates[session?.id];
-      if (!state) return;
+      if (!this.isCurrentState(session?.id, state)) return;
 
       const node = state.treeNodes[normalizeRemotePath(parentPath)];
       if (!node?.loaded) return;
@@ -321,9 +365,10 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
   },
 });
 
-function createFileState(path) {
+function createFileState(path, attemptId = null) {
   const currentPath = normalizeRemotePath(path);
   const state = {
+    attemptId,
     entries: [],
     currentPath,
     requestedPath: currentPath,

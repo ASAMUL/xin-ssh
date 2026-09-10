@@ -42,9 +42,16 @@ struct RemoteCommandOutput {
     exit_status: Option<u32>,
 }
 
+// 采样基线属于本次 SSH 连接，重连后不能拿上一台机器或上一次启动的累计值做差。
+#[derive(Default)]
+pub(crate) struct SystemInfoSampler {
+    previous_cpu: Option<(u64, u64)>,
+}
+
 pub(crate) async fn collect_system_info_on_session(
     session_id: &str,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+    sampler: &mut SystemInfoSampler,
 ) -> Result<RemoteSystemSnapshot, AppError> {
     let output = timeout(
         Duration::from_secs(SYSTEM_INFO_COMMAND_TIMEOUT_SECONDS),
@@ -72,7 +79,7 @@ pub(crate) async fn collect_system_info_on_session(
         .with("detail", detail));
     }
 
-    Ok(parse_system_snapshot(session_id, &output.stdout))
+    Ok(parse_system_snapshot(session_id, &output.stdout, sampler))
 }
 
 async fn execute_remote_command(
@@ -138,10 +145,7 @@ cat /proc/uptime 2>/dev/null || true
 section LOAD
 cat /proc/loadavg 2>/dev/null || true
 
-section CPU1
-grep '^cpu ' /proc/stat 2>/dev/null || true
-sleep 0.25
-section CPU2
+section CPU
 grep '^cpu ' /proc/stat 2>/dev/null || true
 
 section CPUINFO
@@ -181,7 +185,11 @@ section PS
     format!("sh -c {}", shell_quote(script))
 }
 
-fn parse_system_snapshot(session_id: &str, output: &str) -> RemoteSystemSnapshot {
+fn parse_system_snapshot(
+    session_id: &str,
+    output: &str,
+    sampler: &mut SystemInfoSampler,
+) -> RemoteSystemSnapshot {
     let sections = split_system_sections(output);
     let meminfo = parse_meminfo(lines_for(&sections, "MEM"));
     let host_lines = non_empty_lines(lines_for(&sections, "HOST"));
@@ -196,7 +204,7 @@ fn parse_system_snapshot(session_id: &str, output: &str) -> RemoteSystemSnapshot
         load_average: first_non_empty(lines_for(&sections, "LOAD"))
             .map(|line| parse_load_average(&line))
             .unwrap_or_default(),
-        cpu: parse_cpu_info(&sections),
+        cpu: parse_cpu_info(&sections, sampler),
         memory: parse_memory_info(&meminfo),
         swap: parse_swap_info(&meminfo),
         networks: parse_networks(
@@ -253,30 +261,35 @@ fn first_non_empty(lines: &[String]) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn parse_cpu_info(sections: &HashMap<String, Vec<String>>) -> RemoteCpuInfo {
+fn parse_cpu_info(
+    sections: &HashMap<String, Vec<String>>,
+    sampler: &mut SystemInfoSampler,
+) -> RemoteCpuInfo {
     let cpuinfo_lines = non_empty_lines(lines_for(sections, "CPUINFO"));
     let core_count = cpuinfo_lines
         .get(1)
         .and_then(|value| parse_u32(value))
         .filter(|value| *value > 0);
 
+    let current_cpu = first_non_empty(lines_for(sections, "CPU"))
+        .as_deref()
+        .and_then(parse_cpu_stat);
+    let usage_percent = parse_cpu_usage(sampler.previous_cpu, current_cpu);
+    sampler.previous_cpu = current_cpu;
     RemoteCpuInfo {
-        usage_percent: parse_cpu_usage(
-            first_non_empty(lines_for(sections, "CPU1")).as_deref(),
-            first_non_empty(lines_for(sections, "CPU2")).as_deref(),
-        ),
+        usage_percent,
         core_count,
         model_name: cpuinfo_lines.first().cloned(),
     }
 }
 
-fn parse_cpu_usage(first_line: Option<&str>, second_line: Option<&str>) -> Option<f64> {
-    let (first_idle, first_total) = parse_cpu_stat(first_line?)?;
-    let (second_idle, second_total) = parse_cpu_stat(second_line?)?;
+fn parse_cpu_usage(first: Option<(u64, u64)>, second: Option<(u64, u64)>) -> Option<f64> {
+    let (first_idle, first_total) = first?;
+    let (second_idle, second_total) = second?;
     let total_delta = second_total.checked_sub(first_total)?;
     let idle_delta = second_idle.checked_sub(first_idle)?;
 
-    if total_delta == 0 {
+    if total_delta == 0 || idle_delta > total_delta {
         return None;
     }
 
@@ -286,22 +299,21 @@ fn parse_cpu_usage(first_line: Option<&str>, second_line: Option<&str>) -> Optio
 }
 
 fn parse_cpu_stat(line: &str) -> Option<(u64, u64)> {
-    let values: Vec<u64> = line
-        .split_whitespace()
-        .skip(1)
-        .filter_map(parse_u64)
-        .collect();
+    let mut fields = line.split_whitespace();
+    if fields.next()? != "cpu" {
+        return None;
+    }
+    // guest/guest_nice 已包含在 user/nice 中，只加前八项，不能再次计入总时间。
+    let values: Vec<u64> = fields.take(8).map(parse_u64).collect::<Option<_>>()?;
 
     if values.len() < 4 {
         return None;
     }
 
-    let idle = values
-        .get(3)
-        .copied()
-        .unwrap_or(0)
-        .saturating_add(values.get(4).copied().unwrap_or(0));
-    let total = values.iter().copied().sum();
+    let idle = values[3].checked_add(values.get(4).copied().unwrap_or(0))?;
+    let total = values
+        .iter()
+        .try_fold(0_u64, |total, value| total.checked_add(*value))?;
 
     Some((idle, total))
 }
