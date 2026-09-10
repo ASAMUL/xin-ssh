@@ -10,12 +10,14 @@ use tokio::net::{lookup_host, TcpStream};
 use tokio::time::timeout;
 
 use crate::error::{codes, connection_error, required, timeout as timeout_error, AppError};
-use crate::models::AuthMethod;
+use crate::models::{AgentConfig, AuthMethod};
+use crate::ssh::agent::authenticate_agent;
 use crate::ssh::known_hosts;
 
 pub(crate) const SSH_KEEPALIVE_INTERVAL_SECS: u64 = 30;
 const SSH_CONNECT_TIMEOUT_SECS: u64 = 12;
 const SSH_AUTH_TIMEOUT_SECS: u64 = 12;
+const SSH_AGENT_AUTH_TIMEOUT_SECS: u64 = 120;
 
 // russh 在密钥交换期间启动内部任务；超时或取消时主动关闭套接字，避免只停止外层等待。
 struct PendingConnectionSocket(Option<std::net::TcpStream>);
@@ -173,9 +175,16 @@ pub(crate) async fn authenticate_session(
     password: Option<String>,
     private_key_path: Option<String>,
     passphrase: Option<String>,
+    agent: Option<AgentConfig>,
 ) -> Result<(), AppError> {
+    // agent 可能等待系统解锁或硬件触摸，允许交互确认但仍保留整体时限。
+    let auth_timeout = if matches!(&auth_method, AuthMethod::Agent) {
+        SSH_AGENT_AUTH_TIMEOUT_SECS
+    } else {
+        SSH_AUTH_TIMEOUT_SECS
+    };
     let result = timeout(
-        Duration::from_secs(SSH_AUTH_TIMEOUT_SECS),
+        Duration::from_secs(auth_timeout),
         authenticate_with_credentials(
             session,
             username,
@@ -183,10 +192,11 @@ pub(crate) async fn authenticate_session(
             password,
             private_key_path,
             passphrase,
+            agent,
         ),
     )
     .await
-    .map_err(|_| timeout_error("authenticateSsh", SSH_AUTH_TIMEOUT_SECS))
+    .map_err(|_| timeout_error("authenticateSsh", auth_timeout))
     .and_then(|result| result);
     if result.is_err() {
         disconnect_session(session, "authentication failed").await;
@@ -202,8 +212,12 @@ async fn authenticate_with_credentials(
     password: Option<String>,
     private_key_path: Option<String>,
     passphrase: Option<String>,
+    agent: Option<AgentConfig>,
 ) -> Result<(), AppError> {
     let auth_result = match auth_method {
+        AuthMethod::Agent => {
+            return authenticate_agent(session, &username, &agent.unwrap_or_default()).await;
+        }
         AuthMethod::Password => {
             let password = password
                 .filter(|value| !value.is_empty())

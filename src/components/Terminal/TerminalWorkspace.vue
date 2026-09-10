@@ -125,6 +125,7 @@ const backgroundStyleVars = computed(() => {
 });
 const isPasswordAuth = computed(() => activeSession.value?.authMethod === "password");
 const isPrivateKeyAuth = computed(() => activeSession.value?.authMethod === "privateKey");
+const isAgentAuth = computed(() => activeSession.value?.authMethod === "agent");
 const needsCredentials = computed(() => activeSession.value?.status === "authRequired");
 const terminalStatusText = computed(() => {
   const session = activeSession.value;
@@ -244,7 +245,7 @@ function startTerminal() {
   const password = credentials.password;
   const passphrase = credentials.passphrase;
 
-  pendingCredentialSave.value = shouldSaveCredential.value && session
+  pendingCredentialSave.value = shouldSaveCredential.value && session && !isAgentAuth.value
     ? {
       sessionId: session.id,
       password: isPasswordAuth.value ? password : "",
@@ -548,8 +549,8 @@ async function savePendingCredential() {
 
         <form v-if="needsCredentials" class="terminal-auth-panel" @click.stop @submit.prevent="startTerminal">
           <div class="auth-panel-copy">
-            <strong>{{ t("terminal.authTitle") }}</strong>
-            <small>{{ t("terminal.authDescription") }}</small>
+            <strong>{{ t(isAgentAuth ? "profile.agentAuth" : "terminal.authTitle") }}</strong>
+            <small v-if="!isAgentAuth">{{ t("terminal.authDescription") }}</small>
           </div>
 
           <UFormField v-if="isPasswordAuth" class="terminal-auth-field" :label="t('profile.password')">
@@ -578,7 +579,7 @@ async function savePendingCredential() {
             />
           </UFormField>
 
-          <UCheckbox v-model="shouldSaveCredential" class="terminal-save-credential" :label="saveCredentialLabel"
+          <UCheckbox v-if="!isAgentAuth" v-model="shouldSaveCredential" class="terminal-save-credential" :label="saveCredentialLabel"
             :description="t('terminal.saveCredentialDescription')" />
 
           <p v-if="activeSession?.error" class="terminal-auth-error">{{ activeSession.error }}</p>

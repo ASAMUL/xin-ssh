@@ -14,6 +14,7 @@ import { i18n } from "../i18n";
 import { localizeError } from "../utils/appError";
 import { createSerialQueue } from "../utils/serialQueue";
 import { sameConnection } from "../utils/connectionIdentity";
+import { normalizeAgentConfig, sameAgentConfig } from "../utils/sshAgent";
 
 const TUNNEL_EVENT_NAME = "tunnel-event";
 const enqueueTunnelConfigChange = createSerialQueue();
@@ -127,7 +128,7 @@ export const useTunnelStore = defineStore("tunnels", {
         return false;
       }
 
-      const profile = { ...sourceProfile };
+      const profile = { ...sourceProfile, agent: normalizeAgentConfig(sourceProfile.agent) };
       const workspaceDir = useSettingsStore().workspaceDir;
       const attemptId = crypto.randomUUID();
       const provided = { ...credentials };
@@ -146,6 +147,7 @@ export const useTunnelStore = defineStore("tunnels", {
         const currentProfile = profileStore.activeProfiles.find((item) => item.id === tunnel.profileId);
         if (!sameConnection(profile, currentProfile) || profile.authMethod !== currentProfile.authMethod
           || profile.privateKeyPath !== currentProfile.privateKeyPath
+          || !sameAgentConfig(profile.agent, currentProfile.agent)
           || profile.credentialRef !== currentProfile.credentialRef) {
           throw { code: "tunnel.connectionChanged", message: "Connection changed before tunnel startup" };
         }
@@ -157,6 +159,7 @@ export const useTunnelStore = defineStore("tunnels", {
           port: profile.port,
           username: profile.username,
           authMethod: profile.authMethod,
+          agent: profile.authMethod === "agent" ? profile.agent : null,
           password: resolved.password || null,
           privateKeyPath: profile.privateKeyPath || null,
           passphrase: resolved.passphrase || null,
@@ -223,6 +226,7 @@ export const useTunnelStore = defineStore("tunnels", {
 });
 
 async function resolveCredentials(profile, credentials) {
+  if (profile.authMethod === "agent") return {};
   const provided = {
     password: credentials.password || null,
     passphrase: credentials.passphrase || null,

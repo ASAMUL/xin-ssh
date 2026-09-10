@@ -10,6 +10,7 @@ import {
 } from "../services/workspaceApi";
 import { i18n } from "../i18n";
 import { connectionIdentity, sameConnection } from "../utils/connectionIdentity";
+import { normalizeAgentConfig } from "../utils/sshAgent";
 import {
   clearSessionCredentials,
   confirmSessionCredentials,
@@ -110,8 +111,8 @@ export const useSessionStore = defineStore("sessions", {
         if (existingSession) {
           syncSessionFromProfile(existingSession, profile);
           this.activeSessionId = existingSession.id;
-          if (shouldAutoConnectWithSavedCredential(existingSession)) {
-            this.startSessionWithSavedCredential(existingSession.id);
+          if (shouldAutoConnectSession(existingSession)) {
+            this.startSessionAutomatically(existingSession.id);
           }
           return existingSession;
         }
@@ -130,13 +131,14 @@ export const useSessionStore = defineStore("sessions", {
         username: profile.username,
         authMethod: profile.authMethod,
         privateKeyPath: profile.privateKeyPath,
+        agent: normalizeAgentConfig(profile.agent),
         credentialRef: profile.credentialRef ?? null,
         remotePath: profile.defaultRemotePath || "/",
         status: "authRequired",
         isClosing: false,
         error: null,
         hostKeyChange: null,
-        savedCredentialAutoStarted: false,
+        autoStartAttempted: false,
         currentAttemptId: null,
         autoReconnectAttempts: 0,
         connectedAt: null,
@@ -155,8 +157,8 @@ export const useSessionStore = defineStore("sessions", {
 
       this.sessions.push(session);
       this.activeSessionId = session.id;
-      if (shouldAutoConnectWithSavedCredential(session)) {
-        this.startSessionWithSavedCredential(session.id);
+      if (shouldAutoConnectSession(session)) {
+        this.startSessionAutomatically(session.id);
       }
       return session;
     },
@@ -300,6 +302,7 @@ export const useSessionStore = defineStore("sessions", {
           attemptId,
           ...session.connectionTarget,
           authMethod: session.authMethod,
+          agent: session.authMethod === "agent" ? normalizeAgentConfig(session.agent) : null,
           password: resolved.password || null,
           privateKeyPath: session.privateKeyPath || null,
           passphrase: resolved.passphrase || null,
@@ -328,9 +331,9 @@ export const useSessionStore = defineStore("sessions", {
         if (terminalStartRequests.get(sessionId) === startRequest) terminalStartRequests.delete(sessionId);
       }
     },
-    startSessionWithSavedCredential(sessionId = this.activeSessionId, options = {}) {
+    startSessionAutomatically(sessionId = this.activeSessionId, options = {}) {
       const session = this.findSession(sessionId);
-      if (!session?.credentialRef) return false;
+      if (!session || (!session.credentialRef && session.authMethod !== "agent")) return false;
       return this.startTerminalForSession(sessionId, {}, { ...options, credentialSource: "saved" });
     },
     reconnectActiveTerminal() {
@@ -481,7 +484,7 @@ export const useSessionStore = defineStore("sessions", {
     maybeAutoReconnect(session, reason = "remote") {
       if (!session || session.isClosing || session.hostKeyChange || reason === TERMINAL_CLOSE_REASON_CLIENT
         || !["closed", "error"].includes(session.status)
-        || (!readSessionCredentials(session) && !session.credentialRef)) {
+        || (session.authMethod !== "agent" && !readSessionCredentials(session) && !session.credentialRef)) {
         return false;
       }
 
@@ -612,17 +615,18 @@ function syncSessionFromProfile(session, profile) {
   session.username = profile.username;
   session.authMethod = profile.authMethod;
   session.privateKeyPath = profile.privateKeyPath;
+  session.agent = normalizeAgentConfig(profile.agent);
   session.credentialRef = profile.credentialRef ?? null;
   session.remotePath = session.remotePath || profile.defaultRemotePath || "/";
   // 主机、用户或认证方式改变后，旧连接成功过的秘密不能被发给新目标。
   readSessionCredentials(session);
 }
 
-function shouldAutoConnectWithSavedCredential(session) {
+function shouldAutoConnectSession(session) {
   return (
-    Boolean(session?.credentialRef) &&
+    Boolean(session?.credentialRef || session?.authMethod === "agent") &&
     !session.isClosing &&
-    !session.savedCredentialAutoStarted &&
+    !session.autoStartAttempted &&
     ["authRequired", "closed", "error"].includes(session.status)
   );
 }
@@ -670,13 +674,17 @@ function sessionConnectionChanged() {
 
 // 仅重连优先复用本标签已验证的凭据；首次打开仍遵循用户是否保存凭据的选择。
 async function resolveSessionCredentials(session, provided, source) {
+  if (session.authMethod === "agent") {
+    session.autoStartAttempted = true;
+    return {};
+  }
   if (source === "provided") return { password: provided.password, passphrase: provided.passphrase };
   if (source === "reconnect") {
     const cached = readSessionCredentials(session);
     if (cached) return cached;
   }
   if (!session.credentialRef) return null;
-  session.savedCredentialAutoStarted = true;
+  session.autoStartAttempted = true;
   const credentials = await readSavedCredentials(useCredentialStore(), session);
   if (session.authMethod === "password" && !credentials.password) {
     throw new Error(i18n.global.t("terminal.savedCredentialMissing"));

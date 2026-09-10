@@ -1,4 +1,5 @@
 import { connectionIdentity, sameConnection } from "../utils/connectionIdentity";
+import { normalizeAgentConfig, sameAgentConfig } from "../utils/sshAgent";
 
 // 凭据只在当前进程内保留，不进入 Pinia 状态、传输历史或可同步配置。
 const confirmedCredentials = new Map();
@@ -11,6 +12,7 @@ export function sessionCredentialScope(session) {
     workspaceDir: session.workspaceDir,
     authMethod: session.authMethod,
     privateKeyPath: session.privateKeyPath || null,
+    agent: session.authMethod === "agent" ? normalizeAgentConfig(session.agent) : null,
   };
 }
 
@@ -19,7 +21,8 @@ export function sameCredentialScope(left, right) {
     && left.profileId === right.profileId
     && left.workspaceDir === right.workspaceDir
     && left.authMethod === right.authMethod
-    && left.privateKeyPath === right.privateKeyPath;
+    && left.privateKeyPath === right.privateKeyPath
+    && sameAgentConfig(left.agent, right.agent);
 }
 
 export function readSessionCredentials(session) {
@@ -34,6 +37,10 @@ export function readSessionCredentials(session) {
 
 // IPC 返回只表示后端已登记；等待当前尝试的 connected 事件，才能把输入用于重连。
 export function stageSessionCredentials(sessionId, attemptId, scope, credentials) {
+  if (scope.authMethod === "agent") {
+    clearSessionCredentials(sessionId);
+    return;
+  }
   pendingCredentials.set(sessionId, {
     attemptId,
     scope,

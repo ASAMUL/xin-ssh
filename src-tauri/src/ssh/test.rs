@@ -39,6 +39,7 @@ async fn run_connection_test(
         request.password,
         request.private_key_path,
         request.passphrase,
+        request.agent,
     )
     .await?;
     let latency_ms = started.elapsed().as_millis();

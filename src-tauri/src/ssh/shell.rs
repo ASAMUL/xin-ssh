@@ -136,6 +136,7 @@ async fn run_terminal_shell(
             request.password,
             request.private_key_path,
             request.passphrase,
+            request.agent,
         )
         .await?;
 
@@ -452,6 +453,7 @@ fn validate_terminal_start_request(request: &TerminalStartRequest) -> Result<(),
     }
 
     match &request.auth_method {
+        AuthMethod::Agent => {}
         AuthMethod::Password => {
             if request.password.as_deref().unwrap_or_default().is_empty() {
                 return Err(required("password"));

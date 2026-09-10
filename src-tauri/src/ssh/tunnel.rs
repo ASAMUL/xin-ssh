@@ -114,6 +114,7 @@ async fn run_tunnel(
             request.password.take(),
             request.private_key_path.take(),
             request.passphrase.take(),
+            request.agent.take(),
         ).await?;
         Ok::<_, AppError>((listener, Arc::new(session)))
     };

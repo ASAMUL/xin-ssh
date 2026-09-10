@@ -91,7 +91,7 @@ function showCredentialCleanupToast(error = null) {
   credentialCleanupToastId = notification.id;
 }
 
-// 待清理引用保存在删除记录里，重启后仍能给用户提供重试入口。
+// 删除或改用 agent 后保留待清理引用，重启后仍能给用户提供重试入口。
 watch(
   () => profileStore.profilesAwaitingCredentialCleanup.map((profile) => profile.id).sort().join(","),
   () => showCredentialCleanupToast(),

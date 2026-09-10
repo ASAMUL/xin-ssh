@@ -35,7 +35,8 @@ export const useProfileStore = defineStore("profiles", {
         .filter((profile) => !profile.deletedAt)
         .sort((left, right) => left.sortOrder - right.sortOrder),
     profilesAwaitingCredentialCleanup: (state) =>
-      state.profiles.filter((profile) => profile.deletedAt && profile.credentialRef),
+      state.profiles.filter((profile) => (profile.deletedAt || profile.authMethod === "agent")
+        && profile.credentialRef),
     favoriteProfiles() {
       return this.activeProfiles.filter((profile) => profile.favorite);
     },

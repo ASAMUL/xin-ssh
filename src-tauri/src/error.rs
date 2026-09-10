@@ -53,6 +53,13 @@ pub mod codes {
 
     pub const AUTH_FAILED: &str = "auth.failed";
     pub const AUTH_KEY_FILE: &str = "auth.keyFile";
+    pub const AUTH_AGENT_UNAVAILABLE: &str = "auth.agentUnavailable";
+    pub const AUTH_AGENT_EMPTY: &str = "auth.agentEmpty";
+    pub const AUTH_AGENT_KEY_MISSING: &str = "auth.agentKeyMissing";
+    pub const AUTH_AGENT_FAILED: &str = "auth.agentFailed";
+    pub const AUTH_AGENT_REJECTED: &str = "auth.agentRejected";
+    pub const AUTH_AGENT_UNSUPPORTED: &str = "auth.agentUnsupported";
+    pub const AUTH_ADDITIONAL_REQUIRED: &str = "auth.additionalRequired";
     pub const HOST_KEY_CHANGED: &str = "hostKey.changed";
 
     pub const SESSION_NOT_RUNNING: &str = "session.notRunning";

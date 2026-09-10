@@ -131,7 +131,7 @@ export const messages = {
       groupRenamed: "分组已重命名",
       groupDeleted: "分组已删除",
       credentialCleanup: {
-        title: "连接已删除，凭据尚未清除",
+        title: "旧凭据尚未清除",
         description: "部分本机凭据未能清除，请重试。",
       },
       groupDialog: {
@@ -520,6 +520,14 @@ export const messages = {
       cancel: "取消",
       passwordAuth: "密码",
       privateKeyAuth: "私钥",
+      agentAuth: "SSH agent",
+      agentProvider: "Agent 来源",
+      agentSystem: "系统 agent",
+      agentSocket: "Socket / 管道路径（可选）",
+      agentIdentity: "认证密钥",
+      agentAllKeys: "按 agent 顺序尝试",
+      agentRefresh: "刷新 agent 密钥",
+      agentNoKeys: "Agent 中没有可用密钥",
       required: "请填写必要字段",
     },
     snippets: {
@@ -572,6 +580,13 @@ export const messages = {
 
         "auth.failed": "认证失败，请检查用户名、密码或密钥",
         "auth.keyFile": "无法读取或解密私钥：{path}。请检查文件、格式和私钥口令。原因：{detail}",
+        "auth.agentUnavailable": "无法连接本机 SSH agent，请检查服务和 socket / 管道路径。原因：{detail}",
+        "auth.agentEmpty": "SSH agent 中没有密钥，请先添加或解锁密钥",
+        "auth.agentKeyMissing": "SSH agent 中找不到选定密钥：{fingerprint}",
+        "auth.agentFailed": "SSH agent 读取或签名失败，请检查解锁和授权状态。原因：{detail}",
+        "auth.agentRejected": "服务器拒绝了 agent 提供的密钥。请检查用户名、服务器授权密钥；密钥较多时请选择指定密钥以免超过认证次数限制。",
+        "auth.agentUnsupported": "当前平台不支持所选 agent 来源（Pageant 仅支持 Windows）",
+        "auth.additionalRequired": "服务器已接受密钥，但还要求额外认证；目前暂不支持组合认证",
         "hostKey.changed": "服务器主机密钥已变更",
 
         "session.notRunning": "会话未连接",
@@ -686,6 +701,7 @@ export const messages = {
         testConnection: "连接测试",
         connectSsh: "SSH 建连",
         authenticateSsh: "SSH 认证",
+        connectAgent: "连接 SSH agent 并读取密钥",
         openTerminal: "启动终端",
         openSftpChannel: "打开 SFTP 通道",
         createDirectory: "新建文件夹",
@@ -830,7 +846,7 @@ export const messages = {
       groupRenamed: "Group renamed",
       groupDeleted: "Group deleted",
       credentialCleanup: {
-        title: "Connection deleted, credentials still saved",
+        title: "Old credentials are still saved",
         description: "Some local credentials could not be removed. Please retry.",
       },
       groupDialog: {
@@ -1220,6 +1236,14 @@ export const messages = {
       cancel: "Cancel",
       passwordAuth: "Password",
       privateKeyAuth: "Private key",
+      agentAuth: "SSH agent",
+      agentProvider: "Agent provider",
+      agentSystem: "System agent",
+      agentSocket: "Socket / pipe path (optional)",
+      agentIdentity: "Authentication key",
+      agentAllKeys: "Try keys in agent order",
+      agentRefresh: "Refresh agent keys",
+      agentNoKeys: "No keys available in the agent",
       required: "Fill the required fields",
     },
     snippets: {
@@ -1272,6 +1296,13 @@ export const messages = {
 
         "auth.failed": "Authentication failed — check the username, password or key",
         "auth.keyFile": "Could not read or decrypt the private key: {path}. Check the file, format and passphrase. Reason: {detail}",
+        "auth.agentUnavailable": "Could not connect to the local SSH agent. Check the service and socket / pipe path. Reason: {detail}",
+        "auth.agentEmpty": "The SSH agent has no keys. Add or unlock a key first.",
+        "auth.agentKeyMissing": "The selected key is absent from the SSH agent: {fingerprint}",
+        "auth.agentFailed": "SSH agent identity lookup or signing failed. Check unlock and approval status. Reason: {detail}",
+        "auth.agentRejected": "The server rejected the agent keys. Check the username and authorized keys; select a specific key if too many identities exceed the authentication limit.",
+        "auth.agentUnsupported": "This agent provider is unavailable on this platform (Pageant requires Windows).",
+        "auth.additionalRequired": "The server accepted the key but requires additional authentication. Combined authentication is not supported yet.",
         "hostKey.changed": "The server host key has changed",
 
         "session.notRunning": "The session is not connected",
@@ -1388,6 +1419,7 @@ export const messages = {
         testConnection: "connection test",
         connectSsh: "SSH connection setup",
         authenticateSsh: "SSH authentication",
+        connectAgent: "connecting to the SSH agent and listing keys",
         openTerminal: "starting the terminal",
         openSftpChannel: "opening the SFTP channel",
         createDirectory: "creating a folder",

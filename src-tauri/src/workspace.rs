@@ -11,7 +11,7 @@ use tempfile::NamedTempFile;
 
 use crate::error::{codes, io_error, AppError};
 use crate::models::{
-    AppStateFile, AppStatus, ConnectionGroup, ConnectionProfile, ProfilesFile, Snippet,
+    AppStateFile, AppStatus, AuthMethod, ConnectionGroup, ConnectionProfile, ProfilesFile, Snippet,
     SnippetsFile, TerminalBackground, TunnelConfig, TunnelsFile, WorkspaceSettings, WorkspaceSnapshot,
 };
 use crate::util::{now_stamp, path_to_string};
@@ -107,6 +107,10 @@ pub async fn save_profile(
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut next_profile = profile;
     next_profile.updated_at = now_stamp();
+    let uses_agent = matches!(&next_profile.auth_method, AuthMethod::Agent);
+    if uses_agent {
+        next_profile.credential_ref = None;
+    }
 
     if let Some(existing) = profiles_file
         .profiles
@@ -122,13 +126,16 @@ pub async fn save_profile(
         // 最近连接和背景由专用命令维护，旧表单快照不能把它们写回旧值或清空。
         next_profile.last_connected_at = existing.last_connected_at.clone();
         next_profile.terminal_background = existing.terminal_background.clone();
+        // 先保存认证方式，再删除秘密；保留引用能在清理失败或进程中断后重试。
+        if uses_agent {
+            next_profile.credential_ref = existing.credential_ref.clone();
+        }
         *existing = next_profile;
     } else {
         profiles_file.profiles.push(next_profile);
     }
 
-    write_profiles_file(&workspace, &profiles_file)?;
-    load_workspace_from_dir(&workspace)
+    finish_profile_change(&workspace, &mut profiles_file)
 }
 
 // 记录最近一次成功连接时间；不 bump updated_at，避免「连了一下」触发同步冲突
@@ -167,7 +174,7 @@ pub async fn delete_profile(
         profile.id == profile_id
     });
 
-    finish_profile_deletion(&workspace, &mut profiles_file)
+    finish_profile_change(&workspace, &mut profiles_file)
 }
 
 // 清理成功前保留墓碑上的凭据引用，失败或进程退出后仍能重试。
@@ -186,34 +193,38 @@ fn soft_delete_profiles(
     }
 }
 
-fn finish_profile_deletion(
+fn finish_profile_change(
     workspace: &Path,
     profiles_file: &mut ProfilesFile,
 ) -> Result<WorkspaceSnapshot, AppError> {
     write_profiles_file(workspace, profiles_file)?;
     let mut snapshot = load_workspace_from_dir(workspace)?;
-    // 删除已落盘，清理失败通过快照中保留的引用提示并重试，不误报成删除失败。
-    if cleanup_deleted_credentials(workspace, profiles_file).is_ok() {
+    // 配置已落盘，清理失败通过快照中保留的引用提示并重试，不误报成保存失败。
+    if cleanup_unused_credentials(workspace, profiles_file).is_ok() {
         snapshot.profiles = profiles_file.profiles.clone();
     }
     Ok(snapshot)
 }
 
-// 只清理没有有效配置继续引用的凭据，成功后才移除用于失败重试的墓碑引用。
-fn cleanup_deleted_credentials(
+fn profile_needs_no_credentials(profile: &ConnectionProfile) -> bool {
+    profile.deleted_at.is_some() || matches!(&profile.auth_method, AuthMethod::Agent)
+}
+
+// 只清理没有密码/私钥配置继续引用的凭据，成功后才移除用于失败重试的引用。
+fn cleanup_unused_credentials(
     workspace: &Path,
     profiles_file: &mut ProfilesFile,
 ) -> Result<(), AppError> {
     let active_refs: HashSet<String> = profiles_file
         .profiles
         .iter()
-        .filter(|profile| profile.deleted_at.is_none())
+        .filter(|profile| !profile_needs_no_credentials(profile))
         .filter_map(|profile| profile.credential_ref.clone())
         .collect();
     let credential_refs: Vec<String> = profiles_file
         .profiles
         .iter()
-        .filter(|profile| profile.deleted_at.is_some())
+        .filter(|profile| profile_needs_no_credentials(profile))
         .filter_map(|profile| profile.credential_ref.clone())
         .filter(|reference| !active_refs.contains(reference))
         .collect();
@@ -222,7 +233,7 @@ fn cleanup_deleted_credentials(
     for profile in profiles_file
         .profiles
         .iter_mut()
-        .filter(|profile| profile.deleted_at.is_some())
+        .filter(|profile| profile_needs_no_credentials(profile))
     {
         changed |= profile.credential_ref.take().is_some();
     }
@@ -239,7 +250,7 @@ pub async fn retry_deleted_credential_cleanup(
     let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
     let mut profiles_file = read_profiles_file(&workspace)?;
-    cleanup_deleted_credentials(&workspace, &mut profiles_file).map_err(|_| {
+    cleanup_unused_credentials(&workspace, &mut profiles_file).map_err(|_| {
         AppError::new(
             codes::CREDENTIAL_CLEANUP_FAILED,
             "Saved credentials could not be removed",
@@ -341,7 +352,7 @@ pub async fn delete_group(
         }
     }
 
-    finish_profile_deletion(&workspace, &mut profiles_file)
+    finish_profile_change(&workspace, &mut profiles_file)
 }
 
 // 一次写入整组顺序，避免逐条保存产生半完成的布局，同时将默认分组固定在首位。

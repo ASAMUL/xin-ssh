@@ -216,6 +216,7 @@ pub struct ConnectionProfile {
     pub username: String,
     pub auth_method: AuthMethod,
     pub private_key_path: Option<String>,
+    pub agent: Option<AgentConfig>,
     pub credential_ref: Option<String>,
     #[serde(default = "default_remote_path")]
     pub default_remote_path: String,
@@ -248,6 +249,31 @@ pub enum AuthMethod {
     #[default]
     Password,
     PrivateKey,
+    Agent,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AgentConfig {
+    pub provider: AgentProvider,
+    pub socket_path: Option<String>,
+    pub key_fingerprint: Option<String>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentProvider {
+    #[default]
+    System,
+    Pageant,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentIdentityInfo {
+    pub fingerprint: String,
+    pub comment: String,
+    pub algorithm: String,
 }
 
 // —— 命令片段库（snippets.json，软删除同 profiles）——
@@ -314,6 +340,7 @@ pub struct TunnelStartRequest {
     pub port: u16,
     pub username: String,
     pub auth_method: AuthMethod,
+    pub agent: Option<AgentConfig>,
     pub password: Option<String>,
     pub private_key_path: Option<String>,
     pub passphrase: Option<String>,
@@ -340,6 +367,7 @@ pub struct ConnectionTestRequest {
     pub port: u16,
     pub username: String,
     pub auth_method: AuthMethod,
+    pub agent: Option<AgentConfig>,
     pub password: Option<String>,
     pub private_key_path: Option<String>,
     pub passphrase: Option<String>,
@@ -364,6 +392,7 @@ pub struct TerminalStartRequest {
     pub port: u16,
     pub username: String,
     pub auth_method: AuthMethod,
+    pub agent: Option<AgentConfig>,
     pub password: Option<String>,
     pub private_key_path: Option<String>,
     pub passphrase: Option<String>,

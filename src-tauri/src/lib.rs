@@ -61,6 +61,7 @@ pub fn run() {
             sftp::transfer::start_upload_transfer,
             ssh::known_hosts::trust_host_key,
             ssh::test::test_connection,
+            ssh::agent::list_agent_identities,
             sftp::ops::write_remote_file_text,
         ])
         .run(tauri::generate_context!())

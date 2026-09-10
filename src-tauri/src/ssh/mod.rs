@@ -1,3 +1,4 @@
+pub(crate) mod agent;
 pub(crate) mod client;
 pub(crate) mod known_hosts;
 pub(crate) mod registry;

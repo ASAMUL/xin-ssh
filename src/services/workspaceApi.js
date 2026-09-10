@@ -104,6 +104,10 @@ export function testConnection(request) {
   return invoke("test_connection", { request });
 }
 
+export function listAgentIdentities(config) {
+  return invoke("list_agent_identities", { config });
+}
+
 export function startTerminalSession(request) {
   return invoke("start_terminal_session", { request });
 }

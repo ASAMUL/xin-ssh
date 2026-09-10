@@ -1,11 +1,13 @@
 <script setup>
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProfileStore } from "../../stores/profileStore";
 import { useCredentialStore } from "../../stores/credentialStore";
 import { testConnection as testConnectionRequest } from "../../services/workspaceApi";
 import { errorCode, localizeError } from "../../utils/appError";
+import { normalizeAgentConfig } from "../../utils/sshAgent";
+import AgentSettings from "./AgentSettings.vue";
 
 const props = defineProps({
   profileId: {
@@ -30,13 +32,15 @@ const isSavingGroup = ref(false);
 const connectionTestResult = ref(null);
 const saveProgressKey = ref("");
 const newGroupName = ref("");
+let testGeneration = 0;
 
 const defaultGroupId = computed(() => profileStore.activeGroups[0]?.id ?? "group-default");
 const editingProfile = computed(() =>
   props.profileId ? profileStore.profiles.find((profile) => profile.id === props.profileId) : null,
 );
 const isEditingProfile = computed(() => Boolean(editingProfile.value));
-const hasSavedCredential = computed(() => Boolean(editingProfile.value?.credentialRef));
+const hasSavedCredential = computed(() => editingProfile.value?.authMethod !== "agent"
+  && Boolean(editingProfile.value?.credentialRef));
 const formTitle = computed(() => t(isEditingProfile.value ? "profile.editTitle" : "profile.newTitle"));
 const saveButtonText = computed(() => {
   if (isSavingProfile.value) return t("profile.saving");
@@ -56,6 +60,11 @@ const saveCredentialDescription = computed(() =>
     ? t("profile.credentialSavedHint")
     : t("profile.saveCredentialDescription"),
 );
+const authMethodItems = computed(() => [
+  { value: "password", label: t("profile.passwordAuth"), icon: "i-lucide-key-round" },
+  { value: "privateKey", label: t("profile.privateKeyAuth"), icon: "i-lucide-file-key-2" },
+  { value: "agent", label: t("profile.agentAuth"), icon: "i-lucide-key-square" },
+]);
 
 const form = reactive({
   name: "",
@@ -65,6 +74,7 @@ const form = reactive({
   username: "",
   authMethod: "password",
   privateKeyPath: "",
+  agent: normalizeAgentConfig(),
   defaultRemotePath: "/",
 });
 
@@ -97,10 +107,11 @@ function resetForm() {
   form.username = profile?.username ?? "";
   form.authMethod = profile?.authMethod ?? "password";
   form.privateKeyPath = profile?.privateKeyPath ?? "";
+  form.agent = normalizeAgentConfig(profile?.agent);
   form.defaultRemotePath = profile?.defaultRemotePath ?? "/";
   secretPassword.value = "";
   passphrase.value = "";
-  shouldSaveCredential.value = Boolean(profile?.credentialRef);
+  shouldSaveCredential.value = hasSavedCredential.value;
   closeInlineGroupCreator();
   error.value = "";
   connectionTestResult.value = null;
@@ -132,6 +143,7 @@ async function choosePrivateKey() {
   }
 }
 
+// 保存使用点击时的快照，凭据落盘期间修改认证方式不能混入同一次提交。
 async function submitProfile() {
   error.value = "";
 
@@ -143,25 +155,33 @@ async function submitProfile() {
   }
 
   isSavingProfile.value = true;
+  const draft = { ...form, agent: normalizeAgentConfig(form.agent) };
+  const credentialDraft = {
+    authMethod: draft.authMethod,
+    shouldSave: shouldSaveCredential.value,
+    password: secretPassword.value,
+    passphrase: passphrase.value,
+  };
   try {
     const now = Date.now().toString();
     const currentProfile = editingProfile.value;
     const profileId = currentProfile?.id ?? crypto.randomUUID();
-    const credentialRef = await resolveCredentialRef(currentProfile, profileId);
+    const credentialRef = await resolveCredentialRef(currentProfile, profileId, credentialDraft);
 
     await runSaveStep("profile.saveProgress.saveProfile", () =>
       profileStore.saveProfile({
         id: profileId,
         syncId: currentProfile?.syncId ?? profileId,
-        groupId: form.groupId || defaultGroupId.value,
-        name: form.name.trim(),
-        host: form.host.trim(),
-        port: Number(form.port),
-        username: form.username.trim(),
-        authMethod: form.authMethod,
-        privateKeyPath: form.authMethod === "privateKey" ? form.privateKeyPath : null,
+        groupId: draft.groupId,
+        name: draft.name.trim(),
+        host: draft.host.trim(),
+        port: Number(draft.port),
+        username: draft.username.trim(),
+        authMethod: draft.authMethod,
+        privateKeyPath: draft.authMethod === "privateKey" ? draft.privateKeyPath : null,
+        agent: draft.authMethod === "agent" ? draft.agent : null,
         credentialRef,
-        defaultRemotePath: form.defaultRemotePath || "/",
+        defaultRemotePath: draft.defaultRemotePath || "/",
         ...(!currentProfile ? {
           sortOrder: Math.max(-1, ...profileStore.activeProfiles.map((profile) => profile.sortOrder)) + 1,
           favorite: false,
@@ -185,10 +205,13 @@ async function submitProfile() {
   }
 }
 
-async function resolveCredentialRef(currentProfile, profileId) {
-  const currentCredentialRef = currentProfile?.credentialRef ?? null;
+async function resolveCredentialRef(currentProfile, profileId, credentials) {
+  // agent 的残留引用只用于后端清理重试，不能当作仍可使用的已保存密码。
+  if (credentials.authMethod === "agent") return null;
+  const currentCredentialRef = currentProfile?.authMethod === "agent"
+    ? null : (currentProfile?.credentialRef ?? null);
 
-  if (!shouldSaveCredential.value) {
+  if (!credentials.shouldSave) {
     if (currentCredentialRef) {
       await runSaveStep("profile.saveProgress.removeCredential", async () => {
         await credentialStore.removeCredential(currentCredentialRef, ["password", "passphrase"]);
@@ -198,25 +221,25 @@ async function resolveCredentialRef(currentProfile, profileId) {
     return null;
   }
 
-  if (form.authMethod === "password") {
-    if (!secretPassword.value && !currentCredentialRef) {
+  if (credentials.authMethod === "password") {
+    if (!credentials.password && !currentCredentialRef) {
       throw new Error(t("profile.savePasswordRequired"));
     }
 
-    if (!secretPassword.value) return currentCredentialRef;
+    if (!credentials.password) return currentCredentialRef;
 
     const credentialRef = currentCredentialRef || profileId;
     await runSaveStep("profile.saveProgress.saveCredential", () =>
-      credentialStore.saveCredential(credentialRef, { password: secretPassword.value }),
+      credentialStore.saveCredential(credentialRef, { password: credentials.password }),
     );
     return credentialRef;
   }
 
-  if (!passphrase.value) return currentCredentialRef;
+  if (!credentials.passphrase) return currentCredentialRef;
 
   const credentialRef = currentCredentialRef || profileId;
   await runSaveStep("profile.saveProgress.saveCredential", () =>
-    credentialStore.saveCredential(credentialRef, { passphrase: passphrase.value }),
+    credentialStore.saveCredential(credentialRef, { passphrase: credentials.passphrase }),
   );
   return credentialRef;
 }
@@ -244,10 +267,23 @@ function buildConnectionTestRequest() {
     password: form.authMethod === "password" ? secretPassword.value : null,
     privateKeyPath: form.authMethod === "privateKey" ? form.privateKeyPath.trim() : null,
     passphrase: form.authMethod === "privateKey" ? passphrase.value : null,
+    agent: form.authMethod === "agent" ? normalizeAgentConfig(form.agent) : null,
   };
 }
 
+// agent 确认可能持续较久，编辑目标或关闭表单后旧测试结果不能标记新配置为成功。
+watch(() => [
+  props.profileId, form.host, form.port, form.username, form.authMethod,
+  form.privateKeyPath, secretPassword.value, passphrase.value,
+  form.agent.provider, form.agent.socketPath, form.agent.keyFingerprint,
+], () => {
+  testGeneration += 1;
+  connectionTestResult.value = null;
+}, { flush: "sync" });
+onBeforeUnmount(() => { testGeneration += 1; });
+
 async function testCurrentConnection() {
+  if (isTestingConnection.value) return;
   error.value = "";
   connectionTestResult.value = null;
 
@@ -267,10 +303,12 @@ async function testCurrentConnection() {
   }
 
   isTestingConnection.value = true;
+  const generation = ++testGeneration;
   try {
-    connectionTestResult.value = await testConnectionRequest(buildConnectionTestRequest());
+    const result = await testConnectionRequest(buildConnectionTestRequest());
+    if (generation === testGeneration) connectionTestResult.value = result;
   } catch (testError) {
-    error.value = `${t("profile.testFailed")}: ${localizeError(testError)}`;
+    if (generation === testGeneration) error.value = `${t("profile.testFailed")}: ${localizeError(testError)}`;
   } finally {
     isTestingConnection.value = false;
   }
@@ -390,22 +428,17 @@ async function createInlineGroup() {
         </div>
 
         <div class="segmented-control">
-          <button
-            type="button"
-            :class="{ active: form.authMethod === 'password' }"
-            @click="form.authMethod = 'password'"
-          >
-            <UIcon name="i-lucide-key-round" />
-            <span>{{ t("profile.passwordAuth") }}</span>
-          </button>
-          <button
-            type="button"
-            :class="{ active: form.authMethod === 'privateKey' }"
-            @click="form.authMethod = 'privateKey'"
-          >
-            <UIcon name="i-lucide-file-key-2" />
-            <span>{{ t("profile.privateKeyAuth") }}</span>
-          </button>
+          <UButton
+            v-for="method in authMethodItems"
+            :key="method.value"
+            color="neutral"
+            variant="ghost"
+            :class="{ active: form.authMethod === method.value }"
+            :aria-pressed="form.authMethod === method.value"
+            :icon="method.icon"
+            :label="method.label"
+            @click="form.authMethod = method.value"
+          />
         </div>
 
         <UFormField v-if="form.authMethod === 'password'" :label="t('profile.password')">
@@ -419,7 +452,7 @@ async function createInlineGroup() {
           />
         </UFormField>
 
-        <div v-else class="key-fields">
+        <div v-else-if="form.authMethod === 'privateKey'" class="key-fields">
           <UFormField :label="t('profile.privateKeyPath')">
             <div class="inline-field">
               <UInput v-model="form.privateKeyPath" size="lg" class="w-full" />
@@ -444,7 +477,10 @@ async function createInlineGroup() {
           </UFormField>
         </div>
 
+        <AgentSettings v-else v-model="form.agent" />
+
         <UCheckbox
+          v-if="form.authMethod !== 'agent'"
           v-model="shouldSaveCredential"
           class="credential-save-option"
           :label="saveCredentialLabel"
