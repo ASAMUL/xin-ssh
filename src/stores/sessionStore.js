@@ -11,6 +11,8 @@ import {
 import { i18n } from "../i18n";
 import { connectionIdentity, sameConnection } from "../utils/connectionIdentity";
 import { normalizeAgentConfig } from "../utils/sshAgent";
+import { usesSavedCredentials } from "../utils/authentication";
+import { useAuthenticationStore } from "./authenticationStore";
 import {
   clearSessionCredentials,
   confirmSessionCredentials,
@@ -177,6 +179,7 @@ export const useSessionStore = defineStore("sessions", {
       let closing = terminalCloseRequests.get(sessionId);
       if (!closing) {
         session.isClosing = true;
+        useAuthenticationStore().cancelOwner(`terminal:${sessionId}`);
         closing = (async () => {
           await terminalStartRequests.get(sessionId)?.catch(() => {});
           await closeTerminalSession(sessionId);
@@ -264,6 +267,7 @@ export const useSessionStore = defineStore("sessions", {
         session.autoReconnectAttempts = 0;
       }
       let startRequest;
+      let authentication;
       try {
         const profile = currentSessionProfile(session);
         const previousScope = sessionCredentialScope(session);
@@ -297,6 +301,9 @@ export const useSessionStore = defineStore("sessions", {
         // 配置可以在终端存活时被修改，传输必须记录本次真正发给后端的连接地址。
         session.connectionTarget = connectionIdentity(scope);
         stageSessionCredentials(sessionId, attemptId, scope, resolved);
+        authentication = useAuthenticationStore().createFlow(`terminal:${sessionId}`, {
+          ...session.connectionTarget, name: session.name, purpose: "terminal",
+        });
         startRequest = startTerminalSession({
           sessionId: session.id,
           attemptId,
@@ -310,11 +317,12 @@ export const useSessionStore = defineStore("sessions", {
           columns: session.terminalColumns,
           rows: session.terminalRows,
           keepaliveSeconds: useSettingsStore().sshKeepaliveSeconds,
-        });
+        }, authentication.channel);
         terminalStartRequests.set(sessionId, startRequest);
         await startRequest;
         return true;
       } catch (error) {
+        authentication?.close();
         discardPendingCredentials(sessionId, attemptId);
         const latestSession = this.findSession(session.id);
         if (latestSession && !latestSession.isClosing && latestSession.currentAttemptId === attemptId
@@ -333,7 +341,7 @@ export const useSessionStore = defineStore("sessions", {
     },
     startSessionAutomatically(sessionId = this.activeSessionId, options = {}) {
       const session = this.findSession(sessionId);
-      if (!session || (!session.credentialRef && session.authMethod !== "agent")) return false;
+      if (!session || (!session.credentialRef && usesSavedCredentials(session.authMethod))) return false;
       return this.startTerminalForSession(sessionId, {}, { ...options, credentialSource: "saved" });
     },
     reconnectActiveTerminal() {
@@ -383,6 +391,9 @@ export const useSessionStore = defineStore("sessions", {
       const session = this.findSession(event.sessionId);
       if (!session || session.isClosing) return;
       if (isStaleTerminalEvent(session, event)) return;
+      if (["connected", "closed", "error"].includes(event.kind)) {
+        useAuthenticationStore().cancelOwner(`terminal:${session.id}`);
+      }
 
       if (event.kind === "output") {
         const data = event.data ?? "";
@@ -484,7 +495,7 @@ export const useSessionStore = defineStore("sessions", {
     maybeAutoReconnect(session, reason = "remote") {
       if (!session || session.isClosing || session.hostKeyChange || reason === TERMINAL_CLOSE_REASON_CLIENT
         || !["closed", "error"].includes(session.status)
-        || (session.authMethod !== "agent" && !readSessionCredentials(session) && !session.credentialRef)) {
+        || (usesSavedCredentials(session.authMethod) && !readSessionCredentials(session) && !session.credentialRef)) {
         return false;
       }
 
@@ -624,7 +635,7 @@ function syncSessionFromProfile(session, profile) {
 
 function shouldAutoConnectSession(session) {
   return (
-    Boolean(session?.credentialRef || session?.authMethod === "agent") &&
+    Boolean(session && (session.credentialRef || !usesSavedCredentials(session.authMethod))) &&
     !session.isClosing &&
     !session.autoStartAttempted &&
     ["authRequired", "closed", "error"].includes(session.status)
@@ -674,7 +685,7 @@ function sessionConnectionChanged() {
 
 // 仅重连优先复用本标签已验证的凭据；首次打开仍遵循用户是否保存凭据的选择。
 async function resolveSessionCredentials(session, provided, source) {
-  if (session.authMethod === "agent") {
+  if (!usesSavedCredentials(session.authMethod)) {
     session.autoStartAttempted = true;
     return {};
   }

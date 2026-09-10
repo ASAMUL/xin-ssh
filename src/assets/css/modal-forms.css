@@ -146,6 +146,11 @@
     0 4px 14px rgb(var(--xin-shadow-rgb) / 0.1);
 }
 
+.connection-auth-methods {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .key-fields {
   display: flex;
   flex-direction: column;

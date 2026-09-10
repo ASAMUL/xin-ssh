@@ -11,6 +11,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useCredentialStore } from "../../stores/credentialStore";
 import { localizeError } from "../../utils/appError";
+import { usesSavedCredentials } from "../../utils/authentication";
 import {
   TERMINAL_FONTS,
   TERMINAL_FONT_SIZES,
@@ -126,6 +127,9 @@ const backgroundStyleVars = computed(() => {
 const isPasswordAuth = computed(() => activeSession.value?.authMethod === "password");
 const isPrivateKeyAuth = computed(() => activeSession.value?.authMethod === "privateKey");
 const isAgentAuth = computed(() => activeSession.value?.authMethod === "agent");
+const hasCredentialInput = computed(() => usesSavedCredentials(activeSession.value?.authMethod));
+const authenticationTitle = computed(() => t(hasCredentialInput.value
+  ? "terminal.authTitle" : isAgentAuth.value ? "profile.agentAuth" : "profile.interactiveAuth"));
 const needsCredentials = computed(() => activeSession.value?.status === "authRequired");
 const terminalStatusText = computed(() => {
   const session = activeSession.value;
@@ -245,7 +249,7 @@ function startTerminal() {
   const password = credentials.password;
   const passphrase = credentials.passphrase;
 
-  pendingCredentialSave.value = shouldSaveCredential.value && session && !isAgentAuth.value
+  pendingCredentialSave.value = shouldSaveCredential.value && session && hasCredentialInput.value
     ? {
       sessionId: session.id,
       password: isPasswordAuth.value ? password : "",
@@ -549,8 +553,8 @@ async function savePendingCredential() {
 
         <form v-if="needsCredentials" class="terminal-auth-panel" @click.stop @submit.prevent="startTerminal">
           <div class="auth-panel-copy">
-            <strong>{{ t(isAgentAuth ? "profile.agentAuth" : "terminal.authTitle") }}</strong>
-            <small v-if="!isAgentAuth">{{ t("terminal.authDescription") }}</small>
+            <strong>{{ authenticationTitle }}</strong>
+            <small v-if="hasCredentialInput">{{ t("terminal.authDescription") }}</small>
           </div>
 
           <UFormField v-if="isPasswordAuth" class="terminal-auth-field" :label="t('profile.password')">
@@ -579,7 +583,7 @@ async function savePendingCredential() {
             />
           </UFormField>
 
-          <UCheckbox v-if="!isAgentAuth" v-model="shouldSaveCredential" class="terminal-save-credential" :label="saveCredentialLabel"
+          <UCheckbox v-if="hasCredentialInput" v-model="shouldSaveCredential" class="terminal-save-credential" :label="saveCredentialLabel"
             :description="t('terminal.saveCredentialDescription')" />
 
           <p v-if="activeSession?.error" class="terminal-auth-error">{{ activeSession.error }}</p>

@@ -50,7 +50,7 @@ pub(crate) async fn authenticate_agent(
     session: &mut Handle<ConnectionTestClient>,
     username: &str,
     config: &AgentConfig,
-) -> Result<(), AppError> {
+) -> Result<AuthResult, AppError> {
     let (mut agent, mut identities) = load_identities(config).await?;
     if identities.is_empty() {
         return Err(AppError::new(
@@ -84,13 +84,10 @@ pub(crate) async fn authenticate_agent(
             AgentAuthError::Key(error) => agent_error(codes::AUTH_AGENT_FAILED, error),
         })?;
         match result {
-            AuthResult::Success => return Ok(()),
-            AuthResult::Failure { partial_success: true, .. } => {
-                // 服务器已接受密钥时继续枚举会重复认证，二次认证须由后续交互流程处理。
-                return Err(AppError::new(
-                    codes::AUTH_ADDITIONAL_REQUIRED,
-                    "Additional authentication is required",
-                ));
+            AuthResult::Success => return Ok(AuthResult::Success),
+            result @ AuthResult::Failure { partial_success: true, .. } => {
+                // 已接受的身份不能继续枚举，共用认证入口负责处理服务器要求的第二个因素。
+                return Ok(result);
             }
             AuthResult::Failure { remaining_methods, .. } => {
                 if !remaining_methods.contains(&russh::MethodKind::PublicKey) {

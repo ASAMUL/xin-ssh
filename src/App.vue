@@ -6,6 +6,7 @@ import { en, zh_cn } from "@nuxt/ui/locale";
 import TransferPanel from "./components/TransferPanel.vue";
 import WindowChrome from "./components/AppShell/WindowChrome.vue";
 import WindowCloseGuard from "./components/AppShell/WindowCloseGuard.vue";
+import AuthenticationDialog from "./components/ConnectionManager/AuthenticationDialog.vue";
 import WorkspaceShell from "./components/AppShell/WorkspaceShell.vue";
 import { revealTaskInFolder } from "./services/localOpener";
 import { useAppStore } from "./stores/appStore";
@@ -91,7 +92,7 @@ function showCredentialCleanupToast(error = null) {
   credentialCleanupToastId = notification.id;
 }
 
-// 删除或改用 agent 后保留待清理引用，重启后仍能给用户提供重试入口。
+// 删除或改用无本地凭据认证后保留待清理引用，重启后仍能给用户提供重试入口。
 watch(
   () => profileStore.profilesAwaitingCredentialCleanup.map((profile) => profile.id).sort().join(","),
   () => showCredentialCleanupToast(),
@@ -166,6 +167,7 @@ onMounted(() => {
         <TransferPanel v-if="transferStore.panelOpen" />
       </section>
     </main>
+    <AuthenticationDialog />
     <WindowCloseGuard />
   </UApp>
 </template>

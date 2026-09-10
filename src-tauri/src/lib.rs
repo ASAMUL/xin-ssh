@@ -13,6 +13,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(ssh::registry::TerminalRegistry::default())
         .manage(ssh::tunnel::TunnelRegistry::default())
+        .manage(ssh::interactive::AuthenticationRegistry::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -62,6 +63,7 @@ pub fn run() {
             ssh::known_hosts::trust_host_key,
             ssh::test::test_connection,
             ssh::agent::list_agent_identities,
+            ssh::interactive::respond_authentication,
             sftp::ops::write_remote_file_text,
         ])
         .run(tauri::generate_context!())

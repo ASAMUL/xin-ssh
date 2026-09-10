@@ -1,24 +1,30 @@
 use std::sync::{Arc, Mutex};
 
 use tokio::time::Instant;
+use tauri::{ipc::Channel, AppHandle};
 
 use crate::error::{port_invalid, required, AppError};
 use crate::models::{ConnectionTestRequest, ConnectionTestResult};
 use crate::ssh::client::{
     authenticate_session, connect_transport, disconnect_session, ConnectionTestClient, ServerKeySnapshot,
 };
+use crate::ssh::interactive::{AuthenticationContext, AuthenticationEvent};
 
 #[tauri::command]
 pub async fn test_connection(
+    app: AppHandle,
     request: ConnectionTestRequest,
+    authentication: Channel<AuthenticationEvent>,
 ) -> Result<ConnectionTestResult, AppError> {
+    let authentication = AuthenticationContext::new(&app, authentication);
     validate_connection_test_request(&request)?;
 
-    run_connection_test(request).await
+    run_connection_test(request, authentication).await
 }
 
 async fn run_connection_test(
     request: ConnectionTestRequest,
+    authentication: AuthenticationContext,
 ) -> Result<ConnectionTestResult, AppError> {
     let auth_method = request.auth_method.clone();
     let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
@@ -40,6 +46,7 @@ async fn run_connection_test(
         request.private_key_path,
         request.passphrase,
         request.agent,
+        authentication,
     )
     .await?;
     let latency_ms = started.elapsed().as_millis();

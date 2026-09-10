@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use russh::client;
 use tauri::{AppHandle, Emitter, State};
+use tauri::ipc::Channel;
 use tokio::io::copy_bidirectional;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
@@ -15,6 +16,7 @@ use crate::models::{TunnelEventPayload, TunnelStartRequest};
 use crate::ssh::client::{
     authenticate_session, connect_with_tofu, disconnect_session, ConnectionTestClient,
 };
+use crate::ssh::interactive::{AuthenticationContext, AuthenticationEvent};
 
 const TUNNEL_EVENT: &str = "tunnel-event";
 
@@ -65,7 +67,9 @@ pub fn start_tunnel(
     app: AppHandle,
     registry: State<'_, TunnelRegistry>,
     request: TunnelStartRequest,
+    authentication: Channel<AuthenticationEvent>,
 ) -> Result<(), AppError> {
+    let authentication = AuthenticationContext::new(&app, authentication);
     validate_tunnel_request(&request)?;
     let cancellation = CancellationToken::new();
     let (finished_sender, finished) = watch::channel(false);
@@ -79,7 +83,7 @@ pub fn start_tunnel(
     let registry = registry.inner().clone();
     tauri::async_runtime::spawn(async move {
         let mut request = request;
-        let result = run_tunnel(&app, &mut request, &cancellation).await;
+        let result = run_tunnel(&app, &mut request, &cancellation, authentication).await;
         // run_tunnel 先释放监听和所有转发连接，再允许同一配置重新启动。
         registry.finish(&request.tunnel_id, &request.attempt_id);
         let error = if cancellation.is_cancelled() { None } else { result.err() };
@@ -94,6 +98,7 @@ async fn run_tunnel(
     app: &AppHandle,
     request: &mut TunnelStartRequest,
     cancellation: &CancellationToken,
+    authentication: AuthenticationContext,
 ) -> Result<(), AppError> {
     let setup = async {
         // 仅监听回环地址，避免把服务器服务意外暴露给局域网。
@@ -115,6 +120,7 @@ async fn run_tunnel(
             request.private_key_path.take(),
             request.passphrase.take(),
             request.agent.take(),
+            authentication,
         ).await?;
         Ok::<_, AppError>((listener, Arc::new(session)))
     };

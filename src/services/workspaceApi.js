@@ -40,8 +40,8 @@ export function deleteTunnelConfig(tunnelId) {
   return invoke("delete_tunnel_config", { tunnelId });
 }
 
-export function startTunnel(request) {
-  return invoke("start_tunnel", { request });
+export function startTunnel(request, authentication) {
+  return invoke("start_tunnel", { request, authentication });
 }
 
 export function stopTunnel(tunnelId, attemptId) {
@@ -100,16 +100,16 @@ export function removeCredential(request) {
   return invoke("remove_credential", { request });
 }
 
-export function testConnection(request) {
-  return invoke("test_connection", { request });
+export function testConnection(request, authentication) {
+  return invoke("test_connection", { request, authentication });
 }
 
 export function listAgentIdentities(config) {
   return invoke("list_agent_identities", { config });
 }
 
-export function startTerminalSession(request) {
-  return invoke("start_terminal_session", { request });
+export function startTerminalSession(request, authentication) {
+  return invoke("start_terminal_session", { request, authentication });
 }
 
 export function sendTerminalInput(request) {

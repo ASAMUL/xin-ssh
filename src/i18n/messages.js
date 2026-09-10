@@ -1,5 +1,12 @@
 export const messages = {
   "zh-CN": {
+    authentication: {
+      title: "SSH 交互认证",
+      response: "认证答案 {index}",
+      continue: "继续",
+      waiting: "等待服务器确认",
+      purpose: { terminal: "终端", tunnel: "隧道", test: "连接测试" },
+    },
     app: {
       name: "Xin Terminal",
       pro: "Pro",
@@ -521,6 +528,7 @@ export const messages = {
       passwordAuth: "密码",
       privateKeyAuth: "私钥",
       agentAuth: "SSH agent",
+      interactiveAuth: "交互认证 / 2FA",
       agentProvider: "Agent 来源",
       agentSystem: "系统 agent",
       agentSocket: "Socket / 管道路径（可选）",
@@ -586,7 +594,12 @@ export const messages = {
         "auth.agentFailed": "SSH agent 读取或签名失败，请检查解锁和授权状态。原因：{detail}",
         "auth.agentRejected": "服务器拒绝了 agent 提供的密钥。请检查用户名、服务器授权密钥；密钥较多时请选择指定密钥以免超过认证次数限制。",
         "auth.agentUnsupported": "当前平台不支持所选 agent 来源（Pageant 仅支持 Windows）",
-        "auth.additionalRequired": "服务器已接受密钥，但还要求额外认证；目前暂不支持组合认证",
+        "auth.additionalRequired": "服务器要求的后续认证方式暂不支持；当前支持继续 keyboard-interactive 认证",
+        "auth.canceled": "认证已取消",
+        "auth.challengeExpired": "本轮认证已结束，请重新连接",
+        "auth.invalidResponse": "认证答案数量或长度不符合要求",
+        "auth.invalidChallenge": "服务器发送了过多的认证轮次或问题",
+        "auth.interactiveFailed": "交互认证未通过，请检查本轮答案或服务器的认证要求",
         "hostKey.changed": "服务器主机密钥已变更",
 
         "session.notRunning": "会话未连接",
@@ -702,6 +715,7 @@ export const messages = {
         connectSsh: "SSH 建连",
         authenticateSsh: "SSH 认证",
         connectAgent: "连接 SSH agent 并读取密钥",
+        interactiveAuthentication: "交互认证",
         openTerminal: "启动终端",
         openSftpChannel: "打开 SFTP 通道",
         createDirectory: "新建文件夹",
@@ -715,6 +729,13 @@ export const messages = {
     },
   },
   "en-US": {
+    authentication: {
+      title: "SSH Interactive Authentication",
+      response: "Authentication response {index}",
+      continue: "Continue",
+      waiting: "Waiting for server confirmation",
+      purpose: { terminal: "Terminal", tunnel: "Tunnel", test: "Connection test" },
+    },
     app: {
       name: "Xin Terminal",
       pro: "Pro",
@@ -1237,6 +1258,7 @@ export const messages = {
       passwordAuth: "Password",
       privateKeyAuth: "Private key",
       agentAuth: "SSH agent",
+      interactiveAuth: "Interactive / 2FA",
       agentProvider: "Agent provider",
       agentSystem: "System agent",
       agentSocket: "Socket / pipe path (optional)",
@@ -1302,7 +1324,12 @@ export const messages = {
         "auth.agentFailed": "SSH agent identity lookup or signing failed. Check unlock and approval status. Reason: {detail}",
         "auth.agentRejected": "The server rejected the agent keys. Check the username and authorized keys; select a specific key if too many identities exceed the authentication limit.",
         "auth.agentUnsupported": "This agent provider is unavailable on this platform (Pageant requires Windows).",
-        "auth.additionalRequired": "The server accepted the key but requires additional authentication. Combined authentication is not supported yet.",
+        "auth.additionalRequired": "The server requires an unsupported additional authentication method. Continuing with keyboard-interactive is supported.",
+        "auth.canceled": "Authentication canceled",
+        "auth.challengeExpired": "This authentication challenge has ended. Connect again.",
+        "auth.invalidResponse": "The number or length of authentication answers is invalid.",
+        "auth.invalidChallenge": "The server sent too many authentication rounds or prompts.",
+        "auth.interactiveFailed": "Interactive authentication failed. Check the answers or the server's authentication requirements.",
         "hostKey.changed": "The server host key has changed",
 
         "session.notRunning": "The session is not connected",
@@ -1420,6 +1447,7 @@ export const messages = {
         connectSsh: "SSH connection setup",
         authenticateSsh: "SSH authentication",
         connectAgent: "connecting to the SSH agent and listing keys",
+        interactiveAuthentication: "interactive authentication",
         openTerminal: "starting the terminal",
         openSftpChannel: "opening the SFTP channel",
         createDirectory: "creating a folder",

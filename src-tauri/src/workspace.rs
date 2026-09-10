@@ -107,8 +107,8 @@ pub async fn save_profile(
     let mut profiles_file = read_profiles_file(&workspace)?;
     let mut next_profile = profile;
     next_profile.updated_at = now_stamp();
-    let uses_agent = matches!(&next_profile.auth_method, AuthMethod::Agent);
-    if uses_agent {
+    let no_saved_credentials = matches!(&next_profile.auth_method, AuthMethod::Agent | AuthMethod::KeyboardInteractive);
+    if no_saved_credentials {
         next_profile.credential_ref = None;
     }
 
@@ -127,7 +127,7 @@ pub async fn save_profile(
         next_profile.last_connected_at = existing.last_connected_at.clone();
         next_profile.terminal_background = existing.terminal_background.clone();
         // 先保存认证方式，再删除秘密；保留引用能在清理失败或进程中断后重试。
-        if uses_agent {
+        if no_saved_credentials {
             next_profile.credential_ref = existing.credential_ref.clone();
         }
         *existing = next_profile;
@@ -207,7 +207,8 @@ fn finish_profile_change(
 }
 
 fn profile_needs_no_credentials(profile: &ConnectionProfile) -> bool {
-    profile.deleted_at.is_some() || matches!(&profile.auth_method, AuthMethod::Agent)
+    profile.deleted_at.is_some()
+        || matches!(&profile.auth_method, AuthMethod::Agent | AuthMethod::KeyboardInteractive)
 }
 
 // 只清理没有密码/私钥配置继续引用的凭据，成功后才移除用于失败重试的引用。

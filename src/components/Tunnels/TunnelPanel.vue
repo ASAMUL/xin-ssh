@@ -139,7 +139,7 @@ function requestStart(tunnel) {
   if (!profile) return;
 
   // 未保存凭据时先内联收集：密码认证必填密码，私钥认证可留空 passphrase
-  if (profile.authMethod !== "agent" && !profile.credentialRef) {
+  if (["password", "privateKey"].includes(profile.authMethod) && !profile.credentialRef) {
     pendingStartId.value = tunnel.id;
     pendingCredentials.password = "";
     pendingCredentials.passphrase = "";

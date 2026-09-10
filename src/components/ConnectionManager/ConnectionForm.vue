@@ -8,6 +8,8 @@ import { testConnection as testConnectionRequest } from "../../services/workspac
 import { errorCode, localizeError } from "../../utils/appError";
 import { normalizeAgentConfig } from "../../utils/sshAgent";
 import AgentSettings from "./AgentSettings.vue";
+import { usesSavedCredentials } from "../../utils/authentication";
+import { useAuthenticationStore } from "../../stores/authenticationStore";
 
 const props = defineProps({
   profileId: {
@@ -33,13 +35,15 @@ const connectionTestResult = ref(null);
 const saveProgressKey = ref("");
 const newGroupName = ref("");
 let testGeneration = 0;
+let testAuthentication = null;
+const testOwner = `test:${crypto.randomUUID()}`;
 
 const defaultGroupId = computed(() => profileStore.activeGroups[0]?.id ?? "group-default");
 const editingProfile = computed(() =>
   props.profileId ? profileStore.profiles.find((profile) => profile.id === props.profileId) : null,
 );
 const isEditingProfile = computed(() => Boolean(editingProfile.value));
-const hasSavedCredential = computed(() => editingProfile.value?.authMethod !== "agent"
+const hasSavedCredential = computed(() => usesSavedCredentials(editingProfile.value?.authMethod)
   && Boolean(editingProfile.value?.credentialRef));
 const formTitle = computed(() => t(isEditingProfile.value ? "profile.editTitle" : "profile.newTitle"));
 const saveButtonText = computed(() => {
@@ -64,6 +68,7 @@ const authMethodItems = computed(() => [
   { value: "password", label: t("profile.passwordAuth"), icon: "i-lucide-key-round" },
   { value: "privateKey", label: t("profile.privateKeyAuth"), icon: "i-lucide-file-key-2" },
   { value: "agent", label: t("profile.agentAuth"), icon: "i-lucide-key-square" },
+  { value: "keyboardInteractive", label: t("profile.interactiveAuth"), icon: "i-lucide-shield-check" },
 ]);
 
 const form = reactive({
@@ -206,10 +211,10 @@ async function submitProfile() {
 }
 
 async function resolveCredentialRef(currentProfile, profileId, credentials) {
-  // agent 的残留引用只用于后端清理重试，不能当作仍可使用的已保存密码。
-  if (credentials.authMethod === "agent") return null;
-  const currentCredentialRef = currentProfile?.authMethod === "agent"
-    ? null : (currentProfile?.credentialRef ?? null);
+  // 无本地凭据的模式只保留后端清理重试引用，不能当作仍可使用的已保存密码。
+  if (!usesSavedCredentials(credentials.authMethod)) return null;
+  const currentCredentialRef = usesSavedCredentials(currentProfile?.authMethod)
+    ? (currentProfile?.credentialRef ?? null) : null;
 
   if (!credentials.shouldSave) {
     if (currentCredentialRef) {
@@ -279,8 +284,12 @@ watch(() => [
 ], () => {
   testGeneration += 1;
   connectionTestResult.value = null;
+  testAuthentication?.close();
 }, { flush: "sync" });
-onBeforeUnmount(() => { testGeneration += 1; });
+onBeforeUnmount(() => {
+  testGeneration += 1;
+  testAuthentication?.close();
+});
 
 async function testCurrentConnection() {
   if (isTestingConnection.value) return;
@@ -304,12 +313,20 @@ async function testCurrentConnection() {
 
   isTestingConnection.value = true;
   const generation = ++testGeneration;
+  const request = buildConnectionTestRequest();
+  let authentication;
   try {
-    const result = await testConnectionRequest(buildConnectionTestRequest());
+    authentication = useAuthenticationStore().createFlow(testOwner, {
+      host: request.host, port: request.port, username: request.username, name: form.name, purpose: "test",
+    });
+    testAuthentication = authentication;
+    const result = await testConnectionRequest(request, authentication.channel);
     if (generation === testGeneration) connectionTestResult.value = result;
   } catch (testError) {
     if (generation === testGeneration) error.value = `${t("profile.testFailed")}: ${localizeError(testError)}`;
   } finally {
+    authentication?.close();
+    if (testAuthentication === authentication) testAuthentication = null;
     isTestingConnection.value = false;
   }
 }
@@ -427,7 +444,7 @@ async function createInlineGroup() {
           </UFormField>
         </div>
 
-        <div class="segmented-control">
+        <div class="segmented-control connection-auth-methods">
           <UButton
             v-for="method in authMethodItems"
             :key="method.value"
@@ -477,10 +494,10 @@ async function createInlineGroup() {
           </UFormField>
         </div>
 
-        <AgentSettings v-else v-model="form.agent" />
+        <AgentSettings v-else-if="form.authMethod === 'agent'" v-model="form.agent" />
 
         <UCheckbox
-          v-if="form.authMethod !== 'agent'"
+          v-if="usesSavedCredentials(form.authMethod)"
           v-model="shouldSaveCredential"
           class="credential-save-option"
           :label="saveCredentialLabel"

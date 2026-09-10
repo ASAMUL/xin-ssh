@@ -250,6 +250,7 @@ pub enum AuthMethod {
     Password,
     PrivateKey,
     Agent,
+    KeyboardInteractive,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]

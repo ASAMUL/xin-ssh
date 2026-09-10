@@ -12,6 +12,7 @@ use tokio::time::timeout;
 use crate::error::{codes, connection_error, required, timeout as timeout_error, AppError};
 use crate::models::{AgentConfig, AuthMethod};
 use crate::ssh::agent::authenticate_agent;
+use crate::ssh::interactive::{authenticate_interactive, AuthenticationContext};
 use crate::ssh::known_hosts;
 
 pub(crate) const SSH_KEEPALIVE_INTERVAL_SECS: u64 = 30;
@@ -176,6 +177,7 @@ pub(crate) async fn authenticate_session(
     private_key_path: Option<String>,
     passphrase: Option<String>,
     agent: Option<AgentConfig>,
+    authentication: AuthenticationContext,
 ) -> Result<(), AppError> {
     // agent 可能等待系统解锁或硬件触摸，允许交互确认但仍保留整体时限。
     let auth_timeout = if matches!(&auth_method, AuthMethod::Agent) {
@@ -183,21 +185,33 @@ pub(crate) async fn authenticate_session(
     } else {
         SSH_AUTH_TIMEOUT_SECS
     };
-    let result = timeout(
-        Duration::from_secs(auth_timeout),
-        authenticate_with_credentials(
-            session,
-            username,
-            auth_method,
-            password,
-            private_key_path,
-            passphrase,
-            agent,
-        ),
-    )
-    .await
-    .map_err(|_| timeout_error("authenticateSsh", auth_timeout))
-    .and_then(|result| result);
+    let result = async {
+        if matches!(&auth_method, AuthMethod::KeyboardInteractive) {
+            return authenticate_interactive(session, &username, &authentication).await;
+        }
+        let response = timeout(
+            Duration::from_secs(auth_timeout),
+            authenticate_with_credentials(
+                session, username.clone(), auth_method, password, private_key_path, passphrase, agent,
+            ),
+        ).await.map_err(|_| timeout_error("authenticateSsh", auth_timeout))??;
+        match response {
+            client::AuthResult::Success => Ok(()),
+            client::AuthResult::Failure { partial_success, remaining_methods } => {
+                // 只有已接受的首个因素才能继续；否则后续成功会把先前被拒的密码误标为可缓存。
+                if partial_success
+                    && remaining_methods.contains(&russh::MethodKind::KeyboardInteractive)
+                {
+                    authenticate_interactive(session, &username, &authentication).await
+                } else {
+                    Err(AppError::new(
+                        if partial_success { codes::AUTH_ADDITIONAL_REQUIRED } else { codes::AUTH_FAILED },
+                        "Authentication did not complete",
+                    ))
+                }
+            }
+        }
+    }.await;
     if result.is_err() {
         disconnect_session(session, "authentication failed").await;
     }
@@ -213,11 +227,12 @@ async fn authenticate_with_credentials(
     private_key_path: Option<String>,
     passphrase: Option<String>,
     agent: Option<AgentConfig>,
-) -> Result<(), AppError> {
+) -> Result<client::AuthResult, AppError> {
     let auth_result = match auth_method {
         AuthMethod::Agent => {
             return authenticate_agent(session, &username, &agent.unwrap_or_default()).await;
         }
+        AuthMethod::KeyboardInteractive => unreachable!("interactive authentication uses its own exchange"),
         AuthMethod::Password => {
             let password = password
                 .filter(|value| !value.is_empty())
@@ -263,11 +278,7 @@ async fn authenticate_with_credentials(
         }
     };
 
-    if auth_result.success() {
-        Ok(())
-    } else {
-        Err(AppError::new(codes::AUTH_FAILED, "Authentication failed"))
-    }
+    Ok(auth_result)
 }
 
 pub(crate) async fn disconnect_session(session: &client::Handle<ConnectionTestClient>, reason: &str) {

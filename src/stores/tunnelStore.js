@@ -15,6 +15,8 @@ import { localizeError } from "../utils/appError";
 import { createSerialQueue } from "../utils/serialQueue";
 import { sameConnection } from "../utils/connectionIdentity";
 import { normalizeAgentConfig, sameAgentConfig } from "../utils/sshAgent";
+import { usesSavedCredentials } from "../utils/authentication";
+import { useAuthenticationStore } from "./authenticationStore";
 
 const TUNNEL_EVENT_NAME = "tunnel-event";
 const enqueueTunnelConfigChange = createSerialQueue();
@@ -54,6 +56,9 @@ export const useTunnelStore = defineStore("tunnels", {
     handleTunnelEvent(event) {
       const current = this.runtime[event?.tunnelId];
       if (!current || current.attemptId !== event.attemptId || !ACTIVE_STATUSES.has(current.status)) return;
+      if (["started", "stopped", "error"].includes(event.kind)) {
+        useAuthenticationStore().cancelOwner(`tunnel:${event.tunnelId}`);
+      }
 
       if (event.kind === "started") {
         current.hasStarted = true;
@@ -136,6 +141,7 @@ export const useTunnelStore = defineStore("tunnels", {
         status: "starting", error: null, attemptId, hasStarted: false, submitted: false,
       };
 
+      let authentication;
       try {
         await this.startListening();
         if (!this.isCurrentAttempt(tunnel.id, attemptId, "starting")) return false;
@@ -152,6 +158,9 @@ export const useTunnelStore = defineStore("tunnels", {
           throw { code: "tunnel.connectionChanged", message: "Connection changed before tunnel startup" };
         }
         this.runtime[tunnel.id].submitted = true;
+        authentication = useAuthenticationStore().createFlow(`tunnel:${tunnel.id}`, {
+          host: profile.host, port: profile.port, username: profile.username, name: tunnel.name, purpose: "tunnel",
+        });
         const submitted = startTunnel({
           tunnelId: tunnel.id,
           attemptId,
@@ -167,12 +176,13 @@ export const useTunnelStore = defineStore("tunnels", {
           remoteHost: tunnel.remoteHost || "127.0.0.1",
           remotePort: Number(tunnel.remotePort),
           keepaliveSeconds: useSettingsStore().sshKeepaliveSeconds,
-        });
+        }, authentication.channel);
         startRequests.set(attemptId, submitted);
         await submitted;
         return this.isCurrentAttempt(tunnel.id, attemptId)
           && ["starting", "running"].includes(this.runtime[tunnel.id].status);
       } catch (error) {
+        authentication?.close();
         if (this.isCurrentAttempt(tunnel.id, attemptId, "starting")) {
           this.runtime[tunnel.id].status = "error";
           this.runtime[tunnel.id].error = localizeError(error);
@@ -193,6 +203,7 @@ export const useTunnelStore = defineStore("tunnels", {
       const { attemptId } = current;
       if (stopRequests.has(attemptId)) return stopRequests.get(attemptId);
       if (!ACTIVE_STATUSES.has(current.status)) return Promise.resolve();
+      useAuthenticationStore().cancelOwner(`tunnel:${tunnelId}`);
       const submitted = startRequests.get(attemptId);
       const preparing = !current.submitted;
       current.status = "stopping";
@@ -226,7 +237,7 @@ export const useTunnelStore = defineStore("tunnels", {
 });
 
 async function resolveCredentials(profile, credentials) {
-  if (profile.authMethod === "agent") return {};
+  if (!usesSavedCredentials(profile.authMethod)) return {};
   const provided = {
     password: credentials.password || null,
     passphrase: credentials.passphrase || null,

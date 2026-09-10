@@ -60,6 +60,11 @@ pub mod codes {
     pub const AUTH_AGENT_REJECTED: &str = "auth.agentRejected";
     pub const AUTH_AGENT_UNSUPPORTED: &str = "auth.agentUnsupported";
     pub const AUTH_ADDITIONAL_REQUIRED: &str = "auth.additionalRequired";
+    pub const AUTH_CANCELED: &str = "auth.canceled";
+    pub const AUTH_CHALLENGE_EXPIRED: &str = "auth.challengeExpired";
+    pub const AUTH_INVALID_RESPONSE: &str = "auth.invalidResponse";
+    pub const AUTH_INVALID_CHALLENGE: &str = "auth.invalidChallenge";
+    pub const AUTH_INTERACTIVE_FAILED: &str = "auth.interactiveFailed";
     pub const HOST_KEY_CHANGED: &str = "hostKey.changed";
 
     pub const SESSION_NOT_RUNNING: &str = "session.notRunning";

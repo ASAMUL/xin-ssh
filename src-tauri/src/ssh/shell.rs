@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use russh::{ChannelMsg, Disconnect};
 use tauri::{AppHandle, Emitter, State};
+use tauri::ipc::Channel;
 use tokio::sync::{mpsc, Mutex as AsyncMutex, Semaphore};
 use tokio::time::{timeout, Duration, Instant};
 use tokio_util::sync::CancellationToken;
@@ -22,6 +23,7 @@ use crate::sftp::transfer::{
     remove_transfer_cancellation, run_download_transfer, run_upload_transfer,
 };
 use crate::ssh::client::{authenticate_session, connect_with_tofu, disconnect_session};
+use crate::ssh::interactive::{AuthenticationContext, AuthenticationEvent};
 use crate::ssh::registry::{TerminalControl, TerminalRegistry};
 use crate::system_info::{collect_system_info_on_session, SystemInfoSampler};
 use crate::util::shell_quote;
@@ -39,7 +41,9 @@ pub async fn start_terminal_session(
     app: AppHandle,
     registry: State<'_, TerminalRegistry>,
     request: TerminalStartRequest,
+    authentication: Channel<AuthenticationEvent>,
 ) -> Result<(), AppError> {
+    let authentication = AuthenticationContext::new(&app, authentication);
     validate_terminal_start_request(&request)?;
 
     let session_id = request.session_id.clone();
@@ -62,7 +66,7 @@ pub async fn start_terminal_session(
 
     tauri::async_runtime::spawn(async move {
         if let Err(error) =
-            run_terminal_shell(app.clone(), request, control_receiver, registry_handle, cancellation).await
+            run_terminal_shell(app.clone(), request, control_receiver, registry_handle, cancellation, authentication).await
         {
             emit_terminal_event(
                 &app,
@@ -118,6 +122,7 @@ async fn run_terminal_shell(
     mut control_receiver: mpsc::UnboundedReceiver<TerminalControl>,
     registry: TerminalRegistry,
     cancellation: CancellationToken,
+    authentication: AuthenticationContext,
 ) -> Result<(), AppError> {
     // 包括握手失败和事件循环提前返回在内，任何退出都必须停止所属文件操作。
     let _cancel_on_exit = cancellation.clone().drop_guard();
@@ -137,6 +142,7 @@ async fn run_terminal_shell(
             request.private_key_path,
             request.passphrase,
             request.agent,
+            authentication,
         )
         .await?;
 
@@ -453,7 +459,7 @@ fn validate_terminal_start_request(request: &TerminalStartRequest) -> Result<(),
     }
 
     match &request.auth_method {
-        AuthMethod::Agent => {}
+        AuthMethod::Agent | AuthMethod::KeyboardInteractive => {}
         AuthMethod::Password => {
             if request.password.as_deref().unwrap_or_default().is_empty() {
                 return Err(required("password"));
