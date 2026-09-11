@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "@nuxt/ui/composables";
+import { open } from "@tauri-apps/plugin-dialog";
 import ConnectionCard from "./ConnectionCard.vue";
 import ConnectionTable from "./ConnectionTable.vue";
 import DeleteConnectionDialog from "./DeleteConnectionDialog.vue";
@@ -13,6 +14,8 @@ import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
+import { localizeError } from "../../utils/appError";
+import { readSshConfig } from "../../services/workspaceApi";
 
 const RECENT_ROW_LIMIT = 5;
 
@@ -35,6 +38,7 @@ const pendingDeleteProfile = ref(null);
 
 const deleteGroupDialogOpen = ref(false);
 const pendingDeleteGroup = ref(null);
+const isImportingSshConfig = ref(false);
 
 const greeting = computed(() => {
   const hour = new Date().getHours();
@@ -267,6 +271,40 @@ function openProfile(profile) {
   sessionStore.openProfileSession(profile);
 }
 
+async function importSshConfig() {
+  if (isImportingSshConfig.value) return;
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title: t("home.chooseSshConfig"),
+    filters: [{ name: "SSH config", extensions: ["config", "conf", "txt"] }],
+  });
+  if (typeof selected !== "string") return;
+
+  isImportingSshConfig.value = true;
+  try {
+    const entries = await readSshConfig(selected);
+    if (!entries.length) {
+      toast.add({ title: t("home.sshConfigEmpty"), color: "warning" });
+      return;
+    }
+    const imported = await profileStore.importSshConfigEntries(entries);
+    toast.add({
+      title: t("home.sshConfigImported", { count: imported }),
+      icon: "i-lucide-check",
+      color: "success",
+    });
+  } catch (error) {
+    toast.add({
+      title: t("home.sshConfigImportFailed"),
+      description: localizeError(error),
+      color: "error",
+    });
+  } finally {
+    isImportingSshConfig.value = false;
+  }
+}
+
 function toggleFavorite(profileId) {
   profileStore.toggleFavorite(profileId).catch(showError);
 }
@@ -421,6 +459,15 @@ function showError(error) {
             icon="i-lucide-plus"
             :label="t('workspace.addConnectionTitle')"
             @click="uiStore.openConnectionForm()"
+          />
+          <UButton
+            color="neutral"
+            variant="outline"
+            size="sm"
+            icon="i-lucide-file-input"
+            :label="t('home.importSshConfig')"
+            :loading="isImportingSshConfig"
+            @click="importSshConfig"
           />
         </div>
       </header>

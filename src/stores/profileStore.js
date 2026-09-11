@@ -98,6 +98,47 @@ export const useProfileStore = defineStore("profiles", {
         ...patch,
       }));
     },
+    // 导入只创建连接引用，不触碰凭据；逐条复用现有串行保存可让失败项明确停在当前条目。
+    async importSshConfigEntries(entries) {
+      const groupId = this.activeGroups.find((group) => group.id === "group-default")?.id
+        ?? this.activeGroups[0]?.id ?? "group-default";
+      const signatures = new Set(this.activeProfiles.map((profile) => profileSignature(profile)));
+      let imported = 0;
+      for (const entry of entries) {
+        const signature = profileSignature({
+          name: entry.alias,
+          host: entry.host,
+          port: entry.port || 22,
+          username: entry.username,
+        });
+        if (signatures.has(signature)) continue;
+        signatures.add(signature);
+        const id = crypto.randomUUID();
+        const now = Date.now().toString();
+        await this.saveProfile({
+          id,
+          syncId: id,
+          groupId,
+          name: entry.alias,
+          host: entry.host,
+          port: entry.port || 22,
+          username: entry.username,
+          authMethod: entry.privateKeyPath ? "privateKey" : "password",
+          privateKeyPath: entry.privateKeyPath ?? null,
+          agent: null,
+          credentialRef: null,
+          defaultRemotePath: "/",
+          sortOrder: Math.max(-1, ...this.activeProfiles.map((profile) => profile.sortOrder)) + 1,
+          favorite: false,
+          lastConnectedAt: null,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+        });
+        imported += 1;
+      }
+      return imported;
+    },
     async deleteProfile(profileId) {
       return this.persistChange(() => deleteProfile(profileId));
     },
@@ -220,3 +261,9 @@ export const useProfileStore = defineStore("profiles", {
     },
   },
 });
+
+function profileSignature(profile) {
+  return [profile.name, profile.host, profile.port || 22, profile.username]
+    .map((value) => String(value ?? "").trim().toLowerCase())
+    .join("\u0000");
+}

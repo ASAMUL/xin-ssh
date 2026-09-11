@@ -256,6 +256,16 @@ pub struct ConnectionProfile {
     pub deleted_at: Option<String>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshConfigEntry {
+    pub alias: String,
+    pub host: String,
+    pub username: String,
+    pub port: u16,
+    pub private_key_path: Option<String>,
+}
+
 pub fn default_ssh_port() -> u16 {
     22
 }

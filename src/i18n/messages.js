@@ -108,6 +108,11 @@ export const messages = {
       },
       viewGrid: "卡片视图",
       viewList: "列表视图",
+      importSshConfig: "导入 SSH 配置",
+      chooseSshConfig: "选择 SSH 配置文件",
+      sshConfigEmpty: "没有找到可导入的 Host 配置",
+      sshConfigImported: "已导入 {count} 个连接",
+      sshConfigImportFailed: "SSH 配置导入失败",
       table: {
         name: "名称",
         host: "主机",
@@ -686,6 +691,7 @@ export const messages = {
         "ssh.connection": "SSH 连接失败：{detail}",
         "ssh.resolveFailed": "无法解析主机 {host}，请检查地址和 DNS 设置：{detail}",
         "ssh.disconnected": "与服务器的连接已断开",
+        "sshConfig.importFailed": "SSH 配置导入失败：{detail}",
 
         "io.failed": "本地读写失败：{detail}",
         "internal.lockPoisoned": "内部状态异常，请重试",
@@ -842,6 +848,11 @@ export const messages = {
       },
       viewGrid: "Card view",
       viewList: "List view",
+      importSshConfig: "Import SSH config",
+      chooseSshConfig: "Choose an SSH config file",
+      sshConfigEmpty: "No importable Host entries were found",
+      sshConfigImported: "Imported {count} connection(s)",
+      sshConfigImportFailed: "Could not import SSH config",
       table: {
         name: "Name",
         host: "Host",
@@ -1423,6 +1434,7 @@ export const messages = {
         "ssh.connection": "SSH connection failed: {detail}",
         "ssh.resolveFailed": "Could not resolve host {host}. Check the address and DNS settings: {detail}",
         "ssh.disconnected": "The connection to the server was lost",
+        "sshConfig.importFailed": "Could not import SSH config: {detail}",
 
         "io.failed": "Local read/write failed: {detail}",
         "internal.lockPoisoned": "Internal state error, please retry",

@@ -115,6 +115,7 @@ pub mod codes {
     pub const GROUP_NAME_REQUIRED: &str = "group.nameRequired";
     pub const GROUP_NOT_FOUND: &str = "group.notFound";
     pub const PROFILE_NOT_FOUND: &str = "profile.notFound";
+    pub const SSH_CONFIG_IMPORT_FAILED: &str = "sshConfig.importFailed";
     pub const CREDENTIAL_CLEANUP_FAILED: &str = "credential.cleanupFailed";
 
     pub const BACKGROUND_UNSUPPORTED_FORMAT: &str = "background.unsupportedFormat";

@@ -12,7 +12,8 @@ use tempfile::NamedTempFile;
 use crate::error::{codes, io_error, AppError};
 use crate::models::{
     AppStateFile, AppStatus, AuthMethod, ConnectionGroup, ConnectionProfile, ProfilesFile, Snippet,
-    SnippetsFile, TerminalBackground, TunnelConfig, TunnelsFile, WorkspaceSettings, WorkspaceSnapshot,
+    SnippetsFile, SshConfigEntry, TerminalBackground, TunnelConfig, TunnelsFile, WorkspaceSettings,
+    WorkspaceSnapshot,
 };
 use crate::util::{now_stamp, path_to_string};
 
@@ -82,6 +83,163 @@ pub async fn load_workspace(app: AppHandle) -> Result<Option<WorkspaceSnapshot>,
     }
 
     load_workspace_from_dir(&workspace).map(Some)
+}
+
+#[tauri::command]
+pub async fn read_ssh_config(path: String) -> Result<Vec<SshConfigEntry>, AppError> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err(AppError::new(
+            codes::SSH_CONFIG_IMPORT_FAILED,
+            "SSH config path is empty",
+        ));
+    }
+
+    let content = fs::read_to_string(path).map_err(|error| {
+        AppError::new(codes::SSH_CONFIG_IMPORT_FAILED, error.to_string())
+            .with("path", path)
+    })?;
+    parse_ssh_config(&content)
+}
+
+// 只导入连接身份字段，避免把 Include、ProxyCommand 等本机 shell 语义带入应用配置。
+fn parse_ssh_config(content: &str) -> Result<Vec<SshConfigEntry>, AppError> {
+    let mut global = SshConfigDraft::default();
+    let mut blocks: Vec<(Vec<String>, SshConfigDraft)> = Vec::new();
+    let mut current_aliases: Option<Vec<String>> = None;
+    let mut current = SshConfigDraft::default();
+    let mut ignored_block = false;
+    let mut pending = String::new();
+
+    for raw_line in content.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let logical = if line.ends_with('\\') {
+            pending.push_str(line.trim_end_matches('\\'));
+            continue;
+        } else if pending.is_empty() {
+            line.to_string()
+        } else {
+            pending.push_str(line);
+            let joined = pending.clone();
+            pending.clear();
+            joined
+        };
+
+        let (key, value) = split_ssh_config_line(&logical);
+        let Some(value) = value else { continue };
+        if key.eq_ignore_ascii_case("host") {
+            if let Some(aliases) = current_aliases.take() {
+                blocks.push((aliases, current));
+                current = SshConfigDraft::default();
+            }
+            let aliases: Vec<String> = value
+                .split_whitespace()
+                .filter(|alias| !alias.contains('*') && !alias.contains('?') && !alias.starts_with('!'))
+                .map(str::to_string)
+                .collect();
+            let wildcard_defaults = value.split_whitespace().any(|alias| alias == "*");
+            if !aliases.is_empty() {
+                current_aliases = Some(aliases);
+                current = global.clone();
+                ignored_block = false;
+            } else if wildcard_defaults {
+                current_aliases = None;
+                current = SshConfigDraft::default();
+                ignored_block = false;
+            } else {
+                current_aliases = None;
+                current = SshConfigDraft::default();
+                ignored_block = true;
+            }
+            continue;
+        }
+
+        if !ignored_block {
+            let draft = if current_aliases.is_some() { &mut current } else { &mut global };
+            apply_ssh_config_option(draft, &key, &value);
+        }
+    }
+
+    if let Some(aliases) = current_aliases {
+        blocks.push((aliases, current));
+    }
+
+    let home = home_directory();
+    let entries = blocks
+        .into_iter()
+        .flat_map(|(aliases, draft)| {
+            aliases.into_iter().map(|alias| SshConfigEntry {
+                host: draft.host.clone().unwrap_or_else(|| alias.clone()),
+                alias,
+                username: draft.username.clone().unwrap_or_else(default_ssh_username),
+                port: draft.port.unwrap_or(22),
+                private_key_path: draft.identity_file.as_deref().map(|path| expand_home(path, &home)),
+            })
+        })
+        .filter(|entry| !entry.host.trim().is_empty())
+        .collect();
+    Ok(entries)
+}
+
+#[derive(Clone, Default)]
+struct SshConfigDraft {
+    host: Option<String>,
+    username: Option<String>,
+    port: Option<u16>,
+    identity_file: Option<String>,
+}
+
+fn split_ssh_config_line(line: &str) -> (String, Option<String>) {
+    let line = line
+        .split_once(" #")
+        .map(|(before, _)| before)
+        .unwrap_or(line)
+        .trim();
+    let mut parts = line.splitn(2, |character: char| character.is_whitespace());
+    let key = parts.next().unwrap_or_default().to_string();
+    let value = parts.next().map(str::trim).filter(|value| !value.is_empty());
+    if value.is_some() {
+        return (key, value.map(str::to_string));
+    }
+
+    let mut equals = line.splitn(2, '=');
+    let key = equals.next().unwrap_or_default().trim().to_string();
+    (key, equals.next().map(str::trim).filter(|value| !value.is_empty()).map(str::to_string))
+}
+
+fn apply_ssh_config_option(draft: &mut SshConfigDraft, key: &str, value: &str) {
+    match key.to_ascii_lowercase().as_str() {
+        "hostname" => draft.host = Some(value.to_string()),
+        "user" => draft.username = Some(value.to_string()),
+        "port" => draft.port = value.parse::<u16>().ok().filter(|port| *port > 0),
+        "identityfile" if draft.identity_file.is_none() => draft.identity_file = Some(value.to_string()),
+        _ => {}
+    }
+}
+
+fn home_directory() -> String {
+    std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_default()
+}
+
+fn default_ssh_username() -> String {
+    std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .unwrap_or_default()
+}
+
+fn expand_home(path: &str, home: &str) -> String {
+    if home.is_empty() || path == "~" {
+        return if path == "~" && !home.is_empty() { home.to_string() } else { path.to_string() };
+    }
+    if let Some(rest) = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
+        return PathBuf::from(home).join(rest).to_string_lossy().into_owned();
+    }
+    path.to_string()
 }
 
 #[tauri::command]

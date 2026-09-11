@@ -12,6 +12,10 @@ export function loadWorkspace() {
   return invoke("load_workspace");
 }
 
+export function readSshConfig(path) {
+  return invoke("read_ssh_config", { path });
+}
+
 export function changeWorkspaceDir(workspaceDir) {
   return invoke("change_workspace_dir", { workspaceDir });
 }

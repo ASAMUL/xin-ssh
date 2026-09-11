@@ -72,7 +72,7 @@
 
 .home-hero-actions {
   display: grid;
-  grid-template-columns: minmax(220px, 300px) auto;
+  grid-template-columns: minmax(220px, 300px) repeat(2, auto);
   align-items: center;
   gap: 10px;
   justify-self: end;
