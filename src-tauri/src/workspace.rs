@@ -986,7 +986,7 @@ fn backup_corrupt_file(path: &Path, error: &AppError) {
     let renamed = fs::rename(path, &backup).is_ok();
 
     eprintln!(
-        "[xin-terminal] {} is unreadable ({error}); {}",
+        "[xin-ssh] {} is unreadable ({error}); {}",
         path_to_string(path),
         if renamed {
             format!("kept a copy at {}", path_to_string(&backup))

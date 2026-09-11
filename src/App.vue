@@ -154,7 +154,7 @@ onMounted(() => {
     <main class="desktop-window">
       <WindowChrome />
 
-      <section class="desktop-content" aria-label="Xin Terminal">
+      <section class="desktop-content" aria-label="Xin SSH">
         <div v-if="appStore.isLoading" class="startup-state">
           <div class="startup-mark">
             <UIcon name="i-lucide-terminal" />

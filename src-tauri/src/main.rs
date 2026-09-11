@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    xin_terminal_lib::run()
+    xin_ssh_lib::run()
 }

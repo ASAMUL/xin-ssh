@@ -42,7 +42,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
           this.handleDirectoryEvent(event.payload);
         });
       } catch (error) {
-        console.warn("[Xin Terminal] directory event listener unavailable", error);
+        console.warn("[Xin SSH] directory event listener unavailable", error);
       }
     },
     ensureSessionState(session) {

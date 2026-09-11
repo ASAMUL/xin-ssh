@@ -81,7 +81,7 @@ export const useTunnelStore = defineStore("tunnels", {
           this.loaded = true;
         });
       } catch (error) {
-        console.warn("[Xin Terminal] tunnel configs unavailable", error);
+        console.warn("[Xin SSH] tunnel configs unavailable", error);
       }
     },
     async saveConfig(tunnel) {

@@ -1154,7 +1154,7 @@ async function registerDragDrop() {
       handleDragDropPayload(event.payload);
     });
   } catch (error) {
-    console.warn("[Xin Terminal] drag-drop registration failed", error);
+    console.warn("[Xin SSH] drag-drop registration failed", error);
   }
 }
 

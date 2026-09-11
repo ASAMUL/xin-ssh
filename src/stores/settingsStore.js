@@ -90,7 +90,7 @@ export const useSettingsStore = defineStore("settings", {
     // 布局/外观类偏好：先改内存立即生效，持久化失败不回滚（下次启动回落到旧值）
     applySettingsPatch(partial) {
       return this.patchSettings(partial).catch((error) => {
-        console.warn("[Xin Terminal] settings patch failed", error);
+        console.warn("[Xin SSH] settings patch failed", error);
         useUiStore().setError(error);
         return null;
       });

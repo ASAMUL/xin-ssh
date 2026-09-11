@@ -256,7 +256,7 @@ async function runSaveStep(stepKey, task) {
   try {
     return await task();
   } finally {
-    console.info("[Xin Terminal] connection save step", {
+    console.info("[Xin SSH] connection save step", {
       step: stepKey,
       durationMs: Math.round(performance.now() - startedAt),
     });

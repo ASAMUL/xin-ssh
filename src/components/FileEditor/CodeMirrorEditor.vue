@@ -274,7 +274,7 @@ async function loadLanguage(filename) {
 
     activeLanguageName = null;
     view.dispatch({ effects: languageCompartment.reconfigure([]) });
-    console.warn("[Xin Terminal] editor language load failed", error);
+    console.warn("[Xin SSH] editor language load failed", error);
   }
 }
 

@@ -6314,7 +6314,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "xin-terminal"
+name = "xin-ssh"
 version = "0.1.0"
 dependencies = [
  "filetime",

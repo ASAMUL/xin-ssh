@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Xin Terminal",
+  "productName": "Xin SSH",
   "version": "0.1.0",
   "identifier": "com.xin.cn.xin-terminal",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Xin Terminal",
+        "title": "Xin SSH",
         "width": 1440,
         "height": 900,
         "minWidth": 1000,

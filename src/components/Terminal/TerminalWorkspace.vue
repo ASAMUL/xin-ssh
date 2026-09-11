@@ -200,7 +200,7 @@ watch(
       const url = await resolveTerminalBackgroundUrl(file);
       if (!stale) backgroundUrl.value = url;
     } catch (error) {
-      console.warn("[Xin Terminal] terminal background load failed", error);
+      console.warn("[Xin SSH] terminal background load failed", error);
       if (!stale) backgroundUrl.value = null;
     }
   },

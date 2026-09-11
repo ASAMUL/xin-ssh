@@ -315,9 +315,9 @@ async function exportConnectionProfiles() {
   }
 
   const selected = await save({
-    defaultPath: "xin-terminal-connections.json",
+    defaultPath: "xin-ssh-connections.json",
     title: t("home.exportProfilesTitle"),
-    filters: [{ name: "Xin Terminal connections", extensions: ["json"] }],
+    filters: [{ name: "Xin SSH connections", extensions: ["json"] }],
   });
   if (typeof selected !== "string") return;
 

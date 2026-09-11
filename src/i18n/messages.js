@@ -8,9 +8,9 @@ export const messages = {
       purpose: { terminal: "终端", tunnel: "隧道", test: "连接测试" },
     },
     app: {
-      name: "Xin Terminal",
+      name: "Xin SSH",
       pro: "Pro",
-      loading: "正在启动 Xin Terminal",
+      loading: "正在启动 Xin SSH",
       settings: "设置",
     },
     window: {
@@ -18,7 +18,7 @@ export const messages = {
       maximize: "最大化",
       close: "关闭",
       exit: {
-        title: "退出 Xin Terminal？",
+        title: "退出 Xin SSH？",
         description: "退出将关闭当前窗口及其远程连接。",
         unsavedFile: "文件有未保存的修改",
         saving: "正在保存文件，请等待保存完成后再退出。",
@@ -776,9 +776,9 @@ export const messages = {
       purpose: { terminal: "Terminal", tunnel: "Tunnel", test: "Connection test" },
     },
     app: {
-      name: "Xin Terminal",
+      name: "Xin SSH",
       pro: "Pro",
-      loading: "Starting Xin Terminal",
+      loading: "Starting Xin SSH",
       settings: "Settings",
     },
     window: {
@@ -786,7 +786,7 @@ export const messages = {
       maximize: "Maximize",
       close: "Close",
       exit: {
-        title: "Quit Xin Terminal?",
+        title: "Quit Xin SSH?",
         description: "Quitting closes this window and its remote connections.",
         unsavedFile: "This file has unsaved changes",
         saving: "A file is being saved. Wait for it to finish before quitting.",

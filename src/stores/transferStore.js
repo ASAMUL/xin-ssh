@@ -67,7 +67,7 @@ export const useTransferStore = defineStore("transfers", {
         this.persistHistory();
         return true;
       }).catch((error) => {
-        console.warn("[Xin Terminal] load transfer history failed", error);
+        console.warn("[Xin SSH] load transfer history failed", error);
         this.historyError = { code: "transfer.historyLoadFailed", message: String(error) };
         return false;
       }).finally(() => {
@@ -422,7 +422,7 @@ export const useTransferStore = defineStore("transfers", {
         this.historyError = null;
         return true;
       } catch (error) {
-        console.warn("[Xin Terminal] persist transfer history failed", error);
+        console.warn("[Xin SSH] persist transfer history failed", error);
         this.historyError = { code: "transfer.historySaveFailed", message: String(error) };
         return false;
       }

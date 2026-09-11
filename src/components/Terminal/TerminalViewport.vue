@@ -160,7 +160,7 @@ function updateRenderer() {
     // WebView/GPU 不支持时终端仍需可用，该实例后续保持 DOM 渲染。
     webglUnavailable = true;
     addon?.dispose();
-    console.warn("[Xin Terminal] WebGL unavailable, using DOM renderer", error);
+      console.warn("[Xin SSH] WebGL unavailable, using DOM renderer", error);
   }
 }
 

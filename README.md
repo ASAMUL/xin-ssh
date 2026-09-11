@@ -1,6 +1,6 @@
-# Xin Terminal
+# Xin SSH
 
-Xin Terminal is a modern SSH client focused on visual remote file management. The product direction is: operate a remote server like a local file explorer, while keeping terminal access one click away.
+Xin SSH is a modern SSH client focused on visual remote file management. The product direction is: operate a remote server like a local file explorer, while keeping terminal access one click away.
 
 ## Current Slice
 

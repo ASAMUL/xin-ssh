@@ -24,7 +24,7 @@ export const useSnippetStore = defineStore("snippets", {
           this.loaded = true;
         });
       } catch (error) {
-        console.warn("[Xin Terminal] snippets unavailable", error);
+        console.warn("[Xin SSH] snippets unavailable", error);
       }
     },
     async saveSnippet(snippet) {

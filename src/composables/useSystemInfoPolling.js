@@ -23,7 +23,7 @@ export function useSystemInfoPolling(sessionStore, settingsStore) {
       visibilityErrorReported = false;
       return visible && !minimized;
     } catch (error) {
-      if (!visibilityErrorReported) console.warn("[Xin Terminal] window visibility unavailable", error);
+      if (!visibilityErrorReported) console.warn("[Xin SSH] window visibility unavailable", error);
       visibilityErrorReported = true;
       return false;
     }

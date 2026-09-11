@@ -181,7 +181,7 @@ export const useProfileStore = defineStore("profiles", {
       try {
         return await this.persistChange(() => markProfileConnected(profileId));
       } catch (error) {
-        console.warn("[Xin Terminal] mark profile connected failed", error);
+        console.warn("[Xin SSH] mark profile connected failed", error);
         return null;
       }
     },
