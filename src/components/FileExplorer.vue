@@ -810,6 +810,33 @@ const remoteOperationSubmitLabel = computed(() => {
   if (remoteOperationDialog.mode === "move") return t("files.moveTo");
   return t("files.changePermissions");
 });
+const permissionsSummary = computed(() => {
+  const value = remoteOperationDialog.permissions;
+  if (!/^[0-7]{3}$/.test(value)) return [];
+
+  const roles = [
+    ["permissionsOwner", value[0]],
+    ["permissionsGroup", value[1]],
+    ["permissionsOthers", value[2]],
+  ];
+  const flags = [
+    [4, "permissionsRead"],
+    [2, "permissionsWrite"],
+    [1, "permissionsExecute"],
+  ];
+
+  return roles.map(([labelKey, digit]) => {
+    const numericDigit = Number.parseInt(digit, 10);
+    return {
+      digit,
+      label: t(`files.${labelKey}`),
+      flags: flags.map(([mask, flagKey]) => ({
+        enabled: (numericDigit & mask) !== 0,
+        label: t(`files.${flagKey}`),
+      })),
+    };
+  });
+});
 
 function openRemoteOperationDialog(mode, entry = selectedEntries.value[0]) {
   closeContextMenu();
@@ -1714,6 +1741,23 @@ function sortAriaLabel(key) {
             :placeholder="t('files.permissionsPlaceholder')"
             autofocus
           />
+          <div v-if="remoteOperationDialog.mode === 'chmod' && permissionsSummary.length" class="permissions-summary">
+            <strong>{{ t("files.permissionsMeaning") }}</strong>
+            <div v-for="role in permissionsSummary" :key="role.label" class="permissions-summary-row">
+              <span class="permissions-role"><span>{{ role.label }}</span><code>{{ role.digit }}</code></span>
+              <span class="permissions-flags">
+                <span
+                  v-for="flag in role.flags"
+                  :key="flag.label"
+                  class="permissions-flag"
+                  :class="{ enabled: flag.enabled }"
+                >
+                  <UIcon :name="flag.enabled ? 'i-lucide-check' : 'i-lucide-minus'" />
+                  {{ flag.label }}
+                </span>
+              </span>
+            </div>
+          </div>
           <UAlert
             v-if="remoteOperationDialog.error"
             color="error"
