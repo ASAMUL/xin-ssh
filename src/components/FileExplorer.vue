@@ -95,16 +95,24 @@ const query = computed({
   get: () => fileState.value.query,
   set: (value) => fileExplorerStore.setQuery(props.activeSession?.id, value),
 });
+const sortKey = ref("name");
+const sortDirection = ref("asc");
+const entryCollator = computed(() => new Intl.Collator(locale.value, {
+  numeric: true,
+  sensitivity: "base",
+}));
 const visibleEntries = computed(() => {
   const keyword = query.value.trim().toLowerCase();
   const showHidden = settingsStore.showHiddenFiles;
 
-  return fileState.value.entries.filter((entry) => {
+  const filteredEntries = fileState.value.entries.filter((entry) => {
     if (!showHidden && entry.isHidden) return false;
     if (!keyword) return true;
 
     return entry.name.toLowerCase().includes(keyword);
   });
+
+  return sortEntries(filteredEntries, sortKey.value, sortDirection.value, entryCollator.value);
 });
 // 行高需与 file-explorer.css 中 .file-row 的 min-height 保持一致
 const FILE_ROW_HEIGHT = 32;
@@ -1123,6 +1131,72 @@ function formatModified(entry) {
 function fileTypeLabel(entry) {
   return t(`files.kinds.${entry.kind || "other"}`);
 }
+
+// 目录始终置顶，用户切换列时仍能先定位可展开的远程路径；缺失元数据统一排在该列末尾。
+function sortEntries(entries, key, direction, collator) {
+  const multiplier = direction === "desc" ? -1 : 1;
+  return [...entries].sort((left, right) => {
+    if (left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1;
+
+    const leftValue = entrySortValue(left, key);
+    const rightValue = entrySortValue(right, key);
+    const leftMissing = leftValue == null;
+    const rightMissing = rightValue == null;
+    if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+
+    const comparison = leftMissing
+      ? 0
+      : typeof leftValue === "string"
+        ? collator.compare(leftValue, rightValue)
+        : leftValue - rightValue;
+    if (comparison !== 0) return comparison * multiplier;
+
+    const nameComparison = collator.compare(left.name, right.name);
+    return nameComparison || collator.compare(left.path, right.path);
+  });
+}
+
+function entrySortValue(entry, key) {
+  if (key === "size") {
+    if (entry.size == null) return null;
+    const size = Number(entry.size);
+    return Number.isFinite(size) ? size : null;
+  }
+  if (key === "modified") {
+    if (entry.modifiedAt == null) return null;
+    const modifiedAt = Number(entry.modifiedAt);
+    return Number.isFinite(modifiedAt) ? modifiedAt : null;
+  }
+  if (key === "type") return entry.kind || "other";
+  return entry.name;
+}
+
+function toggleSort(nextKey) {
+  if (sortKey.value === nextKey) {
+    sortDirection.value = sortDirection.value === "asc" ? "desc" : "asc";
+    return;
+  }
+
+  sortKey.value = nextKey;
+  sortDirection.value = "asc";
+}
+
+function sortIcon(key) {
+  if (sortKey.value !== key) return "i-lucide-arrow-up-down";
+  return sortDirection.value === "asc" ? "i-lucide-arrow-up" : "i-lucide-arrow-down";
+}
+
+function sortAriaSort(key) {
+  if (sortKey.value !== key) return "none";
+  return sortDirection.value === "asc" ? "ascending" : "descending";
+}
+
+function sortAriaLabel(key) {
+  const field = t(`files.${key === "modified" ? "modified" : key}`);
+  const direction = sortKey.value === key && sortDirection.value === "desc"
+    ? t("files.sortDescending") : t("files.sortAscending");
+  return t("files.sortBy", { field, direction });
+}
 </script>
 
 <template>
@@ -1337,10 +1411,46 @@ function fileTypeLabel(entry) {
           <div class="file-workbench" :class="{ 'drag-over': isDragOver }" @contextmenu="prepareContextMenu">
         <section ref="fileTableWrap" class="file-table-wrap">
           <div class="file-row file-heading">
-            <span class="name-column">{{ t("files.name") }}</span>
-            <span>{{ t("files.size") }}</span>
-            <span>{{ t("files.type") }}</span>
-            <span>{{ t("files.modified") }}</span>
+            <button
+              type="button"
+              class="file-sort-button name-column"
+              :aria-label="sortAriaLabel('name')"
+              :aria-sort="sortAriaSort('name')"
+              @click="toggleSort('name')"
+            >
+              <span>{{ t("files.name") }}</span>
+              <UIcon :name="sortIcon('name')" />
+            </button>
+            <button
+              type="button"
+              class="file-sort-button"
+              :aria-label="sortAriaLabel('size')"
+              :aria-sort="sortAriaSort('size')"
+              @click="toggleSort('size')"
+            >
+              <span>{{ t("files.size") }}</span>
+              <UIcon :name="sortIcon('size')" />
+            </button>
+            <button
+              type="button"
+              class="file-sort-button"
+              :aria-label="sortAriaLabel('type')"
+              :aria-sort="sortAriaSort('type')"
+              @click="toggleSort('type')"
+            >
+              <span>{{ t("files.type") }}</span>
+              <UIcon :name="sortIcon('type')" />
+            </button>
+            <button
+              type="button"
+              class="file-sort-button"
+              :aria-label="sortAriaLabel('modified')"
+              :aria-sort="sortAriaSort('modified')"
+              @click="toggleSort('modified')"
+            >
+              <span>{{ t("files.modified") }}</span>
+              <UIcon :name="sortIcon('modified')" />
+            </button>
             <span>{{ t("files.permissions") }}</span>
           </div>
 

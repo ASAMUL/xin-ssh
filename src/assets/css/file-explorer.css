@@ -541,6 +541,33 @@
   background: var(--xin-surface-raised);
 }
 
+.file-sort-button {
+  min-width: 0;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 0;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.file-sort-button:hover,
+.file-sort-button:focus-visible {
+  color: var(--xin-text);
+}
+
+.file-sort-button svg {
+  flex: 0 0 auto;
+  color: var(--xin-text-faint);
+  font-size: 13px;
+}
+
 .delete-preview :deep(svg) {
   color: var(--xin-danger-deep);
   font-size: 18px;
