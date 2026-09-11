@@ -567,9 +567,9 @@ pub(crate) async fn copy_path_on_session(
         .with("path", &from_path));
     }
 
-    let mut pending = vec![(from_path, to_path, metadata)];
-    while let Some((source_path, target_path, entry_metadata)) = pending.pop() {
-      if entry_metadata.file_type().is_dir() {
+    let mut pending = vec![(from_path, to_path, metadata, false)];
+    while let Some((source_path, target_path, entry_metadata, metadata_only)) = pending.pop() {
+      if entry_metadata.file_type().is_dir() && !metadata_only {
         sftp.create_dir(target_path.clone())
             .await
             .map_err(|error| sftp_error(error, &target_path))?;
@@ -577,42 +577,46 @@ pub(crate) async fn copy_path_on_session(
             .read_dir(source_path.clone())
             .await
             .map_err(|error| sftp_error(error, &source_path))?;
+        // 栈是后进先出：先登记目录元数据，再压入子项，确保权限在所有子项复制完成后恢复。
+        pending.push((source_path.clone(), target_path.clone(), entry_metadata, true));
         for entry in entries {
             let name = entry.file_name();
             let child_from = normalize_remote_path(&format!("{source_path}/{name}"));
             let child_to = normalize_remote_path(&format!("{target_path}/{name}"));
-            pending.push((child_from, child_to, entry.metadata()));
+            pending.push((child_from, child_to, entry.metadata(), false));
         }
       } else {
-        let mut source = sftp
-            .open(source_path.clone())
-            .await
-            .map_err(|error| sftp_error(error, &source_path))?;
-        let mut target = sftp
-            .open_with_flags(
-                target_path.clone(),
-                OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
-            )
-            .await
-            .map_err(|error| sftp_error(error, &target_path))?;
-        let mut buffer = vec![0u8; EDITOR_WRITE_CHUNK_BYTES];
-        loop {
-            let read = source
-                .read(&mut buffer)
+        if !metadata_only {
+            let mut source = sftp
+                .open(source_path.clone())
                 .await
-                .map_err(|error| remote_io_error(error, &source_path))?;
-            if read == 0 {
-                break;
+                .map_err(|error| sftp_error(error, &source_path))?;
+            let mut target = sftp
+                .open_with_flags(
+                    target_path.clone(),
+                    OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+                )
+                .await
+                .map_err(|error| sftp_error(error, &target_path))?;
+            let mut buffer = vec![0u8; EDITOR_WRITE_CHUNK_BYTES];
+            loop {
+                let read = source
+                    .read(&mut buffer)
+                    .await
+                    .map_err(|error| remote_io_error(error, &source_path))?;
+                if read == 0 {
+                    break;
+                }
+                target
+                    .write_all(&buffer[..read])
+                    .await
+                    .map_err(|error| remote_io_error(error, &target_path))?;
             }
             target
-                .write_all(&buffer[..read])
+                .shutdown()
                 .await
                 .map_err(|error| remote_io_error(error, &target_path))?;
         }
-        target
-            .shutdown()
-            .await
-            .map_err(|error| remote_io_error(error, &target_path))?;
       }
 
     if let Some(permissions) = entry_metadata.permissions {

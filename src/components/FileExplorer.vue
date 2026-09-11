@@ -429,6 +429,7 @@ const emptyState = computed(() => {
 watch(() => [props.activeSession?.id, props.activeSession?.currentAttemptId], () => {
   nameDialog.open = false;
   deleteDialog.open = false;
+  closeRemoteOperationDialog(true);
   conflictDialog.open = false;
   contextMenuEntry.value = null;
   treeContextNode.value = null;
@@ -818,7 +819,9 @@ function openRemoteOperationDialog(mode, entry = selectedEntries.value[0]) {
   remoteOperationDialog.mode = mode;
   remoteOperationDialog.entry = entry;
   remoteOperationDialog.targetPath = "";
-  remoteOperationDialog.permissions = entry.permissionsMode == null ? "" : String(entry.permissionsMode).padStart(3, "0");
+  remoteOperationDialog.permissions = entry.permissionsMode == null
+    ? ""
+    : entry.permissionsMode.toString(8).padStart(3, "0");
   remoteOperationDialog.error = "";
 }
 
