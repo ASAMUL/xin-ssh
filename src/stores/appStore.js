@@ -3,6 +3,7 @@ import { getAppStatus, initWorkspace, loadWorkspace } from "../services/workspac
 import { localizeError } from "../utils/appError";
 import { useProfileStore } from "./profileStore";
 import { useSettingsStore } from "./settingsStore";
+import { useSessionStore } from "./sessionStore";
 
 export const useAppStore = defineStore("app", {
   state: () => ({
@@ -20,12 +21,14 @@ export const useAppStore = defineStore("app", {
         if (!status.initialized) {
           const snapshot = await initWorkspace(null);
           this.consumeSnapshot(snapshot);
+          useSessionStore().restorePersistedSessions();
           return;
         }
 
         const snapshot = await loadWorkspace();
         if (snapshot) {
           this.consumeSnapshot(snapshot);
+          useSessionStore().restorePersistedSessions();
         }
       } catch (error) {
         this.error = localizeError(error);

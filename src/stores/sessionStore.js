@@ -60,6 +60,8 @@ export const useSessionStore = defineStore("sessions", {
     sessions: [],
     activeSessionId: null,
     unlistenTerminal: null,
+    hasRestoredSessions: false,
+    isRestoringSessions: false,
   }),
   getters: {
     activeSession: (state) =>
@@ -105,29 +107,40 @@ export const useSessionStore = defineStore("sessions", {
         if (terminalSinks.get(sessionId) === sink) terminalSinks.delete(sessionId);
       };
     },
-    // forceNew: true 跳过复用总是新开终端（加号/快速连接）；默认聚焦已有会话，没有才新建（首页）
-    openProfileSession(profile, { forceNew = false } = {}) {
+    // forceNew: true 跳过复用总是新开终端；恢复时关闭 autoStart，避免没有可复用秘密的连接弹出认证窗口。
+    openProfileSession(profile, {
+      forceNew = false,
+      autoStart = true,
+      remotePath = null,
+      labelIndex = null,
+    } = {}) {
       if (!forceNew) {
         const existingSession = this.sessions.find((session) => session.profileId === profile.id
           && session.workspaceDir === useSettingsStore().workspaceDir && !session.isClosing);
         if (existingSession) {
           syncSessionFromProfile(existingSession, profile);
           this.activeSessionId = existingSession.id;
-          if (shouldAutoConnectSession(existingSession)) {
+          if (autoStart && shouldAutoConnectSession(existingSession)) {
             this.startSessionAutomatically(existingSession.id);
           }
+          this.persistSessionLayout();
           return existingSession;
         }
       }
 
-      const labelIndex = nextSessionLabelIndex(this.sessions, profile.id);
+      const preferredLabelIndex = Number.isInteger(labelIndex) && labelIndex > 0 ? labelIndex : null;
+      const usedLabels = new Set(this.sessions
+        .filter((session) => session.profileId === profile.id)
+        .map((session) => session.labelIndex ?? 1));
+      const resolvedLabelIndex = preferredLabelIndex && !usedLabels.has(preferredLabelIndex)
+        ? preferredLabelIndex : nextSessionLabelIndex(this.sessions, profile.id);
       const session = {
         id: crypto.randomUUID(),
         profileId: profile.id,
         workspaceDir: useSettingsStore().workspaceDir,
         // 同一连接第 2+ 个终端显示 "name (2)"，编号取最小可用值
-        labelIndex,
-        name: sessionDisplayName(profile.name, labelIndex),
+        labelIndex: resolvedLabelIndex,
+        name: sessionDisplayName(profile.name, resolvedLabelIndex),
         host: profile.host,
         port: profile.port,
         username: profile.username,
@@ -135,7 +148,8 @@ export const useSessionStore = defineStore("sessions", {
         privateKeyPath: profile.privateKeyPath,
         agent: normalizeAgentConfig(profile.agent),
         credentialRef: profile.credentialRef ?? null,
-        remotePath: profile.defaultRemotePath || "/",
+        remotePath: typeof remotePath === "string" && remotePath.trim()
+          ? remotePath : (profile.defaultRemotePath || "/"),
         status: "authRequired",
         isClosing: false,
         error: null,
@@ -159,14 +173,49 @@ export const useSessionStore = defineStore("sessions", {
 
       this.sessions.push(session);
       this.activeSessionId = session.id;
-      if (shouldAutoConnectSession(session)) {
+      if (!this.isRestoringSessions && autoStart) this.persistSessionLayout();
+      if (autoStart && shouldAutoConnectSession(session)) {
         this.startSessionAutomatically(session.id);
       }
       return session;
     },
+    // 工作区只保存可重新解析的连接引用；恢复后生成新的运行时 sessionId，避免复用旧事件和文件状态。
+    restorePersistedSessions() {
+      if (this.hasRestoredSessions || !useSettingsStore().settings) return false;
+      this.hasRestoredSessions = true;
+      const restore = useSettingsStore().sessionRestore;
+      const profiles = new Map(useProfileStore().activeProfiles.map((profile) => [profile.id, profile]));
+      const restored = [];
+      this.isRestoringSessions = true;
+      try {
+        for (const entry of restore.sessions) {
+          const profile = profiles.get(entry.profileId);
+          if (!profile) continue;
+          restored.push(this.openProfileSession(profile, {
+            forceNew: true,
+            autoStart: false,
+            remotePath: entry.remotePath,
+            labelIndex: entry.labelIndex,
+          }));
+        }
+      } finally {
+        this.isRestoringSessions = false;
+      }
+      const active = restore.activeProfileId
+        ? restored.find((session) => session.profileId === restore.activeProfileId
+          && (restore.activeLabelIndex == null || session.labelIndex === restore.activeLabelIndex))
+        : restore.activeIndex == null ? null : restored[restore.activeIndex];
+      this.activeSessionId = active?.id ?? restored[0]?.id ?? null;
+      for (const session of restored) {
+        if (canAutoStartRestoredSession(session)) this.startSessionAutomatically(session.id);
+      }
+      this.persistSessionLayout();
+      return restored.length > 0;
+    },
     selectSession(sessionId) {
       if (this.sessions.some((session) => session.id === sessionId && !session.isClosing)) {
         this.activeSessionId = sessionId;
+        this.persistSessionLayout();
       }
     },
     // 首页不占数字编号；从首页向后/向前分别进入第一个/最后一个可用会话。
@@ -196,9 +245,11 @@ export const useSessionStore = defineStore("sessions", {
         : reordered.findIndex((session) => session.id === beforeId);
       reordered.splice(target, 0, session);
       this.sessions = reordered;
+      this.persistSessionLayout();
     },
     showConnectionHub() {
       this.activeSessionId = null;
+      this.persistSessionLayout();
     },
     // 同一标签的并发关闭共用结果，删除配置必须等后端关闭成功才能继续。
     async closeSession(sessionId, { requireDisconnect = false } = {}) {
@@ -223,6 +274,7 @@ export const useSessionStore = defineStore("sessions", {
               ?? this.sessions.slice(0, closingIndex).reverse().find((session) => !session.isClosing);
             this.activeSessionId = nextSession?.id ?? null;
           }
+          this.persistSessionLayout();
         })();
         terminalCloseRequests.set(sessionId, closing);
       }
@@ -415,6 +467,25 @@ export const useSessionStore = defineStore("sessions", {
       if (!session || !remotePath) return;
 
       session.remotePath = remotePath;
+      this.persistSessionLayout();
+    },
+    // 将关闭或顺序变更后的完整状态一次写入，后端按字段合并，不会覆盖其它工作区偏好。
+    persistSessionLayout() {
+      if (this.isRestoringSessions || !useSettingsStore().workspaceDir) return;
+      const sessions = this.sessions.filter((session) => !session.isClosing);
+      const activeSession = sessions.find((session) => session.id === this.activeSessionId);
+      return useSettingsStore().applySettingsPatch({
+        sessionRestore: {
+          sessions: sessions.map((session) => ({
+            profileId: session.profileId,
+            remotePath: session.remotePath || null,
+            labelIndex: session.labelIndex ?? 1,
+          })),
+          activeIndex: activeSession ? sessions.indexOf(activeSession) : null,
+          activeProfileId: activeSession?.profileId ?? null,
+          activeLabelIndex: activeSession?.labelIndex ?? null,
+        },
+      });
     },
     handleTerminalEvent(event) {
       const session = this.findSession(event.sessionId);
@@ -669,6 +740,11 @@ function shouldAutoConnectSession(session) {
     !session.autoStartAttempted &&
     ["authRequired", "closed", "error"].includes(session.status)
   );
+}
+
+function canAutoStartRestoredSession(session) {
+  return session?.authMethod === "agent"
+    || (usesSavedCredentials(session?.authMethod) && Boolean(session?.credentialRef));
 }
 
 function sessionDisplayName(profileName, labelIndex) {

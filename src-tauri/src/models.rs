@@ -29,6 +29,23 @@ pub struct AppStatus {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+pub struct SessionRestoreEntry {
+    pub profile_id: String,
+    pub remote_path: Option<String>,
+    pub label_index: Option<u32>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SessionRestoreState {
+    pub sessions: Vec<SessionRestoreEntry>,
+    pub active_index: Option<usize>,
+    pub active_profile_id: Option<String>,
+    pub active_label_index: Option<u32>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct WorkspaceSettings {
     #[serde(default = "default_schema_version")]
     pub schema_version: u16,
@@ -67,6 +84,9 @@ pub struct WorkspaceSettings {
     // 应用明暗模式：system | light | dark（终端配色是另一套，见 terminal_theme）
     #[serde(default = "default_appearance_mode")]
     pub appearance_mode: String,
+    // 只恢复连接引用和界面位置；密码、OTP、sessionId 与终端输出永不进入配置。
+    #[serde(default)]
+    pub session_restore: SessionRestoreState,
 }
 
 // 新装、settings.json 缺字段、以及文件损坏回退，都落到这一份默认值上
@@ -90,6 +110,7 @@ impl Default for WorkspaceSettings {
             ssh_keepalive_seconds: default_ssh_keepalive_seconds(),
             terminal_background: None,
             appearance_mode: default_appearance_mode(),
+            session_restore: SessionRestoreState::default(),
         }
     }
 }

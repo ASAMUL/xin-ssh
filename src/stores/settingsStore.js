@@ -47,6 +47,7 @@ export const useSettingsStore = defineStore("settings", {
       state.settings?.homeViewMode === "list" ? "list" : "grid",
     terminalBackground: (state) => normalizeTerminalBackground(state.settings?.terminalBackground),
     appearanceMode: (state) => normalizeAppearanceMode(state.settings?.appearanceMode),
+    sessionRestore: (state) => normalizeSessionRestore(state.settings?.sessionRestore),
   },
   actions: {
     hydrate(settings, workspaceDir = this.workspaceDir) {
@@ -188,4 +189,26 @@ function normalizePaneSize(value, fallback) {
   }
 
   return size;
+}
+
+function normalizeSessionRestore(value) {
+  if (!value || !Array.isArray(value.sessions)) {
+    return { sessions: [], activeIndex: null, activeProfileId: null, activeLabelIndex: null };
+  }
+  const sessions = value.sessions
+    .filter((entry) => entry && typeof entry.profileId === "string" && entry.profileId.trim())
+    .map((entry) => ({
+      profileId: entry.profileId,
+      remotePath: typeof entry.remotePath === "string" ? entry.remotePath : null,
+      labelIndex: Number.isInteger(entry.labelIndex) && entry.labelIndex > 0 ? entry.labelIndex : null,
+    }));
+  const activeIndex = Number.isInteger(value.activeIndex) && value.activeIndex >= 0
+    && value.activeIndex < sessions.length ? value.activeIndex : null;
+  return {
+    sessions,
+    activeIndex,
+    activeProfileId: typeof value.activeProfileId === "string" ? value.activeProfileId : null,
+    activeLabelIndex: Number.isInteger(value.activeLabelIndex) && value.activeLabelIndex > 0
+      ? value.activeLabelIndex : null,
+  };
 }
