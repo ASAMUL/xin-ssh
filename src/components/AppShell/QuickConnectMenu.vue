@@ -1,11 +1,12 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useUiStore } from "../../stores/uiStore";
 
 const RECENT_LIMIT = 5;
+const props = defineProps({ disabled: { type: Boolean, default: false } });
 
 const { t } = useI18n();
 const profileStore = useProfileStore();
@@ -13,6 +14,9 @@ const sessionStore = useSessionStore();
 const uiStore = useUiStore();
 
 const open = ref(false);
+watch(() => props.disabled, (disabled) => {
+  if (disabled) open.value = false;
+});
 
 // profileId -> 聚合会话状态（多终端时取“最好”的一个），给列表项的状态点上色
 const sessionStatusByProfile = computed(() => sessionStore.statusByProfile);
@@ -75,12 +79,14 @@ function statusColor(status) {
 }
 
 function openProfile(profile) {
+  if (props.disabled) return;
   open.value = false;
   // 加号 = 总是新开一个终端（Windows Terminal 心理模型）；切换已有会话用顶栏 tab
   sessionStore.openProfileSession(profile, { forceNew: true });
 }
 
 function createConnection() {
+  if (props.disabled) return;
   open.value = false;
   uiStore.openConnectionForm();
 }
@@ -99,6 +105,7 @@ function createConnection() {
       variant="ghost"
       size="sm"
       icon="i-lucide-plus"
+      :disabled="disabled"
       :aria-label="t('quickConnect.open')"
       :title="t('quickConnect.open')"
     />

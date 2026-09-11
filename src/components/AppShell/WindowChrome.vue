@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import SessionTabs from "../SessionTabs.vue";
@@ -8,19 +8,29 @@ import { useAppStore } from "../../stores/appStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useTransferStore } from "../../stores/transferStore";
 import { useUiStore } from "../../stores/uiStore";
+import { useAuthenticationStore } from "../../stores/authenticationStore";
+import { useEditorStore } from "../../stores/editorStore";
+import { useSessionTabShortcuts } from "../../composables/useSessionTabShortcuts";
 
 const { t } = useI18n();
 const appStore = useAppStore();
 const sessionStore = useSessionStore();
 const transferStore = useTransferStore();
 const uiStore = useUiStore();
+const authenticationStore = useAuthenticationStore();
+const editorStore = useEditorStore();
+const tabsDragging = ref(false);
+const tabsDisabled = computed(() => appStore.isLoading || uiStore.isConnectionFormOpen
+  || uiStore.isSettingsOpen || uiStore.isTunnelPanelOpen || uiStore.isWindowCloseOpen
+  || editorStore.isOpen || Boolean(authenticationStore.activeChallenge));
+useSessionTabShortcuts({ disabled: () => tabsDisabled.value || tabsDragging.value });
 const appWindow = window.__TAURI_INTERNALS__ ? getCurrentWindow() : null;
 const platform = navigator.userAgentData?.platform ?? navigator.platform ?? "";
 
 const isMac = computed(() => platform.toLowerCase().includes("mac"));
 
 async function startWindowDrag(event) {
-  if (event.target.closest("button")) return;
+  if (event.button !== 0 || event.target.closest("button, .session-tab")) return;
   if (!appWindow) return;
 
   try {
@@ -62,9 +72,12 @@ function closeWindow() {
       v-if="!appStore.isLoading"
       :sessions="sessionStore.sessions"
       :active-session-id="sessionStore.activeSessionId"
+      :disabled="tabsDisabled"
       @show-connection-hub="sessionStore.showConnectionHub"
       @select="sessionStore.selectSession"
       @close="sessionStore.closeSession"
+      @move="({ id, beforeId }) => sessionStore.moveSession(id, beforeId)"
+      @dragging="tabsDragging = $event"
     />
     <div v-else class="window-drag-space"></div>
 

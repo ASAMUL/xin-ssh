@@ -165,9 +165,37 @@ export const useSessionStore = defineStore("sessions", {
       return session;
     },
     selectSession(sessionId) {
-      if (this.sessions.some((session) => session.id === sessionId)) {
+      if (this.sessions.some((session) => session.id === sessionId && !session.isClosing)) {
         this.activeSessionId = sessionId;
       }
+    },
+    // 首页不占数字编号；从首页向后/向前分别进入第一个/最后一个可用会话。
+    selectAdjacentSession(offset) {
+      const sessions = this.sessions.filter((session) => !session.isClosing);
+      if (!sessions.length || ![-1, 1].includes(offset)) return;
+      const index = sessions.findIndex((session) => session.id === this.activeSessionId);
+      const nextIndex = index < 0
+        ? (offset > 0 ? 0 : sessions.length - 1)
+        : (index + offset + sessions.length) % sessions.length;
+      this.selectSession(sessions[nextIndex].id);
+    },
+    selectSessionByNumber(number) {
+      if (!Number.isInteger(number) || number < 1 || number > 9) return;
+      const sessions = this.sessions.filter((session) => !session.isClosing);
+      const session = number === 9 ? sessions.at(-1) : sessions[number - 1];
+      if (session) this.selectSession(session.id);
+    },
+    // 只移动已有对象，保持 sessionId、revision 及其 xterm 实例不变；拒绝过期的拖动目标。
+    moveSession(sessionId, beforeId = null) {
+      if (sessionId === beforeId || this.sessions.some((session) => session.isClosing)) return;
+      const index = this.sessions.findIndex((session) => session.id === sessionId);
+      if (index < 0 || (beforeId !== null && !this.findSession(beforeId))) return;
+      const reordered = [...this.sessions];
+      const [session] = reordered.splice(index, 1);
+      const target = beforeId === null ? reordered.length
+        : reordered.findIndex((session) => session.id === beforeId);
+      reordered.splice(target, 0, session);
+      this.sessions = reordered;
     },
     showConnectionHub() {
       this.activeSessionId = null;
@@ -191,7 +219,8 @@ export const useSessionStore = defineStore("sessions", {
           if (closingIndex < 0) return;
           this.sessions.splice(closingIndex, 1);
           if (this.activeSessionId === sessionId) {
-            const nextSession = this.sessions[closingIndex] ?? this.sessions[closingIndex - 1] ?? null;
+            const nextSession = this.sessions.slice(closingIndex).find((session) => !session.isClosing)
+              ?? this.sessions.slice(0, closingIndex).reverse().find((session) => !session.isClosing);
             this.activeSessionId = nextSession?.id ?? null;
           }
         })();
