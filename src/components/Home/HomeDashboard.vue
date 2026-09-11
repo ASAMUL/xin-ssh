@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "@nuxt/ui/composables";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import ConnectionCard from "./ConnectionCard.vue";
 import ConnectionTable from "./ConnectionTable.vue";
 import DeleteConnectionDialog from "./DeleteConnectionDialog.vue";
@@ -15,7 +15,7 @@ import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
 import { localizeError } from "../../utils/appError";
-import { readSshConfig } from "../../services/workspaceApi";
+import { exportProfiles, readSshConfig } from "../../services/workspaceApi";
 
 const RECENT_ROW_LIMIT = 5;
 
@@ -39,6 +39,7 @@ const pendingDeleteProfile = ref(null);
 const deleteGroupDialogOpen = ref(false);
 const pendingDeleteGroup = ref(null);
 const isImportingSshConfig = ref(false);
+const isExportingProfiles = ref(false);
 
 const greeting = computed(() => {
   const hour = new Date().getHours();
@@ -305,6 +306,48 @@ async function importSshConfig() {
   }
 }
 
+async function exportConnectionProfiles() {
+  if (isExportingProfiles.value) return;
+  const profiles = profileStore.activeProfiles;
+  if (!profiles.length) {
+    toast.add({ title: t("home.noProfilesToExport"), color: "warning" });
+    return;
+  }
+
+  const selected = await save({
+    defaultPath: "xin-terminal-connections.json",
+    title: t("home.exportProfilesTitle"),
+    filters: [{ name: "Xin Terminal connections", extensions: ["json"] }],
+  });
+  if (typeof selected !== "string") return;
+
+  isExportingProfiles.value = true;
+  try {
+    await exportProfiles(selected, profiles.map((profile) => ({
+      name: profile.name,
+      host: profile.host,
+      port: profile.port,
+      username: profile.username,
+      authMethod: profile.authMethod,
+      privateKeyPath: profile.privateKeyPath ?? null,
+      defaultRemotePath: profile.defaultRemotePath || "/",
+    })));
+    toast.add({
+      title: t("home.profilesExported", { count: profiles.length }),
+      icon: "i-lucide-check",
+      color: "success",
+    });
+  } catch (error) {
+    toast.add({
+      title: t("home.profileExportFailed"),
+      description: localizeError(error),
+      color: "error",
+    });
+  } finally {
+    isExportingProfiles.value = false;
+  }
+}
+
 function toggleFavorite(profileId) {
   profileStore.toggleFavorite(profileId).catch(showError);
 }
@@ -468,6 +511,15 @@ function showError(error) {
             :label="t('home.importSshConfig')"
             :loading="isImportingSshConfig"
             @click="importSshConfig"
+          />
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-file-output"
+            :label="t('home.exportProfiles')"
+            :loading="isExportingProfiles"
+            @click="exportConnectionProfiles"
           />
         </div>
       </header>

@@ -42,6 +42,7 @@ pub fn run() {
             sftp::ops::stream_remote_directory,
             workspace::load_workspace,
             workspace::read_ssh_config,
+            workspace::export_profiles,
             credentials::read_credential,
             sftp::ops::read_remote_file_text,
             background::read_terminal_background,

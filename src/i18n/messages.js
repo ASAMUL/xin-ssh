@@ -113,6 +113,11 @@ export const messages = {
       sshConfigEmpty: "没有找到可导入的 Host 配置",
       sshConfigImported: "已导入 {count} 个连接",
       sshConfigImportFailed: "SSH 配置导入失败",
+      exportProfiles: "导出连接",
+      exportProfilesTitle: "保存连接配置",
+      noProfilesToExport: "没有可导出的连接",
+      profilesExported: "已导出 {count} 个连接",
+      profileExportFailed: "连接配置导出失败",
       table: {
         name: "名称",
         host: "主机",
@@ -692,6 +697,7 @@ export const messages = {
         "ssh.resolveFailed": "无法解析主机 {host}，请检查地址和 DNS 设置：{detail}",
         "ssh.disconnected": "与服务器的连接已断开",
         "sshConfig.importFailed": "SSH 配置导入失败：{detail}",
+        "profile.exportFailed": "连接配置导出失败：{detail}",
 
         "io.failed": "本地读写失败：{detail}",
         "internal.lockPoisoned": "内部状态异常，请重试",
@@ -853,6 +859,11 @@ export const messages = {
       sshConfigEmpty: "No importable Host entries were found",
       sshConfigImported: "Imported {count} connection(s)",
       sshConfigImportFailed: "Could not import SSH config",
+      exportProfiles: "Export connections",
+      exportProfilesTitle: "Save connection configuration",
+      noProfilesToExport: "There are no connections to export",
+      profilesExported: "Exported {count} connection(s)",
+      profileExportFailed: "Could not export connection configuration",
       table: {
         name: "Name",
         host: "Host",
@@ -1435,6 +1446,7 @@ export const messages = {
         "ssh.resolveFailed": "Could not resolve host {host}. Check the address and DNS settings: {detail}",
         "ssh.disconnected": "The connection to the server was lost",
         "sshConfig.importFailed": "Could not import SSH config: {detail}",
+        "profile.exportFailed": "Could not export connection configuration: {detail}",
 
         "io.failed": "Local read/write failed: {detail}",
         "internal.lockPoisoned": "Internal state error, please retry",

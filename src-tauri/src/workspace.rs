@@ -11,9 +11,9 @@ use tempfile::NamedTempFile;
 
 use crate::error::{codes, io_error, AppError};
 use crate::models::{
-    AppStateFile, AppStatus, AuthMethod, ConnectionGroup, ConnectionProfile, ProfilesFile, Snippet,
-    SnippetsFile, SshConfigEntry, TerminalBackground, TunnelConfig, TunnelsFile, WorkspaceSettings,
-    WorkspaceSnapshot,
+    AppStateFile, AppStatus, AuthMethod, ConnectionExportEntry, ConnectionGroup, ConnectionProfile,
+    ProfilesFile, Snippet, SnippetsFile, SshConfigEntry, TerminalBackground, TunnelConfig,
+    TunnelsFile, WorkspaceSettings, WorkspaceSnapshot,
 };
 use crate::util::{now_stamp, path_to_string};
 
@@ -100,6 +100,38 @@ pub async fn read_ssh_config(path: String) -> Result<Vec<SshConfigEntry>, AppErr
             .with("path", path)
     })?;
     parse_ssh_config(&content)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConnectionExportFile {
+    format_version: u16,
+    exported_at: String,
+    profiles: Vec<ConnectionExportEntry>,
+}
+
+#[tauri::command]
+pub async fn export_profiles(
+    path: String,
+    profiles: Vec<ConnectionExportEntry>,
+) -> Result<(), AppError> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err(AppError::new(
+            codes::PROFILE_EXPORT_FAILED,
+            "Export path is empty",
+        ));
+    }
+
+    write_json_file(
+        Path::new(path),
+        &ConnectionExportFile {
+            format_version: 1,
+            exported_at: now_stamp(),
+            profiles,
+        },
+    )
+    .map_err(|error| AppError::new(codes::PROFILE_EXPORT_FAILED, error.to_string()).with("path", path))
 }
 
 // 只导入连接身份字段，避免把 Include、ProxyCommand 等本机 shell 语义带入应用配置。

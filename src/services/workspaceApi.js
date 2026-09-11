@@ -16,6 +16,10 @@ export function readSshConfig(path) {
   return invoke("read_ssh_config", { path });
 }
 
+export function exportProfiles(path, profiles) {
+  return invoke("export_profiles", { path, profiles });
+}
+
 export function changeWorkspaceDir(workspaceDir) {
   return invoke("change_workspace_dir", { workspaceDir });
 }

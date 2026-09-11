@@ -266,6 +266,18 @@ pub struct SshConfigEntry {
     pub private_key_path: Option<String>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionExportEntry {
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth_method: String,
+    pub private_key_path: Option<String>,
+    pub default_remote_path: String,
+}
+
 pub fn default_ssh_port() -> u16 {
     22
 }
