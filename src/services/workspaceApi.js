@@ -152,6 +152,14 @@ export function renameRemotePath(request) {
   return invoke("rename_remote_path", { request });
 }
 
+export function copyRemotePath(request) {
+  return invoke("copy_remote_path", { request });
+}
+
+export function chmodRemotePath(request) {
+  return invoke("chmod_remote_path", { request });
+}
+
 export function startRemoteDelete(request) {
   return invoke("start_remote_delete", { request });
 }

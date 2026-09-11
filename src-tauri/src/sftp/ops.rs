@@ -16,7 +16,7 @@ use crate::error::{
     timeout as timeout_error, AppError,
 };
 use crate::models::{
-    DirectoryEventPayload, RemoteCreateDirectoryRequest, RemoteCreateFileRequest,
+    DirectoryEventPayload, RemoteChmodRequest, RemoteCopyRequest, RemoteCreateDirectoryRequest, RemoteCreateFileRequest,
     RemoteDirectoryStreamRequest, RemoteFileContent, RemoteFileEntry, RemoteListDirectoryRequest,
     RemoteReadFileRequest, RemoteRenameRequest, RemoteWriteFileRequest,
 };
@@ -151,6 +151,45 @@ pub async fn rename_remote_path(
     )
     .await
     .map_err(|_| modification_timeout("rename", 12))?
+}
+
+#[tauri::command]
+pub async fn copy_remote_path(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteCopyRequest,
+) -> Result<(), AppError> {
+    validate_copy_request(&request)?;
+
+    timeout(
+        Duration::from_secs(120),
+        registry.copy_path(RemoteCopyRequest {
+            session_id: request.session_id,
+            from_path: normalize_remote_path(&request.from_path),
+            to_path: normalize_remote_path(&request.to_path),
+            recursive: request.recursive,
+        }),
+    )
+    .await
+    .map_err(|_| modification_timeout("copy", 120))?
+}
+
+#[tauri::command]
+pub async fn chmod_remote_path(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteChmodRequest,
+) -> Result<(), AppError> {
+    validate_chmod_request(&request)?;
+
+    timeout(
+        Duration::from_secs(12),
+        registry.chmod_path(RemoteChmodRequest {
+            session_id: request.session_id,
+            path: normalize_remote_path(&request.path),
+            mode: request.mode,
+        }),
+    )
+    .await
+    .map_err(|_| modification_timeout("chmod", 12))?
 }
 
 fn modification_timeout(operation: &str, seconds: u64) -> AppError {
@@ -481,6 +520,152 @@ pub(crate) async fn rename_path_on_session(
         .map_err(|error| sftp_error(error, &from_path).with("target", &to_path))
 }
 
+// 复制走固定块流式传输，避免大文件一次性读入内存；目录递归前先检查目标路径，防止自复制和覆盖现有数据。
+pub(crate) async fn copy_path_on_session(
+    sftp: &SftpSession,
+    from_path: &str,
+    to_path: &str,
+    recursive: bool,
+) -> Result<(), AppError> {
+    let from_path = normalize_remote_path(from_path);
+    let to_path = normalize_remote_path(to_path);
+
+    if from_path == "/" || to_path == "/" {
+        return Err(root_forbidden("copy"));
+    }
+    if from_path == to_path || to_path.starts_with(&format!("{from_path}/")) {
+        return Err(AppError::new(
+            codes::REMOTE_IO_FAILED,
+            "Copy destination cannot be inside the source",
+        )
+        .with("path", &to_path));
+    }
+    if sftp
+        .try_exists(to_path.clone())
+        .await
+        .map_err(|error| sftp_error(error, &to_path))?
+    {
+        return Err(remote_target_exists(&to_path));
+    }
+
+    let metadata = sftp
+        .metadata(from_path.clone())
+        .await
+        .map_err(|error| sftp_error(error, &from_path))?;
+    if metadata.file_type().is_dir() && !recursive {
+        return Err(AppError::new(
+            codes::REMOTE_IS_DIRECTORY,
+            format!("Remote path is a directory: {from_path}"),
+        )
+        .with("path", &from_path));
+    }
+    if !metadata.file_type().is_dir() && !metadata.file_type().is_file() {
+        return Err(AppError::new(
+            codes::REMOTE_NOT_REGULAR_FILE,
+            format!("Remote path is not a regular file: {from_path}"),
+        )
+        .with("path", &from_path));
+    }
+
+    let mut pending = vec![(from_path, to_path, metadata)];
+    while let Some((source_path, target_path, entry_metadata)) = pending.pop() {
+      if entry_metadata.file_type().is_dir() {
+        sftp.create_dir(target_path.clone())
+            .await
+            .map_err(|error| sftp_error(error, &target_path))?;
+        let entries = sftp
+            .read_dir(source_path.clone())
+            .await
+            .map_err(|error| sftp_error(error, &source_path))?;
+        for entry in entries {
+            let name = entry.file_name();
+            let child_from = normalize_remote_path(&format!("{source_path}/{name}"));
+            let child_to = normalize_remote_path(&format!("{target_path}/{name}"));
+            pending.push((child_from, child_to, entry.metadata()));
+        }
+      } else {
+        let mut source = sftp
+            .open(source_path.clone())
+            .await
+            .map_err(|error| sftp_error(error, &source_path))?;
+        let mut target = sftp
+            .open_with_flags(
+                target_path.clone(),
+                OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+            )
+            .await
+            .map_err(|error| sftp_error(error, &target_path))?;
+        let mut buffer = vec![0u8; EDITOR_WRITE_CHUNK_BYTES];
+        loop {
+            let read = source
+                .read(&mut buffer)
+                .await
+                .map_err(|error| remote_io_error(error, &source_path))?;
+            if read == 0 {
+                break;
+            }
+            target
+                .write_all(&buffer[..read])
+                .await
+                .map_err(|error| remote_io_error(error, &target_path))?;
+        }
+        target
+            .shutdown()
+            .await
+            .map_err(|error| remote_io_error(error, &target_path))?;
+      }
+
+    if let Some(permissions) = entry_metadata.permissions {
+        sftp.set_metadata(
+            target_path.to_string(),
+            russh_sftp::client::fs::Metadata {
+                size: None,
+                uid: None,
+                user: None,
+                gid: None,
+                group: None,
+                permissions: Some(permissions),
+                atime: None,
+                mtime: None,
+            },
+        )
+        .await
+        .map_err(|error| sftp_error(error, &target_path))?;
+    }
+    }
+    Ok(())
+}
+
+pub(crate) async fn chmod_path_on_session(
+    sftp: &SftpSession,
+    path: &str,
+    mode: u32,
+) -> Result<(), AppError> {
+    let path = normalize_remote_path(path);
+    if path == "/" {
+        return Err(root_forbidden("chmod"));
+    }
+    let metadata = sftp
+        .metadata(path.clone())
+        .await
+        .map_err(|error| sftp_error(error, &path))?;
+    sftp.set_metadata(
+        path.clone(),
+        russh_sftp::client::fs::Metadata {
+            size: None,
+            uid: None,
+            user: None,
+            gid: None,
+            group: None,
+            permissions: Some((metadata.permissions.unwrap_or_default() & !0o777) | mode),
+            atime: None,
+            mtime: None,
+        },
+    )
+    .await
+    .map_err(|error| sftp_error(error, &path))
+}
+
 fn directory_event(
     session_id: &str,
     request_id: &str,
@@ -622,5 +807,35 @@ fn validate_rename_request(request: &RemoteRenameRequest) -> Result<(), AppError
         return Err(root_forbidden("rename"));
     }
 
+    Ok(())
+}
+
+fn validate_copy_request(request: &RemoteCopyRequest) -> Result<(), AppError> {
+    if request.session_id.trim().is_empty() {
+        return Err(required("sessionId"));
+    }
+    if request.from_path.trim().is_empty() || request.to_path.trim().is_empty() {
+        return Err(required("remotePath"));
+    }
+    if normalize_remote_path(&request.from_path) == "/" || normalize_remote_path(&request.to_path) == "/" {
+        return Err(root_forbidden("copy"));
+    }
+    Ok(())
+}
+
+fn validate_chmod_request(request: &RemoteChmodRequest) -> Result<(), AppError> {
+    if request.session_id.trim().is_empty() {
+        return Err(required("sessionId"));
+    }
+    if request.path.trim().is_empty() {
+        return Err(required("remotePath"));
+    }
+    if request.mode > 0o777 {
+        return Err(AppError::new(codes::REMOTE_INVALID_PERMISSIONS, "Mode must be between 000 and 777")
+            .with("mode", request.mode));
+    }
+    if normalize_remote_path(&request.path) == "/" {
+        return Err(root_forbidden("chmod"));
+    }
     Ok(())
 }

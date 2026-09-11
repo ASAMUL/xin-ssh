@@ -86,6 +86,7 @@ pub mod codes {
     pub const REMOTE_ROOT_FORBIDDEN: &str = "remote.rootForbidden";
     pub const REMOTE_UNIQUE_NAME_FAILED: &str = "remote.uniqueNameFailed";
     pub const REMOTE_COMMAND_FAILED: &str = "remote.commandFailed";
+    pub const REMOTE_INVALID_PERMISSIONS: &str = "remote.invalidPermissions";
 
     pub const LOCAL_TARGET_EXISTS: &str = "local.targetExists";
     pub const LOCAL_DUPLICATE_TARGET: &str = "local.duplicateTarget";

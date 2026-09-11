@@ -15,7 +15,7 @@ use crate::error::{
     timeout as timeout_error, AppError,
 };
 use crate::models::{
-    RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent, RemoteFileEntry,
+    RemoteChmodRequest, RemoteCopyRequest, RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent, RemoteFileEntry,
     RemoteSystemSnapshot, RemoteUploadRequest,
 };
 
@@ -70,6 +70,17 @@ pub(crate) enum TerminalControl {
     RenamePath {
         from_path: String,
         to_path: String,
+        responder: oneshot::Sender<Result<(), AppError>>,
+    },
+    CopyPath {
+        from_path: String,
+        to_path: String,
+        recursive: bool,
+        responder: oneshot::Sender<Result<(), AppError>>,
+    },
+    ChmodPath {
+        path: String,
+        mode: u32,
         responder: oneshot::Sender<Result<(), AppError>>,
     },
     DeletePaths {
@@ -318,6 +329,33 @@ impl TerminalRegistry {
             .map_err(|_| not_accepting("file"))?;
 
         receiver.await.map_err(|_| request_canceled("rename"))?
+    }
+
+    pub(crate) async fn copy_path(&self, request: RemoteCopyRequest) -> Result<(), AppError> {
+        let sender = self.sender_for(&request.session_id)?;
+        let (responder, receiver) = oneshot::channel();
+        sender
+            .send(TerminalControl::CopyPath {
+                from_path: request.from_path,
+                to_path: request.to_path,
+                recursive: request.recursive,
+                responder,
+            })
+            .map_err(|_| not_accepting("file"))?;
+        receiver.await.map_err(|_| request_canceled("copy"))?
+    }
+
+    pub(crate) async fn chmod_path(&self, request: RemoteChmodRequest) -> Result<(), AppError> {
+        let sender = self.sender_for(&request.session_id)?;
+        let (responder, receiver) = oneshot::channel();
+        sender
+            .send(TerminalControl::ChmodPath {
+                path: request.path,
+                mode: request.mode,
+                responder,
+            })
+            .map_err(|_| not_accepting("file"))?;
+        receiver.await.map_err(|_| request_canceled("chmod"))?
     }
 
     // 先登记任务再投递，取消、关会话和重连都能覆盖尚未启动的删除。

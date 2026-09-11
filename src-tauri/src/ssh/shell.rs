@@ -16,7 +16,7 @@ use crate::sftp::delete::run_delete_task;
 use crate::sftp::session::CachedSftp;
 use crate::sftp::ops::{
     create_directory_on_session, create_file_on_session,
-    list_directory_on_session, read_file_text_on_session, rename_path_on_session,
+    chmod_path_on_session, copy_path_on_session, list_directory_on_session, read_file_text_on_session, rename_path_on_session,
     stream_directory_on_session, write_file_text_on_session,
 };
 use crate::sftp::transfer::{
@@ -310,6 +310,21 @@ async fn run_terminal_shell(
                     } => {
                         cached_sftp.spawn(responder, true, |sftp| async move {
                             rename_path_on_session(&sftp, &from_path, &to_path).await
+                        });
+                    }
+                    TerminalControl::CopyPath {
+                        from_path,
+                        to_path,
+                        recursive,
+                        responder,
+                    } => {
+                        cached_sftp.spawn(responder, true, |sftp| async move {
+                            copy_path_on_session(&sftp, &from_path, &to_path, recursive).await
+                        });
+                    }
+                    TerminalControl::ChmodPath { path, mode, responder } => {
+                        cached_sftp.spawn(responder, true, |sftp| async move {
+                            chmod_path_on_session(&sftp, &path, mode).await
                         });
                     }
                     TerminalControl::DeletePaths {

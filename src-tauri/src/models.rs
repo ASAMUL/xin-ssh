@@ -568,6 +568,23 @@ pub struct RemoteRenameRequest {
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RemoteCopyRequest {
+    pub session_id: String,
+    pub from_path: String,
+    pub to_path: String,
+    pub recursive: bool,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteChmodRequest {
+    pub session_id: String,
+    pub path: String,
+    pub mode: u32,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RemoteDeleteRequest {
     pub task_id: String,
     pub session_id: String,

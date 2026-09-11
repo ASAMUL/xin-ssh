@@ -22,6 +22,8 @@ pub fn run() {
             ssh::shell::close_terminal_session,
             sftp::ops::create_remote_directory,
             sftp::ops::create_remote_file,
+            sftp::ops::copy_remote_path,
+            sftp::ops::chmod_remote_path,
             workspace::delete_group,
             workspace::delete_profile,
             workspace::delete_snippet,

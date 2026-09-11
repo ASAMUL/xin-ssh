@@ -54,6 +54,15 @@ const deleteDialog = reactive({
   error: "",
   isSubmitting: false,
 });
+const remoteOperationDialog = reactive({
+  open: false,
+  mode: "copy",
+  entry: null,
+  targetPath: "",
+  permissions: "",
+  error: "",
+  isSubmitting: false,
+});
 let showOperationsAfterDelete = false;
 const conflictDialog = reactive({
   open: false,
@@ -137,6 +146,7 @@ const selectedEntries = computed(() =>
 );
 const canDownload = computed(() => canTransfer.value && selectedEntries.value.length > 0);
 const canRename = computed(() => canTransfer.value && selectedEntries.value.length === 1);
+const canRemoteOperate = computed(() => canTransfer.value && selectedEntries.value.length === 1);
 const canDelete = computed(() => canTransfer.value && selectedEntries.value.length > 0);
 const contextEntries = computed(() => {
   const entry = contextMenuEntry.value;
@@ -193,6 +203,24 @@ const contextMenuItems = computed(() => {
               icon: "i-lucide-pencil",
               disabled: !canTransfer.value,
               onSelect: renameContextEntry,
+            },
+            {
+              label: t("files.copyTo"),
+              icon: "i-lucide-copy-plus",
+              disabled: !canRemoteOperate.value || entries.length !== 1,
+              onSelect: () => openRemoteOperationDialog("copy", entry),
+            },
+            {
+              label: t("files.moveTo"),
+              icon: "i-lucide-folder-input",
+              disabled: !canRemoteOperate.value || entries.length !== 1,
+              onSelect: () => openRemoteOperationDialog("move", entry),
+            },
+            {
+              label: t("files.changePermissions"),
+              icon: "i-lucide-shield-check",
+              disabled: !canRemoteOperate.value || entries.length !== 1,
+              onSelect: () => openRemoteOperationDialog("chmod", entry),
             },
           ]
         : []),
@@ -767,6 +795,76 @@ function closeNameDialog() {
   nameDialog.error = "";
 }
 
+const remoteOperationTitle = computed(() => {
+  if (remoteOperationDialog.mode === "copy") return t("files.copyToTitle");
+  if (remoteOperationDialog.mode === "move") return t("files.moveToTitle");
+  return t("files.changePermissionsTitle");
+});
+const remoteOperationDescription = computed(() => {
+  if (remoteOperationDialog.mode === "chmod") return t("files.changePermissionsDescription");
+  return t("files.remoteTargetDescription");
+});
+const remoteOperationSubmitLabel = computed(() => {
+  if (remoteOperationDialog.mode === "copy") return t("files.copyTo");
+  if (remoteOperationDialog.mode === "move") return t("files.moveTo");
+  return t("files.changePermissions");
+});
+
+function openRemoteOperationDialog(mode, entry = selectedEntries.value[0]) {
+  closeContextMenu();
+  if (!canTransfer.value || !entry || selectedEntries.value.length > 1) return;
+
+  remoteOperationDialog.open = true;
+  remoteOperationDialog.mode = mode;
+  remoteOperationDialog.entry = entry;
+  remoteOperationDialog.targetPath = "";
+  remoteOperationDialog.permissions = entry.permissionsMode == null ? "" : String(entry.permissionsMode).padStart(3, "0");
+  remoteOperationDialog.error = "";
+}
+
+function closeRemoteOperationDialog(force = false) {
+  if (remoteOperationDialog.isSubmitting && !force) return;
+  remoteOperationDialog.open = false;
+  remoteOperationDialog.entry = null;
+  remoteOperationDialog.targetPath = "";
+  remoteOperationDialog.permissions = "";
+  remoteOperationDialog.error = "";
+}
+
+async function submitRemoteOperation() {
+  // 先在界面拦截明显无效的路径和权限值，避免把可预见的输入错误送到远端。
+  const entry = remoteOperationDialog.entry;
+  if (!props.activeSession || !entry || remoteOperationDialog.isSubmitting) return;
+
+  const mode = remoteOperationDialog.mode;
+  if (mode === "chmod") {
+    if (!/^[0-7]{3}$/.test(remoteOperationDialog.permissions)) {
+      remoteOperationDialog.error = t("files.permissionsInvalid");
+      return;
+    }
+  } else if (!remoteOperationDialog.targetPath.trim() || !remoteOperationDialog.targetPath.trim().startsWith("/")) {
+    remoteOperationDialog.error = t("files.remotePathRequired");
+    return;
+  }
+
+  remoteOperationDialog.isSubmitting = true;
+  remoteOperationDialog.error = "";
+  try {
+    if (mode === "copy") {
+      await fileExplorerStore.copyEntry(props.activeSession, entry.path, remoteOperationDialog.targetPath.trim(), entry.isDirectory);
+    } else if (mode === "move") {
+      await fileExplorerStore.renameEntry(props.activeSession, entry.path, remoteOperationDialog.targetPath.trim());
+    } else {
+      await fileExplorerStore.chmodEntry(props.activeSession, entry.path, Number.parseInt(remoteOperationDialog.permissions, 8));
+    }
+    closeRemoteOperationDialog(true);
+  } catch (error) {
+    remoteOperationDialog.error = localizeError(error);
+  } finally {
+    remoteOperationDialog.isSubmitting = false;
+  }
+}
+
 async function submitNameDialog() {
   if (!props.activeSession || nameDialog.isSubmitting) return;
 
@@ -963,6 +1061,7 @@ function handleWindowKeydown(event) {
   if (event.key === "Escape") {
     if (nameDialog.open) closeNameDialog();
     else if (deleteDialog.open) closeDeleteDialog();
+    else if (remoteOperationDialog.open) closeRemoteOperationDialog();
     else if (conflictDialog.open) closeConflictDialog();
     else fileExplorerStore.clearSelection(props.activeSession?.id);
 
@@ -1580,6 +1679,55 @@ function sortAriaLabel(key) {
           :loading="deleteDialog.isSubmitting"
           :label="t('files.delete')"
           @click="submitDeleteDialog"
+        />
+      </template>
+    </UModal>
+
+    <UModal
+      v-model:open="remoteOperationDialog.open"
+      :title="remoteOperationTitle"
+      :description="remoteOperationDescription"
+      :dismissible="!remoteOperationDialog.isSubmitting"
+      :close="!remoteOperationDialog.isSubmitting"
+      :ui="{ footer: 'justify-end' }"
+    >
+      <template #body>
+        <form class="file-dialog-form" @submit.prevent="submitRemoteOperation">
+          <UInput
+            v-if="remoteOperationDialog.mode !== 'chmod'"
+            v-model="remoteOperationDialog.targetPath"
+            color="neutral"
+            variant="outline"
+            :placeholder="t('files.remotePathPlaceholder')"
+            autofocus
+          />
+          <UInput
+            v-else
+            v-model="remoteOperationDialog.permissions"
+            color="neutral"
+            variant="outline"
+            inputmode="numeric"
+            maxlength="3"
+            :placeholder="t('files.permissionsPlaceholder')"
+            autofocus
+          />
+          <UAlert
+            v-if="remoteOperationDialog.error"
+            color="error"
+            variant="soft"
+            icon="i-lucide-circle-alert"
+            :title="remoteOperationDialog.error"
+          />
+        </form>
+      </template>
+      <template #footer>
+        <UButton color="neutral" variant="outline" :label="t('common.cancel')" :disabled="remoteOperationDialog.isSubmitting" @click="closeRemoteOperationDialog" />
+        <UButton
+          color="primary"
+          icon="i-lucide-check"
+          :loading="remoteOperationDialog.isSubmitting"
+          :label="remoteOperationSubmitLabel"
+          @click="submitRemoteOperation"
         />
       </template>
     </UModal>

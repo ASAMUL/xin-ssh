@@ -3,6 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import {
   createRemoteDirectory,
   createRemoteFile,
+  copyRemotePath,
+  chmodRemotePath,
   listRemoteDirectory,
   renameRemotePath,
   streamRemoteDirectory,
@@ -270,6 +272,27 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       if (!this.isCurrentState(session.id, state)) return;
       this.refreshTreeChildren(session, parentRemotePath(fromPath));
       this.refreshTreeChildren(session, parentRemotePath(toPath));
+    },
+    async copyEntry(session, fromPath, toPath, recursive) {
+      // 复制完成后同时刷新列表和目标父目录，避免目录树显示旧的远端状态。
+      const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
+
+      await copyRemotePath({ sessionId: session.id, fromPath, toPath, recursive });
+      if (!this.isCurrentState(session.id, state)) return;
+      await this.refreshDirectory(session);
+      if (!this.isCurrentState(session.id, state)) return;
+      this.refreshTreeChildren(session, parentRemotePath(toPath));
+    },
+    async chmodEntry(session, path, mode) {
+      // 权限变化只影响元数据，但列表与目录树都依赖权限字段，所以统一刷新来源。
+      const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
+
+      await chmodRemotePath({ sessionId: session.id, path, mode });
+      if (!this.isCurrentState(session.id, state)) return;
+      await this.refreshDirectory(session);
+      if (this.isCurrentState(session.id, state)) this.refreshTreeChildren(session, parentRemotePath(path));
     },
     async refreshAfterDeletion(session, paths) {
       const state = this.ensureSessionState(session);
