@@ -846,7 +846,7 @@ async function submitRemoteOperation() {
       remoteOperationDialog.error = t("files.permissionsInvalid");
       return;
     }
-  } else if (!remoteOperationDialog.targetPath.trim() || !remoteOperationDialog.targetPath.trim().startsWith("/")) {
+  } else if (!remoteOperationDialog.targetPath.startsWith("/") || remoteOperationDialog.targetPath.includes("\0")) {
     remoteOperationDialog.error = t("files.remotePathRequired");
     return;
   }
@@ -855,9 +855,9 @@ async function submitRemoteOperation() {
   remoteOperationDialog.error = "";
   try {
     if (mode === "copy") {
-      await fileExplorerStore.copyEntry(props.activeSession, entry.path, remoteOperationDialog.targetPath.trim(), entry.isDirectory);
+      await fileExplorerStore.copyEntry(props.activeSession, entry.path, remoteOperationDialog.targetPath, entry.isDirectory);
     } else if (mode === "move") {
-      await fileExplorerStore.renameEntry(props.activeSession, entry.path, remoteOperationDialog.targetPath.trim());
+      await fileExplorerStore.renameEntry(props.activeSession, entry.path, remoteOperationDialog.targetPath);
     } else {
       await fileExplorerStore.chmodEntry(props.activeSession, entry.path, Number.parseInt(remoteOperationDialog.permissions, 8));
     }
@@ -872,13 +872,13 @@ async function submitRemoteOperation() {
 async function submitNameDialog() {
   if (!props.activeSession || nameDialog.isSubmitting) return;
 
-  const name = nameDialog.value.trim();
+  const name = nameDialog.value;
   if (!name) {
     nameDialog.error = t("files.nameRequired");
     return;
   }
 
-  if (name.includes("/") || name.includes("\\")) {
+  if (name.includes("/") || name.includes("\0") || name === "." || name === "..") {
     nameDialog.error = t("files.nameCannotContainSlash");
     return;
   }
@@ -1165,7 +1165,7 @@ function normalizeDialogSelection(selection) {
   if (!selection) return [];
 
   const values = Array.isArray(selection) ? selection : [selection];
-  return values.map((value) => String(value || "").trim()).filter(Boolean);
+  return values.map((value) => String(value || "")).filter(Boolean);
 }
 
 function shouldHandleFileShortcut() {

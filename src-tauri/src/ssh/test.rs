@@ -1,12 +1,10 @@
-use std::sync::{Arc, Mutex};
-
 use tokio::time::Instant;
 use tauri::{ipc::Channel, AppHandle};
 
 use crate::error::{port_invalid, required, AppError};
 use crate::models::{ConnectionTestRequest, ConnectionTestResult};
 use crate::ssh::client::{
-    authenticate_session, connect_transport, disconnect_session, ConnectionTestClient, ServerKeySnapshot,
+    authenticate_session, connect_verified, disconnect_session,
 };
 use crate::ssh::interactive::{AuthenticationContext, AuthenticationEvent};
 
@@ -19,25 +17,20 @@ pub async fn test_connection(
     let authentication = AuthenticationContext::new(&app, authentication);
     validate_connection_test_request(&request)?;
 
-    run_connection_test(request, authentication).await
+    run_connection_test(&app, request, authentication).await
 }
 
 async fn run_connection_test(
+    app: &AppHandle,
     request: ConnectionTestRequest,
     authentication: AuthenticationContext,
 ) -> Result<ConnectionTestResult, AppError> {
     let auth_method = request.auth_method.clone();
-    let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
-    let handler = ConnectionTestClient {
-        server_key: Arc::clone(&server_key),
-        // 连接测试只上报指纹信息，不做 TOFU 拦截
-        expected_fingerprint: None,
-    };
     let host = request.host.trim().to_string();
     let username = request.username.trim().to_string();
     let started = Instant::now();
 
-    let mut session = connect_transport(&host, request.port, None, handler).await?;
+    let (mut session, server_key) = connect_verified(app, &host, request.port, None).await?;
     authenticate_session(
         &mut session,
         username,
@@ -51,11 +44,6 @@ async fn run_connection_test(
     .await?;
     let latency_ms = started.elapsed().as_millis();
     disconnect_session(&session, "connection test complete").await;
-
-    let server_key = server_key
-        .lock()
-        .map(|snapshot| snapshot.clone())
-        .unwrap_or_default();
 
     Ok(ConnectionTestResult {
         authenticated: true,

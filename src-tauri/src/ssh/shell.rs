@@ -189,7 +189,7 @@ async fn run_terminal_shell(
         None,
     );
 
-    let initial_path = request.default_remote_path.trim();
+    let initial_path = request.default_remote_path.as_str();
     if !initial_path.is_empty() && initial_path != "/" {
         channel
             .data_bytes(format!("cd {}\r", shell_quote(initial_path)).into_bytes())
@@ -297,10 +297,12 @@ async fn run_terminal_shell(
                     TerminalControl::WriteFileText {
                         path,
                         content,
+                        expected_version,
+                        backup_path,
                         responder,
                     } => {
                         cached_sftp.spawn(responder, true, |sftp| async move {
-                            write_file_text_on_session(&sftp, &path, &content).await
+                            write_file_text_on_session(sftp, &path, &content, &expected_version, &backup_path).await
                         });
                     }
                     TerminalControl::RenamePath {

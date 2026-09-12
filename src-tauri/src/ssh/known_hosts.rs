@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager};
 use crate::error::{codes, io_error, lock_poisoned, required, AppError};
 use crate::models::TrustHostKeyRequest;
 use crate::util::now_millis;
-use crate::workspace::{read_json_file_or_recover, write_json_file, CURRENT_SCHEMA_VERSION};
+use crate::workspace::{write_json_file, CURRENT_SCHEMA_VERSION};
 
 const KNOWN_HOSTS_FILE: &str = "known-hosts.json";
 
@@ -15,7 +15,7 @@ const KNOWN_HOSTS_FILE: &str = "known-hosts.json";
 static KNOWN_HOSTS_IO_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(rename_all = "camelCase")]
 struct KnownHostsFile {
     schema_version: u16,
     hosts: HashMap<String, KnownHostEntry>,
@@ -31,7 +31,7 @@ impl Default for KnownHostsFile {
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(rename_all = "camelCase")]
 struct KnownHostEntry {
     fingerprint: String,
     algorithm: Option<String>,
@@ -59,6 +59,7 @@ pub async fn trust_host_key(app: AppHandle, request: TrustHostKeyRequest) -> Res
         request.port,
         request.fingerprint.trim(),
         request.algorithm.as_deref(),
+        true,
     )
 }
 
@@ -67,6 +68,7 @@ pub(crate) fn lookup_fingerprint(
     host: &str,
     port: u16,
 ) -> Result<Option<String>, AppError> {
+    let _guard = KNOWN_HOSTS_IO_LOCK.lock().map_err(|_| lock_poisoned())?;
     let known_hosts = read_known_hosts(app)?;
 
     Ok(known_hosts
@@ -81,10 +83,23 @@ pub(crate) fn record_host_key(
     port: u16,
     fingerprint: &str,
     algorithm: Option<&str>,
+    replace: bool,
 ) -> Result<(), AppError> {
     let _guard = KNOWN_HOSTS_IO_LOCK.lock().map_err(|_| lock_poisoned())?;
     let path = known_hosts_path(app)?;
     let mut known_hosts = read_known_hosts_at(&path)?;
+    fingerprint.parse::<russh::keys::ssh_key::Fingerprint>()
+        .map_err(|error| host_store_error(error).with("path", path.display()))?;
+    // 首连握手可能并发完成；持锁复核，不能让后完成的连接覆盖刚建立的信任。
+    if !replace {
+        if let Some(entry) = known_hosts.hosts.get(&host_entry_id(host, port)) {
+            return if entry.fingerprint == fingerprint {
+                Ok(())
+            } else {
+                Err(host_key_changed_error(&entry.fingerprint, fingerprint))
+            };
+        }
+    }
     let now = now_millis();
 
     known_hosts
@@ -104,10 +119,11 @@ pub(crate) fn record_host_key(
     known_hosts.schema_version = CURRENT_SCHEMA_VERSION;
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(io_error)?;
+        fs::create_dir_all(parent).map_err(host_store_error)?;
     }
 
     write_json_file(&path, &known_hosts)
+        .map_err(|error| host_store_error(error).with("path", path.display()))
 }
 
 /// 指纹与记录不一致：前端据此弹「主机密钥已变更」面板，
@@ -126,11 +142,30 @@ fn read_known_hosts(app: &AppHandle) -> Result<KnownHostsFile, AppError> {
 }
 
 fn read_known_hosts_at(path: &PathBuf) -> Result<KnownHostsFile, AppError> {
-    if !path.exists() {
-        return Ok(KnownHostsFile::default());
+    // 信任记录损坏不能降级为空表，否则既有主机将重新被当成首次连接。
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(KnownHostsFile::default());
+        }
+        Err(error) => return Err(host_store_error(error).with("path", path.display())),
+    };
+    let known_hosts: KnownHostsFile = serde_json::from_slice(&bytes)
+        .map_err(|error| host_store_error(error).with("path", path.display()))?;
+    if known_hosts.schema_version != CURRENT_SCHEMA_VERSION
+        || known_hosts.hosts.iter().any(|(host, entry)| {
+            host.is_empty() || entry.fingerprint.parse::<russh::keys::ssh_key::Fingerprint>().is_err()
+        })
+    {
+        return Err(host_store_error("Invalid known-hosts schema or fingerprint")
+            .with("path", path.display()));
     }
+    Ok(known_hosts)
+}
 
-    read_json_file_or_recover(path, KnownHostsFile::default)
+pub(crate) fn host_store_error(detail: impl std::fmt::Display) -> AppError {
+    AppError::new(codes::HOST_KEY_STORE_FAILED, "Could not verify or persist host trust")
+        .with("detail", detail)
 }
 
 fn known_hosts_path(app: &AppHandle) -> Result<PathBuf, AppError> {

@@ -117,7 +117,7 @@ pub(crate) async fn connect_transport(
 }
 
 // 建立 SSH TCP 连接并做 TOFU 指纹校验：已有记录则校验（不一致报 HOST_KEY_CHANGED），
-// 首次连接成功后记录指纹。终端与隧道共用。
+// 首次握手后、认证前持久化指纹。终端、隧道与连接测试共用。
 // keepalive_seconds: None = 默认 30s，Some(0) = 禁用。
 pub(crate) async fn connect_with_tofu(
     app: &AppHandle,
@@ -125,6 +125,16 @@ pub(crate) async fn connect_with_tofu(
     port: u16,
     keepalive_seconds: Option<u64>,
 ) -> Result<client::Handle<ConnectionTestClient>, AppError> {
+    connect_verified(app, host, port, keepalive_seconds).await.map(|(session, _)| session)
+}
+
+// 所有会发送凭据的入口必须先完成持久化信任校验，不能把测试连接当作例外。
+pub(crate) async fn connect_verified(
+    app: &AppHandle,
+    host: &str,
+    port: u16,
+    keepalive_seconds: Option<u64>,
+) -> Result<(client::Handle<ConnectionTestClient>, ServerKeySnapshot), AppError> {
     let expected_fingerprint = known_hosts::lookup_fingerprint(app, host, port)?;
     let server_key = Arc::new(Mutex::new(ServerKeySnapshot::default()));
     let handler = ConnectionTestClient {
@@ -149,23 +159,19 @@ pub(crate) async fn connect_with_tofu(
         }
     };
 
-    if expected_fingerprint.is_none() {
-        let snapshot = server_key
-            .lock()
-            .map(|snapshot| snapshot.clone())
-            .unwrap_or_default();
-        if let Some(fingerprint) = &snapshot.fingerprint {
-            let _ = known_hosts::record_host_key(
-                app,
-                host,
-                port,
-                fingerprint,
-                snapshot.algorithm.as_deref(),
-            );
-        }
+    let snapshot = server_key.lock().map(|snapshot| snapshot.clone()).unwrap_or_default();
+    let verification = match &snapshot.fingerprint {
+        Some(fingerprint) => known_hosts::record_host_key(
+            app, host, port, fingerprint, snapshot.algorithm.as_deref(), false,
+        ),
+        None => Err(known_hosts::host_store_error("Server fingerprint unavailable")),
+    };
+    if let Err(error) = verification {
+        disconnect_session(&session, "host verification failed").await;
+        return Err(error);
     }
 
-    Ok(session)
+    Ok((session, snapshot))
 }
 
 // 认证服务器不响应时及时结束；私钥读取和解密移出异步 worker，连接测试复用同一条路径。

@@ -548,6 +548,7 @@ pub struct RemoteWriteFileRequest {
     pub session_id: String,
     pub path: String,
     pub content: String,
+    pub expected_version: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -556,6 +557,7 @@ pub struct RemoteFileContent {
     pub path: String,
     pub size: u64,
     pub content: String,
+    pub version: String,
 }
 
 #[derive(Clone, Deserialize)]

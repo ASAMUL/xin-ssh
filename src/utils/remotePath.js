@@ -2,7 +2,7 @@
 export const DEFAULT_REMOTE_PATH = "/";
 
 export function normalizeRemotePath(path = DEFAULT_REMOTE_PATH) {
-  const cleanPath = String(path || DEFAULT_REMOTE_PATH).trim().replaceAll("\\", "/");
+  const cleanPath = String(path || DEFAULT_REMOTE_PATH);
   const parts = [];
 
   for (const part of cleanPath.split("/")) {
@@ -29,7 +29,7 @@ export function parentRemotePath(path) {
 
 export function joinRemotePath(base, child) {
   const cleanBase = normalizeRemotePath(base);
-  const cleanChild = String(child || "").replace(/[\\/]/g, "_");
+  const cleanChild = String(child || "").replaceAll("/", "_");
 
   return cleanBase === DEFAULT_REMOTE_PATH ? `/${cleanChild}` : `${cleanBase}/${cleanChild}`;
 }

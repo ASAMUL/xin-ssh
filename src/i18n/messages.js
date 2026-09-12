@@ -368,7 +368,7 @@ export const messages = {
       createFileDescription: "在当前远程路径下创建一个空文件。",
       namePlaceholder: "输入名称",
       nameRequired: "请输入名称",
-      nameCannotContainSlash: "名称不能包含路径分隔符",
+      nameCannotContainSlash: "名称不能是 . 或 ..，也不能包含 / 或空字符",
       rename: "重命名",
       renameTitle: "重命名",
       renameDescription: "修改当前远程项目的名称。",
@@ -471,6 +471,7 @@ export const messages = {
       cancel: "取消传输",
       queued: "等待开始",
       planning: "扫描中",
+      verifying: "校验中",
       planningMeta: "正在准备传输，已发现 {count} 个文件",
       progressMeta: "{speed} · {done}/{total} 个文件",
       uploadFallback: "上传",
@@ -612,6 +613,7 @@ export const messages = {
     errors: {
       title: "操作失败",
       copy: "复制详情",
+      recoveryHint: "请先刷新并核对远端文件，避免直接重试；如需恢复原内容，请检查备份 {path}。若操作在备份完成前停止，该备份可能不完整或不存在，原文件未改写。",
       // 后端 AppError.code → 文案。占位符对应 AppError.params。
       codes: {
         "validation.required": "缺少必填项：{field}",
@@ -637,6 +639,11 @@ export const messages = {
         "auth.invalidChallenge": "服务器发送了过多的认证轮次或问题",
         "auth.interactiveFailed": "交互认证未通过，请检查本轮答案或服务器的认证要求",
         "hostKey.changed": "服务器主机密钥已变更",
+        "remote.fileChanged": "远端文件内容已发生变化，已停止保存。请保留当前编辑内容，刷新并核对远端版本：{path}",
+        "remote.backupUnsafe": "服务器未能限制备份文件的访问权限，已停止保存，原文件未改写。",
+        "transfer.resumeMismatch": "续传目标更大、内容不一致或类型不兼容，已停止续传：{path}。请核对文件后重新选择覆盖或另存。",
+        "transfer.sourceChanged": "校验发现文件大小或内容已变化，未将传输标为完成：{path}。请在文件停止修改后重试。",
+        "hostKey.storeFailed": "无法读取或保存主机信任记录，已停止连接。请检查应用数据目录中的 known-hosts.json 及其读写权限。原因：{detail}",
 
         "session.notRunning": "会话未连接",
         "session.connectionChanged": "连接目标或认证配置已变更，请核对后重新输入凭据",
@@ -1139,7 +1146,7 @@ export const messages = {
       createFileDescription: "Create an empty file in the current remote path.",
       namePlaceholder: "Enter a name",
       nameRequired: "Enter a name",
-      nameCannotContainSlash: "Names cannot contain path separators",
+      nameCannotContainSlash: "Names cannot be . or .., or contain / or a null character",
       rename: "Rename",
       renameTitle: "Rename",
       renameDescription: "Change the name of the selected remote item.",
@@ -1242,6 +1249,7 @@ export const messages = {
       cancel: "Cancel transfer",
       queued: "Waiting",
       planning: "Scanning",
+      verifying: "Verifying",
       planningMeta: "Preparing transfer, {count} files found",
       progressMeta: "{speed} · {done}/{total} files",
       uploadFallback: "Upload",
@@ -1383,6 +1391,7 @@ export const messages = {
     errors: {
       title: "Operation failed",
       copy: "Copy details",
+      recoveryHint: "Refresh and check the remote file before retrying. To recover the original content, check backup {path}. If the operation stopped before the backup finished, it may be incomplete or absent and the original file was not rewritten.",
       // Backend AppError.code → message. Placeholders map to AppError.params.
       codes: {
         "validation.required": "Missing required value: {field}",
@@ -1408,6 +1417,11 @@ export const messages = {
         "auth.invalidChallenge": "The server sent too many authentication rounds or prompts.",
         "auth.interactiveFailed": "Interactive authentication failed. Check the answers or the server's authentication requirements.",
         "hostKey.changed": "The server host key has changed",
+        "remote.fileChanged": "The remote file content changed, so saving stopped. Keep your edits and reload to compare the remote version: {path}",
+        "remote.backupUnsafe": "The server could not restrict backup access. Saving stopped without rewriting the original file.",
+        "transfer.resumeMismatch": "The resume target is larger, has different content, or has an incompatible type: {path}. Check the files before choosing overwrite or a different destination.",
+        "transfer.sourceChanged": "Verification detected a change in file size or content. The transfer was not marked complete: {path}. Retry once the file is no longer being modified.",
+        "hostKey.storeFailed": "Connection stopped because host trust could not be read or saved. Check known-hosts.json in the application data directory and its access permissions. Reason: {detail}",
 
         "session.notRunning": "The session is not connected",
         "session.connectionChanged": "The connection target or authentication settings changed. Review them and enter credentials again.",

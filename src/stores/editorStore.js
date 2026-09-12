@@ -29,6 +29,7 @@ export const useEditorStore = defineStore("editor", {
     name: "",
     size: 0,
     initialContent: "",
+    remoteVersion: "",
     isLoading: false,
     isSaving: false,
     isDirty: false,
@@ -69,6 +70,7 @@ export const useEditorStore = defineStore("editor", {
       this.name = entry.name;
       this.size = Number(entry.size ?? 0);
       this.initialContent = "";
+      this.remoteVersion = "";
       this.isDirty = false;
       this.editRevision = 0;
       this.confirmingClose = false;
@@ -93,6 +95,7 @@ export const useEditorStore = defineStore("editor", {
         if (this.requestToken !== token) return;
 
         this.initialContent = result?.content ?? "";
+        this.remoteVersion = result?.version ?? "";
         this.size = Number(result?.size ?? 0);
         this.isLoading = false;
       } catch (error) {
@@ -136,13 +139,15 @@ export const useEditorStore = defineStore("editor", {
       const editRevision = this.editRevision;
 
       try {
-        await writeRemoteFileText({
+        const version = await writeRemoteFileText({
           sessionId: this.sessionId,
           path: this.path,
           content,
+          expectedVersion: this.remoteVersion,
         });
 
         if (this.requestToken !== requestToken) return false;
+        this.remoteVersion = version;
         this.isDirty = this.editRevision !== editRevision;
         // 保存期间的新输入不能被旧快照覆盖，也不能被“保存后退出”一起丢弃。
         if (!this.isDirty) this.initialContent = content;

@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    io::SeekFrom,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -18,7 +17,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::time::{Duration, Instant};
 use tokio::{
     fs as async_fs,
-    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWriteExt},
     sync::Mutex as AsyncMutex,
 };
 
@@ -37,6 +36,7 @@ use crate::sftp::path::{
 use crate::sftp::transfer_metadata::{
     metadata_error, set_local_file_modified, set_local_path_modified, upload_attributes,
 };
+use crate::sftp::transfer_verify::{resume_mismatch, source_changed, verify_contents, verify_prefix};
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
 use crate::util::{path_to_string, summarize_entry_errors};
@@ -85,7 +85,7 @@ enum TransferConflictPolicy {
     Overwrite,
     Skip,
     Rename,
-    // 断点续传：目标已存在时从已有字节续，size 已够则整个跳过
+    // 断点续传：已有字节必须与当前源文件一致，不能只凭大小跳过。
     Resume,
 }
 
@@ -258,6 +258,7 @@ async fn download_transfer_with_sftp(
         parse_transfer_conflict_policy(&request.conflict_policy)?,
         &planning,
     ).await?;
+    validate_download_destinations(&plan)?;
 
     with_progress(progress, |p| {
         p.bytes_total = plan.bytes_total;
@@ -327,25 +328,25 @@ async fn upload_file(
     progress: &Mutex<TransferProgress>,
     cancellation: &Arc<AtomicBool>,
 ) -> Result<(), AppError> {
-    // 内容已齐的续传仍需重试元数据，不能把上次 chmod/mtime 失败当作完成。
-    if file.content_complete {
-        ensure_transfer_active(cancellation)?;
-        sftp.set_metadata(file.remote_path.clone(), file.attributes.clone()).await
-            .map_err(|error| metadata_error(&file.remote_path, error))?;
-        with_progress(progress, |p| {
-            p.files_done += 1;
-            p.emit(app, "progress", Some(file.remote_path.clone()), false);
-        })?;
-        return Ok(());
-    }
+    // 先校验源句柄与规划快照，再打开目标；续传校验和追加共用句柄，避免中途重新打开。
     let mut local_file = async_fs::File::open(&file.local_path)
         .await
         .map_err(io_error)?;
-    // 续传（offset > 0）：不 TRUNCATE，双端 seek 到断点；整传保持覆盖语义
-    let open_flags = if file.offset > 0 {
-        OpenFlags::CREATE | OpenFlags::WRITE
+    validate_local_source(&local_file.metadata().await.map_err(io_error)?, file)?;
+    let target = match sftp.symlink_metadata(file.remote_path.clone()).await {
+        Ok(metadata) => Some(metadata),
+        Err(SftpError::Status(status)) if status.status_code == StatusCode::NoSuchFile => None,
+        Err(error) => return Err(sftp_error(error, &file.remote_path)),
+    };
+    if target.as_ref().is_some_and(|metadata| !metadata.file_type().is_file()) {
+        return Err(resume_mismatch(&file.remote_path));
+    }
+    let open_flags = if file.resume_existing {
+        OpenFlags::READ | OpenFlags::WRITE
+    } else if file.overwrite && target.is_some() {
+        OpenFlags::TRUNCATE | OpenFlags::WRITE
     } else {
-        OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE
+        OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE
     };
     let mut remote_file = sftp
         .open_with_flags_and_attributes(file.remote_path.clone(), open_flags, {
@@ -355,29 +356,29 @@ async fn upload_file(
         })
         .await
         .map_err(|error| sftp_error(error, &file.remote_path))?;
-    if file.offset > 0 {
-        local_file
-            .seek(SeekFrom::Start(file.offset))
-            .await
-            .map_err(io_error)?;
-        remote_file
-            .seek(SeekFrom::Start(file.offset))
-            .await
-            .map_err(|error| remote_io_error(error, &file.remote_path))?;
-    }
-    let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
-
-    loop {
-        ensure_transfer_active(cancellation)?;
-        let read = local_file.read(&mut buffer).await.map_err(io_error)?;
-        if read == 0 {
-            break;
+    if file.resume_existing {
+        with_progress(progress, |p| p.emit(app, "verifying", Some(file.remote_path.clone()), true))?;
+        let metadata = remote_file.metadata().await.map_err(|error| sftp_error(error, &file.remote_path))?;
+        if !metadata.file_type().is_file() || metadata.size != Some(file.offset) {
+            return Err(resume_mismatch(&file.remote_path));
         }
-
+    }
+    let mut digest = verify_prefix(&mut local_file, &mut remote_file, file.offset, &file.remote_path, cancellation).await?;
+    let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
+    let mut remaining = file.size - file.offset;
+    while remaining > 0 {
+        ensure_transfer_active(cancellation)?;
+        let count = remaining.min(TRANSFER_BUFFER_SIZE as u64) as usize;
+        let read = local_file.read(&mut buffer[..count]).await.map_err(io_error)?;
+        if read == 0 {
+            return Err(source_changed(&path_to_string(&file.local_path)));
+        }
+        digest.update(&buffer[..read]);
         remote_file
             .write_all(&buffer[..read])
             .await
             .map_err(|error| remote_io_error(error, &file.remote_path))?;
+        remaining -= read as u64;
         with_progress(progress, |p| {
             p.bytes_transferred += read as u64;
             p.emit(app, "progress", Some(file.remote_path.clone()), false);
@@ -385,6 +386,14 @@ async fn upload_file(
     }
 
     remote_file.flush().await.map_err(|error| remote_io_error(error, &file.remote_path))?;
+    with_progress(progress, |p| p.emit(app, "verifying", Some(file.remote_path.clone()), true))?;
+    let digest = digest.finish();
+    verify_contents(&mut local_file, file.size, &digest, &path_to_string(&file.local_path), cancellation, io_error).await?;
+    validate_local_source(&local_file.metadata().await.map_err(io_error)?, file)?;
+    if file.resume_existing {
+        verify_contents(&mut remote_file, file.size, &digest, &file.remote_path, cancellation,
+            |error| remote_io_error(error, &file.remote_path)).await?;
+    }
     ensure_transfer_active(cancellation)?;
     remote_file.set_metadata(file.attributes.clone()).await
         .map_err(|error| metadata_error(&file.remote_path, error))?;
@@ -406,15 +415,7 @@ async fn download_file(
     progress: &Mutex<TransferProgress>,
     cancellation: &Arc<AtomicBool>,
 ) -> Result<(), AppError> {
-    if file.content_complete {
-        ensure_transfer_active(cancellation)?;
-        set_local_path_modified(&file.local_path, file.modified).await?;
-        with_progress(progress, |p| {
-            p.files_done += 1;
-            p.emit(app, "progress", Some(file.remote_path.clone()), false);
-        })?;
-        return Ok(());
-    }
+    // 新目标使用独占创建，让操作系统兜底拦截规划后出现的同名文件和别名冲突。
     if let Some(parent) = file.local_path.parent() {
         async_fs::create_dir_all(parent).await.map_err(io_error)?;
     }
@@ -423,44 +424,55 @@ async fn download_file(
         .open(file.remote_path.clone())
         .await
         .map_err(|error| sftp_error(error, &file.remote_path))?;
-    // 续传：本地不截断，双端 seek 到断点；整传保持 create 覆盖语义
-    let mut local_file = if file.offset > 0 {
+    validate_remote_source(&remote_file.metadata().await.map_err(|error| sftp_error(error, &file.remote_path))?, file)?;
+    let target = match async_fs::symlink_metadata(&file.local_path).await {
+        Ok(metadata) => Some(metadata),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(io_error(error)),
+    };
+    if target.as_ref().is_some_and(|metadata| !metadata.is_file()) {
+        return Err(resume_mismatch(&path_to_string(&file.local_path)));
+    }
+    let mut local_file = if file.resume_existing {
         async_fs::OpenOptions::new()
             .write(true)
-            .create(true)
+            .read(true)
             .open(&file.local_path)
             .await
             .map_err(io_error)?
+    } else if file.overwrite && target.is_some() {
+        async_fs::OpenOptions::new().write(true).truncate(true).open(&file.local_path)
+            .await.map_err(io_error)?
     } else {
-        async_fs::File::create(&file.local_path)
+        async_fs::OpenOptions::new().write(true).create_new(true).open(&file.local_path)
             .await
             .map_err(io_error)?
     };
-    if file.offset > 0 {
-        remote_file
-            .seek(SeekFrom::Start(file.offset))
-            .await
-            .map_err(|error| remote_io_error(error, &file.remote_path))?;
-        local_file
-            .seek(SeekFrom::Start(file.offset))
-            .await
-            .map_err(io_error)?;
+    if file.resume_existing {
+        with_progress(progress, |p| p.emit(app, "verifying", Some(file.remote_path.clone()), true))?;
+        let metadata = local_file.metadata().await.map_err(io_error)?;
+        if !metadata.is_file() || metadata.len() != file.offset {
+            return Err(resume_mismatch(&path_to_string(&file.local_path)));
+        }
     }
+    let mut digest = verify_prefix(&mut local_file, &mut remote_file, file.offset, &file.remote_path, cancellation).await?;
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
-
-    loop {
+    let mut remaining = file.size - file.offset;
+    while remaining > 0 {
         ensure_transfer_active(cancellation)?;
-        let read = remote_file.read(&mut buffer)
+        let count = remaining.min(TRANSFER_BUFFER_SIZE as u64) as usize;
+        let read = remote_file.read(&mut buffer[..count])
             .await
             .map_err(|error| remote_io_error(error, &file.remote_path))?;
         if read == 0 {
-            break;
+            return Err(source_changed(&file.remote_path));
         }
-
+        digest.update(&buffer[..read]);
         local_file
             .write_all(&buffer[..read])
             .await
             .map_err(io_error)?;
+        remaining -= read as u64;
         with_progress(progress, |p| {
             p.bytes_transferred += read as u64;
             p.emit(app, "progress", Some(file.remote_path.clone()), false);
@@ -468,6 +480,14 @@ async fn download_file(
     }
 
     local_file.flush().await.map_err(io_error)?;
+    with_progress(progress, |p| p.emit(app, "verifying", Some(file.remote_path.clone()), true))?;
+    let digest = digest.finish();
+    verify_contents(&mut remote_file, file.size, &digest, &file.remote_path, cancellation,
+        |error| remote_io_error(error, &file.remote_path)).await?;
+    validate_remote_source(&remote_file.metadata().await.map_err(|error| sftp_error(error, &file.remote_path))?, file)?;
+    if file.resume_existing {
+        verify_contents(&mut local_file, file.size, &digest, &path_to_string(&file.local_path), cancellation, io_error).await?;
+    }
     ensure_transfer_active(cancellation)?;
     set_local_file_modified(local_file, &file.local_path, file.modified).await?;
     remote_file.shutdown()
@@ -477,6 +497,29 @@ async fn download_file(
         p.files_done += 1;
         p.emit(app, "progress", Some(file.remote_path.clone()), false);
     })?;
+    Ok(())
+}
+
+fn validate_local_source(metadata: &std::fs::Metadata, file: &UploadFilePlan) -> Result<(), AppError> {
+    if !metadata.is_file() || metadata.len() != file.size || metadata.modified().ok() != file.source_modified {
+        return Err(source_changed(&path_to_string(&file.local_path)));
+    }
+    Ok(())
+}
+
+fn ensure_remote_source(metadata: &FileAttributes, path: &str) -> Result<(), AppError> {
+    if !metadata.file_type().is_file() || metadata.size.is_none() {
+        return Err(AppError::new(codes::REMOTE_NOT_REGULAR_FILE, "A regular file with a known size is required")
+            .with("path", path));
+    }
+    Ok(())
+}
+
+fn validate_remote_source(metadata: &FileAttributes, file: &DownloadFilePlan) -> Result<(), AppError> {
+    ensure_remote_source(metadata, &file.remote_path)?;
+    if metadata.size != Some(file.size) || metadata.mtime != file.modified {
+        return Err(source_changed(&file.remote_path));
+    }
     Ok(())
 }
 
@@ -543,7 +586,9 @@ struct UploadFilePlan {
     size: u64,
     // 断点续传起点（远端已有字节数），0 = 从头传
     offset: u64,
-    content_complete: bool,
+    resume_existing: bool,
+    overwrite: bool,
+    source_modified: Option<std::time::SystemTime>,
     attributes: FileAttributes,
 }
 
@@ -567,7 +612,8 @@ struct DownloadFilePlan {
     size: u64,
     // 断点续传起点（本地已有字节数），0 = 从头下
     offset: u64,
-    content_complete: bool,
+    resume_existing: bool,
+    overwrite: bool,
     modified: Option<u32>,
 }
 
@@ -578,6 +624,17 @@ async fn apply_remote_conflict_policy(
     planning: &TransferPlanning<'_>,
 ) -> Result<(), AppError> {
     // resume 不看根目标是否存在，而是逐文件比对远端已有字节
+    for file in &mut plan.files {
+        if policy == TransferConflictPolicy::Overwrite {
+            planning.visit(&file.remote_path, None)?;
+            file.overwrite = match sftp.symlink_metadata(file.remote_path.clone()).await {
+                Ok(metadata) if metadata.file_type().is_file() => true,
+                Ok(_) => return Err(resume_mismatch(&file.remote_path)),
+                Err(SftpError::Status(status)) if status.status_code == StatusCode::NoSuchFile => false,
+                Err(error) => return Err(sftp_error(error, &file.remote_path)),
+            };
+        }
+    }
     if policy == TransferConflictPolicy::Resume {
         return apply_remote_resume(sftp, plan, planning).await;
     }
@@ -612,6 +669,18 @@ async fn apply_local_conflict_policy(
     policy: TransferConflictPolicy,
     planning: &TransferPlanning<'_>,
 ) -> Result<(), AppError> {
+    for file in &mut plan.files {
+        if policy == TransferConflictPolicy::Overwrite {
+            planning.visit(&path_to_string(&file.local_path), None)?;
+            // 只授权覆盖规划时就存在的文件，不能把本批刚创建的别名目标当成可覆盖旧文件。
+            file.overwrite = match async_fs::symlink_metadata(&file.local_path).await {
+                Ok(metadata) if metadata.is_file() => true,
+                Ok(_) => return Err(resume_mismatch(&path_to_string(&file.local_path))),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(error) => return Err(io_error(error)),
+            };
+        }
+    }
     if policy == TransferConflictPolicy::Resume {
         return apply_local_resume(plan, planning).await;
     }
@@ -651,19 +720,17 @@ async fn apply_local_conflict_policy(
 async fn apply_remote_resume(sftp: &SftpSession, plan: &mut UploadPlan, planning: &TransferPlanning<'_>) -> Result<(), AppError> {
     for file in &mut plan.files {
         planning.visit(&file.remote_path, None)?;
-        match sftp.metadata(file.remote_path.clone()).await {
+        match sftp.symlink_metadata(file.remote_path.clone()).await {
             Ok(metadata) if metadata.file_type().is_file() => {
-                let remote_size = metadata.size.unwrap_or(0);
-                if remote_size >= file.size {
-                    plan.resumed_bytes += file.size;
-                    file.content_complete = true;
-                    continue;
+                let remote_size = metadata.size.ok_or_else(|| resume_mismatch(&file.remote_path))?;
+                if remote_size > file.size {
+                    return Err(resume_mismatch(&file.remote_path));
                 }
-
+                file.resume_existing = true;
                 file.offset = remote_size;
                 plan.resumed_bytes += remote_size;
             }
-            Ok(_) => {},
+            Ok(_) => return Err(resume_mismatch(&file.remote_path)),
             Err(SftpError::Status(status)) if status.status_code == StatusCode::NoSuchFile => {},
             // 读不到属性不等于目标不存在，不能在权限或网络出错后退化为截断重传。
             Err(error) => return Err(sftp_error(error, &file.remote_path)),
@@ -677,19 +744,17 @@ async fn apply_remote_resume(sftp: &SftpSession, plan: &mut UploadPlan, planning
 async fn apply_local_resume(plan: &mut DownloadPlan, planning: &TransferPlanning<'_>) -> Result<(), AppError> {
     for file in &mut plan.files {
         planning.visit(&path_to_string(&file.local_path), None)?;
-        match async_fs::metadata(&file.local_path).await {
+        match async_fs::symlink_metadata(&file.local_path).await {
             Ok(metadata) if metadata.is_file() => {
                 let local_size = metadata.len();
-                if local_size >= file.size {
-                    plan.resumed_bytes += file.size;
-                    file.content_complete = true;
-                    continue;
+                if local_size > file.size {
+                    return Err(resume_mismatch(&path_to_string(&file.local_path)));
                 }
-
+                file.resume_existing = true;
                 file.offset = local_size;
                 plan.resumed_bytes += local_size;
             }
-            Ok(_) => {},
+            Ok(_) => return Err(resume_mismatch(&path_to_string(&file.local_path))),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
             Err(error) => return Err(io_error(error)),
         }
@@ -781,10 +846,13 @@ async fn rename_download_plan_roots(
     planning: &TransferPlanning<'_>,
 ) -> Result<(), AppError> {
     let mut replacements = Vec::new();
+    let mut reserved: HashSet<PathBuf> = plan.root_targets.iter().map(|path| local_collision_key(path)).collect();
 
     for root in &plan.root_targets {
         if conflicting_roots.contains(root) {
-            replacements.push((root.clone(), unique_local_target(root, planning).await?));
+            let replacement = unique_local_target(root, &reserved, planning).await?;
+            reserved.insert(local_collision_key(&replacement));
+            replacements.push((root.clone(), replacement));
         }
     }
 
@@ -819,11 +887,12 @@ async fn unique_remote_target(sftp: &SftpSession, root: &str, planning: &Transfe
     .with("path", root))
 }
 
-async fn unique_local_target(root: &Path, planning: &TransferPlanning<'_>) -> Result<PathBuf, AppError> {
+async fn unique_local_target(root: &Path, reserved: &HashSet<PathBuf>, planning: &TransferPlanning<'_>) -> Result<PathBuf, AppError> {
     for index in 1..1000 {
         let candidate = local_conflict_variant(root, index);
         planning.visit(&path_to_string(&candidate), None)?;
-        if !async_fs::try_exists(&candidate).await.map_err(io_error)? {
+        if !reserved.contains(&local_collision_key(&candidate))
+            && !async_fs::try_exists(&candidate).await.map_err(io_error)? {
             return Ok(candidate);
         }
     }
@@ -989,12 +1058,14 @@ async fn plan_local_upload(
                         planning.visit(&path_to_string(&child_path), Some(size))?;
                         files.push(UploadFilePlan {
                             attributes: upload_attributes(&child_metadata, &child_path)?,
+                            source_modified: child_metadata.modified().ok(),
+                            resume_existing: false,
+                            overwrite: false,
                             label: child_name,
                             local_path: child_path,
                             remote_path: child_remote_path,
                             size,
                             offset: 0,
-                            content_complete: false,
                         });
                     }
                 }
@@ -1005,12 +1076,14 @@ async fn plan_local_upload(
             planning.visit(local_path, Some(size))?;
             files.push(UploadFilePlan {
                 attributes: upload_attributes(&metadata, &root)?,
+                source_modified: metadata.modified().ok(),
+                resume_existing: false,
+                overwrite: false,
                 label: name,
                 local_path: root,
                 remote_path,
                 size,
                 offset: 0,
-                content_complete: false,
             });
         }
     }
@@ -1042,7 +1115,7 @@ async fn plan_remote_download(
     for entry in remote_entries {
         planning.visit(&entry.path, None)?;
         let remote_path = normalize_remote_path(&entry.path);
-        let raw_local_name = if entry.name.trim().is_empty() {
+        let raw_local_name = if entry.name.is_empty() {
             remote_basename(&remote_path)
         } else {
             entry.name.clone()
@@ -1050,17 +1123,17 @@ async fn plan_remote_download(
         let local_name = safe_local_name(&raw_local_name);
         let local_path = local_dir.join(local_name);
 
-        if !seen_root_targets.insert(local_path.clone()) {
+        if !seen_root_targets.insert(local_collision_key(&local_path)) {
             return Err(duplicate_download_target(&local_path));
         }
         ensure_unique_local_download_path(&mut seen_local_paths, &local_path)?;
         root_targets.push(local_path.clone());
 
         let metadata = sftp
-            .symlink_metadata(remote_path.clone())
+            .metadata(remote_path.clone())
             .await
             .map_err(|error| sftp_error(error, &remote_path))?;
-        if metadata.file_type().is_dir() || entry.is_directory {
+        if metadata.file_type().is_dir() {
             directories.push(DownloadDirectoryPlan {
                 local_path: local_path.clone(), modified: metadata.mtime,
             });
@@ -1075,8 +1148,16 @@ async fn plan_remote_download(
 
                 for child in read_dir {
                     planning.check()?;
-                    let child_metadata = child.metadata();
+                    let mut child_metadata = child.metadata();
                     let child_remote_path = normalize_remote_path(&child.path());
+                    if child_metadata.file_type().is_symlink() {
+                        child_metadata = sftp.metadata(child_remote_path.clone()).await
+                            .map_err(|error| sftp_error(error, &child_remote_path))?;
+                        // 不递归跟随目录链接，防止扫描循环或下载到选中目录以外的整棵树。
+                        if !child_metadata.file_type().is_file() {
+                            return Err(source_changed(&child_remote_path));
+                        }
+                    }
                     let child_local_path = local_parent.join(safe_local_name(&child.file_name()));
                     ensure_unique_local_download_path(&mut seen_local_paths, &child_local_path)?;
 
@@ -1086,6 +1167,7 @@ async fn plan_remote_download(
                         });
                         stack.push((child_remote_path, child_local_path));
                     } else {
+                        ensure_remote_source(&child_metadata, &child_remote_path)?;
                         let size = child_metadata.size.unwrap_or(0);
                         bytes_total += size;
                         planning.visit(&child_remote_path, Some(size))?;
@@ -1095,7 +1177,8 @@ async fn plan_remote_download(
                             local_path: child_local_path,
                             size,
                             offset: 0,
-                            content_complete: false,
+                            resume_existing: false,
+                            overwrite: false,
                             modified: child_metadata.mtime,
                         });
                     }
@@ -1103,7 +1186,8 @@ async fn plan_remote_download(
             }
         } else {
             // 历史记录中的大小可能已过期，续传必须优先按远端当前大小判断是否传完。
-            let size = metadata.size.or(entry.size).unwrap_or(0);
+            ensure_remote_source(&metadata, &remote_path)?;
+            let size = metadata.size.unwrap_or(0);
             bytes_total += size;
             planning.visit(&remote_path, Some(size))?;
             files.push(DownloadFilePlan {
@@ -1112,7 +1196,8 @@ async fn plan_remote_download(
                 local_path,
                 size,
                 offset: 0,
-                content_complete: false,
+                resume_existing: false,
+                overwrite: false,
                 modified: metadata.mtime,
             });
         }
@@ -1139,11 +1224,31 @@ fn ensure_unique_local_download_path(
     seen_paths: &mut HashSet<PathBuf>,
     path: &Path,
 ) -> Result<(), AppError> {
-    if seen_paths.insert(path.to_path_buf()) {
+    if seen_paths.insert(local_collision_key(path)) {
         return Ok(());
     }
 
     Err(duplicate_download_target(path))
+}
+
+fn local_collision_key(path: &Path) -> PathBuf {
+    if cfg!(windows) {
+        PathBuf::from(path.to_string_lossy().to_uppercase())
+    } else {
+        path.to_path_buf()
+    }
+}
+
+// 自动重命名会改变整棵子树的落点，写入前再次检查所有文件与目录之间的冲突。
+fn validate_download_destinations(plan: &DownloadPlan) -> Result<(), AppError> {
+    let mut seen = HashSet::new();
+    for directory in &plan.directories {
+        ensure_unique_local_download_path(&mut seen, &directory.local_path)?;
+    }
+    for file in &plan.files {
+        ensure_unique_local_download_path(&mut seen, &file.local_path)?;
+    }
+    Ok(())
 }
 
 async fn ensure_remote_directory(sftp: &SftpSession, path: &str) -> Result<bool, AppError> {

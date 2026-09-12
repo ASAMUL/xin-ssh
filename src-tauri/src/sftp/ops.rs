@@ -2,12 +2,13 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+use std::io::SeekFrom;
 
 use russh::client;
 use russh_sftp::client::{error::Error as SftpError, RawSftpSession, SftpSession};
 use russh_sftp::protocol::{OpenFlags, StatusCode};
 use tauri::{AppHandle, Emitter, State};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::{timeout, Duration};
 
@@ -21,7 +22,7 @@ use crate::models::{
     RemoteReadFileRequest, RemoteRenameRequest, RemoteWriteFileRequest,
 };
 use crate::sftp::error::{remote_io_error, sftp_error};
-use crate::sftp::path::normalize_remote_path;
+use crate::sftp::path::{normalize_remote_path, join_remote_path, remote_parent_path};
 use crate::sftp::{open_raw_sftp_session, remote_file_entry, remote_file_entry_from_attrs};
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
@@ -119,19 +120,34 @@ pub async fn read_remote_file_text(
 pub async fn write_remote_file_text(
     registry: State<'_, TerminalRegistry>,
     request: RemoteWriteFileRequest,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     validate_write_file_request(&request)?;
-
-    timeout(
+    // 在命令层确定随机备份路径，接收端超时或取消时仍能向用户报告恢复位置。
+    let path = normalize_remote_path(&request.path);
+    let random = ring::rand::generate::<[u8; 16]>(&ring::rand::SystemRandom::new())
+        .map_err(|_| AppError::new(codes::REMOTE_IO_FAILED, "Could not generate backup name")
+            .with("path", &path).with("detail", "Could not generate backup name"))?
+        .expose();
+    let backup_path = join_remote_path(&remote_parent_path(&path), &format!(".xin-backup-{:032x}", u128::from_le_bytes(random)));
+    let result = timeout(
         Duration::from_secs(60),
         registry.write_file_text(
             &request.session_id,
-            normalize_remote_path(&request.path),
+            path,
             request.content,
+            request.expected_version,
+            backup_path.clone(),
         ),
     )
     .await
-    .map_err(|_| modification_timeout("writeFile", 60))?
+    .map_err(|_| modification_timeout("writeFile", 60).with("recoveryPath", &backup_path))?;
+    result.map_err(|error| {
+        if error.is(codes::SESSION_REQUEST_CANCELED) {
+            error.with("recoveryPath", &backup_path)
+        } else {
+            error
+        }
+    })
 }
 
 #[tauri::command]
@@ -408,7 +424,7 @@ pub(crate) async fn read_file_text_on_session(
 
     let mut file = sftp.open(path.clone()).await.map_err(|error| sftp_error(error, &path))?;
     let mut bytes = Vec::with_capacity(size as usize);
-    let read_result = file.read_to_end(&mut bytes).await;
+    let read_result = (&mut file).take(MAX_EDITABLE_FILE_BYTES + 1).read_to_end(&mut bytes).await;
     let _ = file.shutdown().await;
     read_result.map_err(|error| remote_io_error(error, &path))?;
 
@@ -430,40 +446,125 @@ pub(crate) async fn read_file_text_on_session(
     Ok(RemoteFileContent {
         path,
         size: content.len() as u64,
+        version: file_content_version(content.as_bytes()),
         content,
     })
 }
 
 pub(crate) async fn write_file_text_on_session(
-    sftp: &SftpSession,
+    sftp: Arc<SftpSession>,
     path: &str,
     content: &str,
-) -> Result<(), AppError> {
+    expected_version: &str,
+    backup_path: &str,
+) -> Result<String, AppError> {
     let path = normalize_remote_path(path);
 
     if path == "/" {
         return Err(root_forbidden("writeFile"));
     }
 
-    // 就地截断重写以保留权限与属主；不走“临时文件+改名”，SFTP rename 无法覆盖且会重置属主
+    // 先通过同一文件句柄校验旧内容并保存独立备份，断网或取消时原内容仍可恢复；
+    // 最后写回原句柄，保留属主、权限以及软链接/硬链接语义。
     let mut file = sftp
         .open_with_flags(
             path.clone(),
-            OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+            OpenFlags::READ | OpenFlags::WRITE,
         )
         .await
         .map_err(|error| sftp_error(error, &path))?;
 
-    for chunk in content.as_bytes().chunks(EDITOR_WRITE_CHUNK_BYTES) {
-        file.write_all(chunk)
-            .await
-            .map_err(|error| remote_io_error(error, &path))?;
+    let metadata = file.metadata().await.map_err(|error| sftp_error(error, &path))?;
+    if !metadata.file_type().is_file() {
+        return Err(AppError::new(codes::REMOTE_NOT_REGULAR_FILE, "Only regular files can be saved").with("path", &path));
     }
+    let original = read_editor_bytes(&mut file, &path).await?;
+    if file_content_version(&original) != expected_version {
+        return Err(file_changed_error(&path));
+    }
+    let mut attributes = russh_sftp::protocol::FileAttributes::empty();
+    attributes.permissions = Some(0o600);
+    let mut backup = sftp.open_with_flags_and_attributes(
+        backup_path.to_string(), OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE, attributes,
+    ).await.map_err(|error| sftp_error(error, backup_path))?;
+    // 某些服务器忽略创建权限；确认备份不会暴露原文件里的凭据后才写入内容。
+    if !backup.metadata().await.map_err(|error| sftp_error(error, backup_path))?
+        .permissions.is_some_and(|mode| mode & 0o077 == 0)
+    {
+        return Err(AppError::new(codes::REMOTE_BACKUP_UNSAFE, "Server did not restrict backup access"));
+    }
+    write_editor_bytes(&mut backup, backup_path, &original).await?;
+    backup.shutdown().await.map_err(|error| remote_io_error(error, backup_path))?;
 
-    file.flush().await.map_err(|error| remote_io_error(error, &path))?;
-    file.shutdown()
+    let result = async {
+        // 备份往返期间文件可能被其他程序修改，再核对一次才能开始破坏性写入。
+        if file_content_version(&read_editor_bytes(&mut file, &path).await?) != expected_version {
+            return Err(file_changed_error(&path));
+        }
+        let mut truncate = russh_sftp::protocol::FileAttributes::empty();
+        truncate.size = Some(0);
+        file.set_metadata(truncate).await.map_err(|error| sftp_error(error, &path))?;
+        file.seek(SeekFrom::Start(0)).await.map_err(|error| remote_io_error(error, &path))?;
+        write_editor_bytes(&mut file, &path, content.as_bytes()).await?;
+        if let Some(permissions) = metadata.permissions {
+            let mut attributes = russh_sftp::protocol::FileAttributes::empty();
+            attributes.permissions = Some(permissions);
+            file.set_metadata(attributes).await.map_err(|error| sftp_error(error, &path))?;
+        }
+        let version = file_content_version(content.as_bytes());
+        if file_content_version(&read_editor_bytes(&mut file, &path).await?) != version {
+            return Err(file_changed_error(&path));
+        }
+        // 外部编辑器常用 rename 替换原文件；旧句柄写入成功不代表当前路径已保存。
+        let mut current = sftp.open(path.clone()).await.map_err(|error| sftp_error(error, &path))?;
+        if !current.metadata().await.map_err(|error| sftp_error(error, &path))?.file_type().is_file()
+            || file_content_version(&read_editor_bytes(&mut current, &path).await?) != version
+        {
+            return Err(file_changed_error(&path));
+        }
+        current.shutdown().await.map_err(|error| remote_io_error(error, &path))?;
+        file.shutdown().await.map_err(|error| remote_io_error(error, &path))?;
+        Ok(version)
+    }.await.map_err(|error: AppError| error.with("recoveryPath", backup_path));
+    if result.is_ok() {
+        // 清理不能占用保存的剩余时限，否则成功写入也会因删除备份超时而被误报失败。
+        let cleanup_sftp = Arc::clone(&sftp);
+        let cleanup_path = backup_path.to_string();
+        tauri::async_runtime::spawn(async move {
+            let _ = timeout(Duration::from_secs(5), cleanup_sftp.remove_file(cleanup_path)).await;
+        });
+    }
+    result
+}
+
+fn file_content_version(bytes: &[u8]) -> String {
+    ring::digest::digest(&ring::digest::SHA256, bytes).as_ref()
+        .iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn file_changed_error(path: &str) -> AppError {
+    AppError::new(codes::REMOTE_FILE_CHANGED, "Remote file changed since it was read").with("path", path)
+}
+
+async fn read_editor_bytes(file: &mut russh_sftp::client::fs::File, path: &str) -> Result<Vec<u8>, AppError> {
+    file.seek(SeekFrom::Start(0)).await.map_err(|error| remote_io_error(error, path))?;
+    let mut bytes = Vec::new();
+    (&mut *file).take(MAX_EDITABLE_FILE_BYTES + 1).read_to_end(&mut bytes)
+        .await.map_err(|error| remote_io_error(error, path))?;
+    if bytes.len() as u64 > MAX_EDITABLE_FILE_BYTES {
+        return Err(editable_file_too_large_error());
+    }
+    Ok(bytes)
+}
+
+async fn write_editor_bytes(file: &mut russh_sftp::client::fs::File, path: &str, bytes: &[u8]) -> Result<(), AppError> {
+    for chunk in bytes.chunks(EDITOR_WRITE_CHUNK_BYTES) {
+        file.write_all(chunk).await.map_err(|error| remote_io_error(error, path))?;
+    }
+    file.flush().await.map_err(|error| remote_io_error(error, path))?;
+    file.sync_all()
         .await
-        .map_err(|error| remote_io_error(error, &path))
+        .map_err(|error| sftp_error(error, path))
 }
 
 // 目录树用的一次性列目录：走会话内缓存 SFTP 子通道，与流式面板列表互不影响
@@ -781,6 +882,9 @@ fn validate_read_file_request(request: &RemoteReadFileRequest) -> Result<(), App
 }
 
 fn validate_write_file_request(request: &RemoteWriteFileRequest) -> Result<(), AppError> {
+    if request.expected_version.is_empty() {
+        return Err(file_changed_error(&request.path));
+    }
     if request.session_id.trim().is_empty() {
         return Err(required("sessionId"));
     }

@@ -66,6 +66,11 @@ pub mod codes {
     pub const AUTH_INVALID_CHALLENGE: &str = "auth.invalidChallenge";
     pub const AUTH_INTERACTIVE_FAILED: &str = "auth.interactiveFailed";
     pub const HOST_KEY_CHANGED: &str = "hostKey.changed";
+    pub const HOST_KEY_STORE_FAILED: &str = "hostKey.storeFailed";
+    pub const REMOTE_FILE_CHANGED: &str = "remote.fileChanged";
+    pub const REMOTE_BACKUP_UNSAFE: &str = "remote.backupUnsafe";
+    pub const TRANSFER_RESUME_MISMATCH: &str = "transfer.resumeMismatch";
+    pub const TRANSFER_SOURCE_CHANGED: &str = "transfer.sourceChanged";
 
     pub const SESSION_NOT_RUNNING: &str = "session.notRunning";
     pub const SESSION_NOT_ACCEPTING: &str = "session.notAccepting";

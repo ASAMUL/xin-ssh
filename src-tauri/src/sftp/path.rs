@@ -4,13 +4,13 @@ use crate::error::{codes, AppError};
 use crate::util::path_to_string;
 
 pub(crate) fn normalize_remote_path(path: &str) -> String {
-    let trimmed = path.trim().replace('\\', "/");
-    if trimmed.is_empty() {
+    // POSIX 文件名允许空格和反斜杠，改写它们会让删除、保存等操作命中另一个文件。
+    if path.is_empty() {
         return "/".to_string();
     }
 
     let mut parts = Vec::new();
-    for part in trimmed.split('/') {
+    for part in path.split('/') {
         match part {
             "" | "." => {}
             ".." => {
@@ -31,7 +31,7 @@ pub(crate) fn join_remote_path(base: &str, child: &str) -> String {
     let base = normalize_remote_path(base);
     let child: String = child
         .chars()
-        .map(|character| if character == '/' || character == '\\' { '_' } else { character })
+        .map(|character| if character == '/' { '_' } else { character })
         .collect();
 
     if base == "/" {
@@ -66,8 +66,8 @@ pub(crate) fn local_file_name(path: &Path) -> Result<String, AppError> {
     let name = path
         .file_name()
         .ok_or_else(|| file_name_unknown(path))?
-        .to_string_lossy()
-        .trim()
+        .to_str()
+        .ok_or_else(|| file_name_unknown(path))?
         .to_string();
 
     if name.is_empty() {
@@ -95,24 +95,36 @@ pub(crate) fn safe_local_name(name: &str) -> String {
     let sanitized: String = name
         .chars()
         .map(|character| match character {
-            '/' | '\\' => '_',
+            '/' => '_',
+            '\\' if cfg!(windows) => '_',
             '<' | '>' | ':' | '"' | '|' | '?' | '*' if cfg!(windows) => '_',
             value if value.is_control() => '_',
             value => value,
         })
         .collect();
 
-    let sanitized = sanitized.trim();
     let sanitized = if cfg!(windows) {
         // Windows 会静默丢掉结尾的点和空格，先剪掉避免落地成不同的名字
         sanitized.trim_end_matches(['.', ' '])
     } else {
-        sanitized
+        sanitized.as_str()
     };
 
     if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
         "remote-item".to_string()
+    } else if cfg!(windows) && is_windows_device_name(sanitized) {
+        format!("_{sanitized}")
     } else {
         sanitized.to_string()
     }
+}
+
+fn is_windows_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or_default().trim_end().to_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
+        || ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(*prefix).is_some_and(|suffix| {
+                matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "\u{00b9}" | "\u{00b2}" | "\u{00b3}")
+            })
+        })
 }

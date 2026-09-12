@@ -65,7 +65,9 @@ pub(crate) enum TerminalControl {
     WriteFileText {
         path: String,
         content: String,
-        responder: oneshot::Sender<Result<(), AppError>>,
+        expected_version: String,
+        backup_path: String,
+        responder: oneshot::Sender<Result<String, AppError>>,
     },
     RenamePath {
         from_path: String,
@@ -296,7 +298,9 @@ impl TerminalRegistry {
         session_id: &str,
         path: String,
         content: String,
-    ) -> Result<(), AppError> {
+        expected_version: String,
+        backup_path: String,
+    ) -> Result<String, AppError> {
         let sender = self.sender_for(session_id)?;
         let (responder, receiver) = oneshot::channel();
 
@@ -304,6 +308,8 @@ impl TerminalRegistry {
             .send(TerminalControl::WriteFileText {
                 path,
                 content,
+                expected_version,
+                backup_path,
                 responder,
             })
             .map_err(|_| not_accepting("file"))?;

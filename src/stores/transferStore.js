@@ -323,6 +323,7 @@ export const useTransferStore = defineStore("transfers", {
         direction: event.direction,
         status: task.status === "canceling" && !FINISHED_STATUSES.has(eventStatus(event.kind))
           ? "canceling" : eventStatus(event.kind),
+        phase: event.kind,
         label,
         rootLabel,
         currentPath: event.currentPath,

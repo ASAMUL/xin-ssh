@@ -89,7 +89,10 @@ export function localizeError(error) {
     return message || code;
   }
 
-  return i18n.global.t(key, localizeParams(params));
+  const localized = i18n.global.t(key, localizeParams(params));
+  return params.recoveryPath
+    ? `${localized} ${i18n.global.t("errors.recoveryHint", { path: params.recoveryPath })}`
+    : localized;
 }
 
 function localizeParams(params) {

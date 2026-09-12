@@ -211,6 +211,7 @@ function taskMeta(task) {
   if (task.status === "canceling") return t("transfers.canceling");
   if (task.status === "queued") return t("transfers.queued");
   if (task.status === "planning") return t("transfers.planningMeta", { count: task.filesTotal });
+  if (task.phase === "verifying") return t("transfers.verifying");
 
   const speed = task.speedBytesPerSecond ? `${formatBytes(task.speedBytesPerSecond)}/s` : "--";
   return t("transfers.progressMeta", {
