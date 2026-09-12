@@ -528,67 +528,6 @@
   font-size: 13px;
 }
 
-.permissions-summary {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid rgb(var(--xin-neutral-rgb) / 0.2);
-  border-radius: 8px;
-  background: var(--xin-surface-raised);
-  color: var(--xin-text-secondary);
-  font-size: 11px;
-}
-
-.permissions-summary-row {
-  display: grid;
-  grid-template-columns: minmax(116px, auto) minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-}
-
-.permissions-role {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.permissions-role span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.permissions-role code {
-  color: var(--xin-text-body);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.permissions-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-}
-
-.permissions-flag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--xin-text-muted);
-  white-space: nowrap;
-}
-
-.permissions-flag.enabled {
-  color: var(--xin-accent-strong);
-}
-
-.permissions-flag :deep(svg) {
-  width: 13px;
-  height: 13px;
-}
-
 .delete-preview {
   min-width: 0;
   display: grid;

@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useVirtualizer } from "@tanstack/vue-virtual";
 import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
+import FilePermissionsEditor from "./FilePermissionsEditor.vue";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
 import { useFileOperationStore } from "../stores/fileOperationStore";
 import { useEditorStore } from "../stores/editorStore";
@@ -802,40 +803,13 @@ const remoteOperationTitle = computed(() => {
   return t("files.changePermissionsTitle");
 });
 const remoteOperationDescription = computed(() => {
-  if (remoteOperationDialog.mode === "chmod") return t("files.changePermissionsDescription");
+  if (remoteOperationDialog.mode === "chmod") return remoteOperationDialog.entry?.path ?? "";
   return t("files.remoteTargetDescription");
 });
 const remoteOperationSubmitLabel = computed(() => {
   if (remoteOperationDialog.mode === "copy") return t("files.copyTo");
   if (remoteOperationDialog.mode === "move") return t("files.moveTo");
   return t("files.changePermissions");
-});
-const permissionsSummary = computed(() => {
-  const value = remoteOperationDialog.permissions;
-  if (!/^[0-7]{3}$/.test(value)) return [];
-
-  const roles = [
-    ["permissionsOwner", value[0]],
-    ["permissionsGroup", value[1]],
-    ["permissionsOthers", value[2]],
-  ];
-  const flags = [
-    [4, "permissionsRead"],
-    [2, "permissionsWrite"],
-    [1, "permissionsExecute"],
-  ];
-
-  return roles.map(([labelKey, digit]) => {
-    const numericDigit = Number.parseInt(digit, 10);
-    return {
-      digit,
-      label: t(`files.${labelKey}`),
-      flags: flags.map(([mask, flagKey]) => ({
-        enabled: (numericDigit & mask) !== 0,
-        label: t(`files.${flagKey}`),
-      })),
-    };
-  });
 });
 
 function openRemoteOperationDialog(mode, entry = selectedEntries.value[0]) {
@@ -1719,7 +1693,7 @@ function sortAriaLabel(key) {
       :description="remoteOperationDescription"
       :dismissible="!remoteOperationDialog.isSubmitting"
       :close="!remoteOperationDialog.isSubmitting"
-      :ui="{ footer: 'justify-end' }"
+      :ui="{ description: 'break-all', footer: 'justify-end' }"
     >
       <template #body>
         <form class="file-dialog-form" @submit.prevent="submitRemoteOperation">
@@ -1731,33 +1705,14 @@ function sortAriaLabel(key) {
             :placeholder="t('files.remotePathPlaceholder')"
             autofocus
           />
-          <UInput
+          <FilePermissionsEditor
             v-else
+            :key="remoteOperationDialog.entry?.path"
             v-model="remoteOperationDialog.permissions"
-            color="neutral"
-            variant="outline"
-            inputmode="numeric"
-            maxlength="3"
-            :placeholder="t('files.permissionsPlaceholder')"
-            autofocus
+            :is-directory="remoteOperationDialog.entry?.isDirectory"
+            :disabled="remoteOperationDialog.isSubmitting"
+            @update:model-value="remoteOperationDialog.error = ''"
           />
-          <div v-if="remoteOperationDialog.mode === 'chmod' && permissionsSummary.length" class="permissions-summary">
-            <strong>{{ t("files.permissionsMeaning") }}</strong>
-            <div v-for="role in permissionsSummary" :key="role.label" class="permissions-summary-row">
-              <span class="permissions-role"><span>{{ role.label }}</span><code>{{ role.digit }}</code></span>
-              <span class="permissions-flags">
-                <span
-                  v-for="flag in role.flags"
-                  :key="flag.label"
-                  class="permissions-flag"
-                  :class="{ enabled: flag.enabled }"
-                >
-                  <UIcon :name="flag.enabled ? 'i-lucide-check' : 'i-lucide-minus'" />
-                  {{ flag.label }}
-                </span>
-              </span>
-            </div>
-          </div>
           <UAlert
             v-if="remoteOperationDialog.error"
             color="error"

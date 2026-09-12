@@ -1,0 +1,66 @@
+.file-permissions-editor {
+  min-width: 0;
+  display: grid;
+  gap: 20px;
+}
+
+.file-permissions-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.file-permissions-role-column {
+  width: 34%;
+}
+
+.file-permissions-table th,
+.file-permissions-table td {
+  padding: 4px 6px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.file-permissions-table th:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+
+.file-permissions-table thead th {
+  padding-top: 0;
+  padding-bottom: 10px;
+  color: var(--xin-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.file-permissions-table tbody tr {
+  height: 52px;
+  border-top: 1px solid var(--xin-border-soft);
+}
+
+.file-permissions-table tbody th {
+  color: var(--xin-text);
+  font-weight: 600;
+}
+
+.file-permissions-mode {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.file-permissions-input {
+  width: 104px;
+  flex: 0 0 104px;
+}
+
+.file-permissions-symbolic {
+  min-width: 0;
+  color: var(--xin-text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
