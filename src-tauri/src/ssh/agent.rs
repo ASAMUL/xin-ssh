@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
+use futures::FutureExt;
 use russh::{
     client::{AuthResult, Handle},
     keys::{
@@ -70,13 +71,16 @@ pub(crate) async fn authenticate_agent(
     let rsa_hash = session.best_supported_rsa_hash().await
         .map_err(connection_error)?.flatten();
     for identity in identities {
+        // 在库调用处固定 Send future，避免签名泛型的生命周期约束扩散到外层后台任务。
         let result = match identity {
             AgentIdentity::PublicKey { key, .. } => {
                 session.authenticate_publickey_with(username, key, rsa_hash, &mut agent)
+                    .boxed()
                     .await
             }
             AgentIdentity::Certificate { certificate, .. } => {
                 session.authenticate_certificate_with(username, certificate, rsa_hash, &mut agent)
+                    .boxed()
                     .await
             }
         }.map_err(|error| match error {

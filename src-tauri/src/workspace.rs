@@ -102,7 +102,7 @@ pub async fn read_ssh_config(path: String) -> Result<Vec<SshConfigEntry>, AppErr
     parse_ssh_config(&content)
 }
 
-#[derive(Serialize)]
+#[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ConnectionExportFile {
     format_version: u16,
@@ -165,7 +165,6 @@ fn parse_ssh_config(content: &str) -> Result<Vec<SshConfigEntry>, AppError> {
         if key.eq_ignore_ascii_case("host") {
             if let Some(aliases) = current_aliases.take() {
                 blocks.push((aliases, current));
-                current = SshConfigDraft::default();
             }
             let aliases: Vec<String> = value
                 .split_whitespace()
@@ -203,12 +202,13 @@ fn parse_ssh_config(content: &str) -> Result<Vec<SshConfigEntry>, AppError> {
     let entries = blocks
         .into_iter()
         .flat_map(|(aliases, draft)| {
-            aliases.into_iter().map(|alias| SshConfigEntry {
+            let home = &home;
+            aliases.into_iter().map(move |alias| SshConfigEntry {
                 host: draft.host.clone().unwrap_or_else(|| alias.clone()),
                 alias,
                 username: draft.username.clone().unwrap_or_else(default_ssh_username),
                 port: draft.port.unwrap_or(22),
-                private_key_path: draft.identity_file.as_deref().map(|path| expand_home(path, &home)),
+                private_key_path: draft.identity_file.as_deref().map(|path| expand_home(path, home)),
             })
         })
         .filter(|entry| !entry.host.trim().is_empty())

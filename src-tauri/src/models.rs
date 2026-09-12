@@ -27,7 +27,7 @@ pub struct AppStatus {
     pub workspace_dir: Option<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SessionRestoreEntry {
     pub profile_id: String,

@@ -585,6 +585,8 @@ pub(crate) async fn copy_path_on_session(
             let child_to = normalize_remote_path(&format!("{target_path}/{name}"));
             pending.push((child_from, child_to, entry.metadata(), false));
         }
+        // 元数据已交给回访任务，本轮不能继续使用或提前应用目录权限。
+        continue;
       } else {
         if !metadata_only {
             let mut source = sftp

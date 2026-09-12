@@ -318,12 +318,12 @@ async fn run_terminal_shell(
                         recursive,
                         responder,
                     } => {
-                        cached_sftp.spawn(responder, true, |sftp| async move {
+                        cached_sftp.spawn(responder, true, move |sftp| async move {
                             copy_path_on_session(&sftp, &from_path, &to_path, recursive).await
                         });
                     }
                     TerminalControl::ChmodPath { path, mode, responder } => {
-                        cached_sftp.spawn(responder, true, |sftp| async move {
+                        cached_sftp.spawn(responder, true, move |sftp| async move {
                             chmod_path_on_session(&sftp, &path, mode).await
                         });
                     }
