@@ -84,6 +84,9 @@ pub struct WorkspaceSettings {
     // 应用明暗模式：system | light | dark（终端配色是另一套，见 terminal_theme）
     #[serde(default = "default_appearance_mode")]
     pub appearance_mode: String,
+    // 液态玻璃强度：clear（通透，透出桌面壁纸）| tinted（着色，更实、对比更高）
+    #[serde(default = "default_glass_style")]
+    pub glass_style: String,
     // 只恢复连接引用和界面位置；密码、OTP、sessionId 与终端输出永不进入配置。
     #[serde(default)]
     pub session_restore: SessionRestoreState,
@@ -110,6 +113,7 @@ impl Default for WorkspaceSettings {
             ssh_keepalive_seconds: default_ssh_keepalive_seconds(),
             terminal_background: None,
             appearance_mode: default_appearance_mode(),
+            glass_style: default_glass_style(),
             session_restore: SessionRestoreState::default(),
         }
     }
@@ -162,6 +166,11 @@ pub fn default_locale() -> String {
 /// 默认跟随系统明暗，前端 utils/appearanceMode.js 负责解析成实际的 light/dark
 pub fn default_appearance_mode() -> String {
     "system".to_string()
+}
+
+/// 默认通透；前端 utils/glassStyle.js 负责把它挂到 <html data-glass>
+pub fn default_glass_style() -> String {
+    "clear".to_string()
 }
 pub fn default_terminal_font_family() -> String {
     "Cascadia Code".to_string()

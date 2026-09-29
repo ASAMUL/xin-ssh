@@ -265,3 +265,34 @@
   backdrop-filter: blur(3px) saturate(1.1);
   -webkit-backdrop-filter: blur(3px) saturate(1.1);
 }
+
+/* ————————————————————————————————————————————————————————————
+   玻璃强度（设置 → 玻璃效果），由 utils/glassStyle.js 挂到 <html data-glass>
+   通透（clear）：窗口底层很薄，Tauri 里桌面壁纸经 Mica 透上来；控件玻璃保持现在的通透度。
+   着色（tinted）：窗口底层、面板、控件、菜单全部加厚，背景花的时候读字更轻松。
+   选择器写 html[data-glass]（0,1,1）压过 .dark（0,1,0）；深色 + 着色另起一条（0,2,1）。
+   ———————————————————————————————————————————————————————————— */
+html[data-glass="clear"] {
+  --xin-window-veil-top: 0.38;
+  --xin-window-veil-bottom: 0.5;
+  --xin-sheet-alpha: 0.44;
+}
+
+html[data-glass="tinted"] {
+  --xin-window-veil-top: 0.92;
+  --xin-window-veil-bottom: 0.95;
+  --xin-sheet-alpha: 0.8;
+  --xin-glass: rgb(var(--xin-fill-rgb) / 0.74);
+  --xin-glass-strong: rgb(var(--xin-fill-rgb) / 0.88);
+  --lg-fill: rgb(255 255 255 / 0.6);
+  --lg-fill-hover: rgb(255 255 255 / 0.72);
+  --lg-fill-regular: rgb(255 255 255 / 0.88);
+  --lg-fill-sheet: rgb(252 249 251 / 0.92);
+}
+
+html.dark[data-glass="tinted"] {
+  --lg-fill: rgb(40 34 46 / 0.66);
+  --lg-fill-hover: rgb(52 45 60 / 0.72);
+  --lg-fill-regular: rgb(34 29 40 / 0.9);
+  --lg-fill-sheet: rgb(26 22 31 / 0.94);
+}

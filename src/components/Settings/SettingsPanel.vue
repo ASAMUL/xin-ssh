@@ -31,6 +31,16 @@ const appearanceItems = computed(() => [
   { value: "dark", label: t("settings.appearanceDark"), icon: "i-lucide-moon" },
 ]);
 
+const glassStyle = computed({
+  get: () => settingsStore.glassStyle,
+  set: (value) => settingsStore.setGlassStyle(value),
+});
+
+const glassStyleItems = computed(() => [
+  { value: "clear", label: t("settings.glassClear"), icon: "i-lucide-droplet" },
+  { value: "tinted", label: t("settings.glassTinted"), icon: "i-lucide-contrast" },
+]);
+
 const sshKeepaliveSeconds = computed({
   get: () => settingsStore.sshKeepaliveSeconds,
   set: (value) => settingsStore.setSshKeepaliveSeconds(value),
@@ -74,6 +84,21 @@ const keepaliveItems = computed(() =>
             variant="pill"
             size="sm"
             :items="appearanceItems"
+            :content="false"
+          />
+        </div>
+
+        <div class="settings-row settings-row-stacked">
+          <div>
+            <strong>{{ t("settings.glassStyle") }}</strong>
+            <small>{{ t("settings.glassStyleHint") }}</small>
+          </div>
+          <UTabs
+            v-model="glassStyle"
+            class="settings-appearance"
+            variant="pill"
+            size="sm"
+            :items="glassStyleItems"
             :content="false"
           />
         </div>

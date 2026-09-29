@@ -19,7 +19,7 @@
   overflow: hidden;
   border: 1px solid var(--xin-glass-border);
   border-radius: 24px;
-  background: rgb(var(--xin-fill-rgb) / 0.58);
+  background: rgb(var(--xin-fill-rgb) / var(--xin-sheet-alpha));
   box-shadow:
     var(--xin-specular-strong),
     0 0 0 1px rgb(var(--xin-ink-rgb) / 0.03),

@@ -141,6 +141,12 @@
   --xin-canvas-raised-rgb: 251 249 251;
   --xin-canvas: rgb(var(--xin-canvas-rgb));
   --xin-canvas-raised: rgb(var(--xin-canvas-raised-rgb));
+  /* Tauri 里压在系统 Mica 上的那层画布有多不透明：越低，桌面壁纸透出来越多。
+     具体值由「玻璃效果」设置决定（liquid-glass.css 的玻璃强度一节），这里是着色档的兜底 */
+  --xin-window-veil-top: 0.84;
+  --xin-window-veil-bottom: 0.88;
+  /* 首页那张纸的不透明度，同样跟着玻璃强度走 */
+  --xin-sheet-alpha: 0.58;
 
   --xin-radius-xl: 22px;
   --xin-radius-lg: 16px;
@@ -338,7 +344,11 @@ button {
     radial-gradient(1100px 720px at 6% -12%, var(--xin-ambient-a), transparent 62%),
     radial-gradient(920px 640px at 102% -4%, var(--xin-ambient-b), transparent 58%),
     radial-gradient(1100px 860px at 50% 118%, var(--xin-ambient-c), transparent 62%),
-    linear-gradient(180deg, rgb(var(--xin-canvas-raised-rgb) / 0.84) 0%, rgb(var(--xin-canvas-rgb) / 0.88) 100%);
+    linear-gradient(
+      180deg,
+      rgb(var(--xin-canvas-raised-rgb) / var(--xin-window-veil-top)) 0%,
+      rgb(var(--xin-canvas-rgb) / var(--xin-window-veil-bottom)) 100%
+    );
 }
 
 .desktop-content {

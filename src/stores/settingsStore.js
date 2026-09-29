@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { saveSettings } from "../services/workspaceApi";
 import { normalizeTerminalBackground } from "../services/backgroundApi";
 import { applyAppearanceMode, normalizeAppearanceMode } from "../utils/appearanceMode";
+import { applyGlassStyle, normalizeGlassStyle } from "../utils/glassStyle";
 import { i18n } from "../i18n";
 import { createSerialQueue } from "../utils/serialQueue";
 import { useUiStore } from "./uiStore";
@@ -47,6 +48,7 @@ export const useSettingsStore = defineStore("settings", {
       state.settings?.homeViewMode === "list" ? "list" : "grid",
     terminalBackground: (state) => normalizeTerminalBackground(state.settings?.terminalBackground),
     appearanceMode: (state) => normalizeAppearanceMode(state.settings?.appearanceMode),
+    glassStyle: (state) => normalizeGlassStyle(state.settings?.glassStyle),
     sessionRestore: (state) => normalizeSessionRestore(state.settings?.sessionRestore),
   },
   actions: {
@@ -62,6 +64,7 @@ export const useSettingsStore = defineStore("settings", {
       // 明暗模式挂在 <html> 上，不属于 Vue 的响应式范围，得在这里显式落一次；
       // 启动时 main.js 已按系统偏好画过，这里是拿到用户存的档后校准。
       applyAppearanceMode(this.appearanceMode);
+      applyGlassStyle(this.glassStyle);
     },
     previewSettings(partial) {
       if (!this.settings) {
@@ -72,6 +75,7 @@ export const useSettingsStore = defineStore("settings", {
       if (partial.locale) i18n.global.locale.value = partial.locale;
       // 滑块预览很频繁，只有模式变化才需要同步原生窗口主题。
       if (Object.hasOwn(partial, "appearanceMode")) applyAppearanceMode(this.appearanceMode);
+      if (Object.hasOwn(partial, "glassStyle")) applyGlassStyle(this.glassStyle);
     },
     // 内存立即采用最新输入；响应只确认落盘，不能拿旧响应覆盖之后的预览或修改。
     async patchSettings(partial, workspaceDir = this.workspaceDir) {
@@ -146,6 +150,9 @@ export const useSettingsStore = defineStore("settings", {
     setAppearanceMode(appearanceMode) {
       const mode = normalizeAppearanceMode(appearanceMode);
       return this.applySettingsPatch({ appearanceMode: mode });
+    },
+    setGlassStyle(glassStyle) {
+      return this.applySettingsPatch({ glassStyle: normalizeGlassStyle(glassStyle) });
     },
   },
 });

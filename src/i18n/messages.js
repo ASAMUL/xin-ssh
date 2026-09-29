@@ -618,6 +618,10 @@ export const messages = {
       appearanceSystem: "跟随系统",
       appearanceLight: "浅色",
       appearanceDark: "深色",
+      glassStyle: "玻璃效果",
+      glassStyleHint: "通透会透出更多桌面壁纸；着色更实、对比更高，背景花的时候读字更轻松",
+      glassClear: "通透",
+      glassTinted: "着色",
       close: "关闭",
     },
     errors: {
@@ -1406,6 +1410,10 @@ export const messages = {
       appearanceSystem: "System",
       appearanceLight: "Light",
       appearanceDark: "Dark",
+      glassStyle: "Glass",
+      glassStyleHint: "Clear lets more of your wallpaper through; Tinted is more opaque with higher contrast for busy backgrounds",
+      glassClear: "Clear",
+      glassTinted: "Tinted",
       close: "Close",
     },
     errors: {
