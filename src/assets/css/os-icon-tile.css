@@ -1,0 +1,38 @@
+/* 系统图标底座：像 iOS 的 App 图标一样自带一块瓷白底，
+   彩色品牌标（Ubuntu 橙、Debian 酒红、Tux 黑身）放在哪种卡片上都站得住。 */
+.os-icon-tile {
+  --tile-size: 48px;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--xin-os-mono);
+  border: 1px solid var(--xin-os-tile-border);
+  border-radius: calc(var(--tile-size) * 0.28);
+  background: var(--xin-os-tile);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.85),
+    0 1px 2px rgb(var(--xin-shadow-rgb) / 0.06);
+}
+
+.os-icon-tile :deep(svg) {
+  width: 58%;
+  height: 58%;
+}
+
+/* 苹果标不带 fill，靠继承上色；lucide 的 <g fill="none"> 会自己挡住这条，不受影响。
+   单色标视觉上比彩色标「重」，缩小一档才和旁边的彩色标等大。 */
+.os-icon-tile.mono :deep(svg) {
+  width: 50%;
+  height: 50%;
+  fill: currentColor;
+}
+
+/* 墨色会话卡上的底座：半透明亮面，单色标翻成浅色 */
+.os-icon-tile.ink {
+  color: var(--xin-on-ink);
+  border-color: rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.08);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1);
+}

@@ -522,6 +522,25 @@ export const messages = {
         matchPosition: "第 {current} 项，共 {total} 项",
       },
     },
+    osIcon: {
+      label: "系统图标",
+      choose: "选择系统图标",
+      auto: "自动识别",
+      autoHint: "连接成功后读取远端系统自动匹配",
+      autoDetected: "自动 · {name}",
+      detectedAs: "已识别为 {name}",
+      groups: {
+        linux: "Linux 发行版",
+        system: "其他系统",
+        platform: "平台与云",
+        device: "通用设备",
+      },
+      names: {
+        server: "服务器",
+        nas: "NAS",
+        router: "路由器",
+      },
+    },
     profile: {
       newTitle: "新建连接",
       editTitle: "编辑连接",
@@ -1298,6 +1317,25 @@ export const messages = {
         noResults: "No results",
         invalidRegex: "Invalid regex",
         matchPosition: "{current} of {total}",
+      },
+    },
+    osIcon: {
+      label: "System icon",
+      choose: "Choose a system icon",
+      auto: "Auto detect",
+      autoHint: "Matched from the remote system after connecting",
+      autoDetected: "Auto · {name}",
+      detectedAs: "Detected as {name}",
+      groups: {
+        linux: "Linux distributions",
+        system: "Other systems",
+        platform: "Platforms & cloud",
+        device: "Devices",
+      },
+      names: {
+        server: "Server",
+        nas: "NAS",
+        router: "Router",
       },
     },
     profile: {

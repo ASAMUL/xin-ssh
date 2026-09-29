@@ -9,6 +9,7 @@ import {
   saveGroup,
   saveProfile,
   setProfileBackground,
+  setProfileDetectedOs,
 } from "../services/workspaceApi";
 import { normalizeTerminalBackground } from "../services/backgroundApi";
 import { createSerialQueue } from "../utils/serialQueue";
@@ -182,6 +183,17 @@ export const useProfileStore = defineStore("profiles", {
         return await this.persistChange(() => markProfileConnected(profileId));
       } catch (error) {
         console.warn("[Xin SSH] mark profile connected failed", error);
+        return null;
+      }
+    },
+    // 识别结果只是图标提示，失败不打扰用户；结果没变就不写盘，避免每轮采样都落一次 profiles.json
+    async recordDetectedOs(profileId, detectedOs) {
+      const profile = this.activeProfiles.find((item) => item.id === profileId);
+      if (!profile || !detectedOs || profile.detectedOs === detectedOs) return null;
+      try {
+        return await this.persistChange(() => setProfileDetectedOs(profileId, detectedOs));
+      } catch (error) {
+        console.warn("[Xin SSH] record detected os failed", error);
         return null;
       }
     },

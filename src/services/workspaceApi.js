@@ -36,6 +36,10 @@ export function markProfileConnected(profileId) {
   return invoke("mark_profile_connected", { profileId });
 }
 
+export function setProfileDetectedOs(profileId, detectedOs) {
+  return invoke("set_profile_detected_os", { profileId, detectedOs });
+}
+
 export function listTunnelConfigs() {
   return invoke("list_tunnel_configs");
 }

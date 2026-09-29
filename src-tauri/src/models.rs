@@ -251,6 +251,12 @@ pub struct ConnectionProfile {
     // 该连接专属的终端背景图；None = 跟随全局设置
     #[serde(default)]
     pub terminal_background: Option<TerminalBackground>,
+    // 用户手选的系统图标；None / "auto" = 用连接后自动识别的 detected_os
+    #[serde(default)]
+    pub os_icon: Option<String>,
+    // 连接成功后从远端 /etc/os-release 识别出的图标 id，由 set_profile_detected_os 单独写入
+    #[serde(default)]
+    pub detected_os: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
@@ -612,6 +618,8 @@ pub struct RemoteSystemSnapshot {
     pub captured_at: u64,
     pub hostname: Option<String>,
     pub kernel: Option<String>,
+    // /etc/os-release 的 ID（ubuntu / debian / rhel …），前端据此挑连接图标
+    pub os_id: Option<String>,
     pub uptime_seconds: Option<u64>,
     pub load_average: Vec<f64>,
     pub cpu: RemoteCpuInfo,

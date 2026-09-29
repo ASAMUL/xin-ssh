@@ -86,6 +86,13 @@
   --xin-shadow-soft: 0 10px 32px rgb(var(--xin-shadow-rgb) / 0.08);
   --xin-shadow-panel: 0 24px 64px rgb(var(--xin-shadow-rgb) / 0.14);
 
+  /* —— 系统图标底座 ——
+     devicon 是彩色品牌标，其中苹果 / Tux 身体是纯黑，只有浅底能同时托住所有标；
+     深色模式也保持瓷白底座（像 iOS 的 App 图标），不跟着变暗。 */
+  --xin-os-tile: #f6f3f6;
+  --xin-os-tile-border: rgb(var(--xin-ink-rgb) / 0.06);
+  --xin-os-mono: #1b1720;
+
   /* —— 画布底色：窗口与首页的实底 ——
      Tauri 里 .native-glass 会把画布铺成半透明好透出系统 Mica，所以基色
      也得留成通道形式，否则深色模式下那层窗底会继续发白。 */
@@ -177,6 +184,9 @@
   /* 黑影在暗底上本来就弱，加大 alpha 找回层次 */
   --xin-shadow-soft: 0 10px 32px rgb(var(--xin-shadow-rgb) / 0.32);
   --xin-shadow-panel: 0 24px 64px rgb(var(--xin-shadow-rgb) / 0.5);
+
+  --xin-os-tile: #ebe5ee;
+  --xin-os-tile-border: rgb(255 255 255 / 0.1);
 
   --xin-canvas-rgb: 10 14 24;
   --xin-canvas-raised-rgb: 17 23 38;

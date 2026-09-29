@@ -313,9 +313,10 @@ pub async fn save_profile(
                 "Connection profile not found",
             ));
         }
-        // 最近连接和背景由专用命令维护，旧表单快照不能把它们写回旧值或清空。
+        // 最近连接、背景和识别到的系统由专用命令维护，旧表单快照不能把它们写回旧值或清空。
         next_profile.last_connected_at = existing.last_connected_at.clone();
         next_profile.terminal_background = existing.terminal_background.clone();
+        next_profile.detected_os = existing.detected_os.clone();
         // 先保存认证方式，再删除秘密；保留引用能在清理失败或进程中断后重试。
         if no_saved_credentials {
             next_profile.credential_ref = existing.credential_ref.clone();
@@ -344,6 +345,29 @@ pub async fn mark_profile_connected(
         .find(|item| item.id == profile_id)
     {
         profile.last_connected_at = Some(now_stamp());
+    }
+
+    write_profiles_file(&workspace, &profiles_file)?;
+    load_workspace_from_dir(&workspace)
+}
+
+// 连接后自动识别出的系统图标；和最近连接时间一样是本机观测结果，不 bump updated_at
+#[tauri::command]
+pub async fn set_profile_detected_os(
+    app: AppHandle,
+    profile_id: String,
+    detected_os: Option<String>,
+) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = lock_workspace();
+    let workspace = active_workspace_dir(&app)?;
+    let mut profiles_file = read_profiles_file(&workspace)?;
+
+    if let Some(profile) = profiles_file
+        .profiles
+        .iter_mut()
+        .find(|item| item.id == profile_id && item.deleted_at.is_none())
+    {
+        profile.detected_os = detected_os;
     }
 
     write_profiles_file(&workspace, &profiles_file)?;

@@ -139,6 +139,9 @@ section HOST
 hostname 2>/dev/null || true
 uname -srmo 2>/dev/null || uname -a 2>/dev/null || true
 
+section OS
+awk -F= '$1=="ID" {gsub(/"/, "", $2); print $2; exit}' /etc/os-release 2>/dev/null || true
+
 section UPTIME
 cat /proc/uptime 2>/dev/null || true
 
@@ -199,6 +202,7 @@ fn parse_system_snapshot(
         captured_at: now_millis(),
         hostname: host_lines.first().cloned(),
         kernel: host_lines.get(1).cloned(),
+        os_id: first_non_empty(lines_for(&sections, "OS")).map(|id| id.to_lowercase()),
         uptime_seconds: first_non_empty(lines_for(&sections, "UPTIME"))
             .and_then(|line| parse_uptime_seconds(&line)),
         load_average: first_non_empty(lines_for(&sections, "LOAD"))

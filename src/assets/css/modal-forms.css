@@ -95,6 +95,11 @@
   gap: 13px;
 }
 
+/* 身份行：图标 | 名称 | 分组。图标放最前，像给联系人配头像——先认出是哪台机器 */
+.form-grid.identity-grid {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr) minmax(0, 1fr);
+}
+
 /* 主机地址宽、端口窄、用户名居中收尾，一行读完连接目标 */
 .form-grid.host-grid {
   grid-template-columns: minmax(0, 1.9fr) 128px minmax(0, 1.1fr);

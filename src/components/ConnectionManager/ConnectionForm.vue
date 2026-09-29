@@ -8,6 +8,8 @@ import { testConnection as testConnectionRequest } from "../../services/workspac
 import { errorCode, localizeError } from "../../utils/appError";
 import { normalizeAgentConfig } from "../../utils/sshAgent";
 import AgentSettings from "./AgentSettings.vue";
+import OsIconPicker from "./OsIconPicker.vue";
+import { OS_ICON_AUTO } from "../../config/osIcons";
 import { usesSavedCredentials } from "../../utils/authentication";
 import { useAuthenticationStore } from "../../stores/authenticationStore";
 
@@ -73,6 +75,7 @@ const authMethodItems = computed(() => [
 
 const form = reactive({
   name: "",
+  osIcon: OS_ICON_AUTO,
   groupId: "",
   host: "",
   port: 22,
@@ -106,6 +109,7 @@ function resetForm() {
   const profile = editingProfile.value;
 
   form.name = profile?.name ?? "";
+  form.osIcon = profile?.osIcon ?? OS_ICON_AUTO;
   form.groupId = profile?.groupId ?? defaultGroupId.value;
   form.host = profile?.host ?? "";
   form.port = profile?.port ?? 22;
@@ -179,6 +183,8 @@ async function submitProfile() {
         syncId: currentProfile?.syncId ?? profileId,
         groupId: draft.groupId,
         name: draft.name.trim(),
+        // 「自动」不落具体值：以后换了识别规则，旧连接也能跟着新结果走
+        osIcon: draft.osIcon === OS_ICON_AUTO ? null : draft.osIcon,
         host: draft.host.trim(),
         port: Number(draft.port),
         username: draft.username.trim(),
@@ -372,7 +378,10 @@ async function createInlineGroup() {
       </header>
 
       <div class="form-body">
-        <div class="form-grid">
+        <div class="form-grid identity-grid">
+          <UFormField :label="t('osIcon.label')">
+            <OsIconPicker v-model="form.osIcon" :detected-os="editingProfile?.detectedOs ?? null" />
+          </UFormField>
           <UFormField :label="t('profile.name')">
             <UInput v-model="form.name" size="lg" class="w-full" />
           </UFormField>

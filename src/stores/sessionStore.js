@@ -34,6 +34,7 @@ import { useProfileStore } from "./profileStore";
 import { useSettingsStore } from "./settingsStore";
 import { useUiStore } from "./uiStore";
 import { useFileExplorerStore } from "./fileExplorerStore";
+import { detectOsIcon } from "../config/osIcons";
 
 const TERMINAL_EVENT_NAME = "terminal-event";
 const INITIAL_TERMINAL_COLUMNS = 120;
@@ -515,6 +516,9 @@ export const useSessionStore = defineStore("sessions", {
         // 首页「最近连接」打点，失败不影响会话
         if (session.workspaceDir === useSettingsStore().workspaceDir) {
           useProfileStore().markConnected(session.profileId);
+          // 还没识别过系统的连接主动采样一次；监控栏隐藏时不会轮询，不能指望它顺带识别
+          const profile = useProfileStore().activeProfiles.find((item) => item.id === session.profileId);
+          if (profile && !profile.detectedOs) this.refreshSystemInfo(session.id);
         }
         return;
       }
@@ -633,6 +637,9 @@ export const useSessionStore = defineStore("sessions", {
         latestSession.systemInfo = normalizeSystemInfoSnapshot(snapshot);
         latestSession.systemInfoUpdatedAt = Date.now();
         appendNetworkSample(latestSession, latestSession.systemInfo);
+        if (latestSession.workspaceDir === useSettingsStore().workspaceDir) {
+          useProfileStore().recordDetectedOs(latestSession.profileId, detectOsIcon(latestSession.systemInfo));
+        }
         return latestSession.systemInfo;
       } catch (error) {
         const latestSession = this.findSession(session.id);

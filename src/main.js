@@ -17,6 +17,7 @@ import "./assets/css/main.css";
 
 import { addCollection } from "@iconify/vue";
 import lucideIcons from "@iconify-json/lucide/icons.json";
+import osIcons from "virtual:os-icons";
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createRouter, createWebHashHistory } from "vue-router";
@@ -26,6 +27,8 @@ import { applyAppearanceMode } from "./utils/appearanceMode";
 import ui from "@nuxt/ui/vue-plugin";
 
 addCollection(lucideIcons);
+// 连接的系统图标（devicon 彩色子集），由 vite.config.js 按 config/osIcons.js 裁剪生成
+addCollection(osIcons);
 
 // 运行在 Tauri 里时窗口是透明的（Mica/Acrylic 玻璃），CSS 据此切换到半透明底色；
 // 浏览器里跑 dev 时保持不透明底色。

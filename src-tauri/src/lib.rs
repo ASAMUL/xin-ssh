@@ -56,6 +56,7 @@ pub fn run() {
             workspace::save_profile,
             workspace::save_settings,
             workspace::set_profile_background,
+            workspace::set_profile_detected_os,
             workspace::save_snippet,
             workspace::save_tunnel_config,
             ssh::shell::send_terminal_input,

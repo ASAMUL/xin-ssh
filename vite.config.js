@@ -1,8 +1,35 @@
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import ui from '@nuxt/ui/vite'
+import { DEVICON_NAMES } from "./src/config/osIcons.js";
 
 const host = process.env.TAURI_DEV_HOST;
+const require = createRequire(import.meta.url);
+
+// devicon 全集 5MB，整包 addCollection 会让首包翻几倍；这里只切出系统图标目录里
+// 用到的那几十个，作为 virtual:os-icons 交给 main.js 注册（Tauri 离线，不能走 Iconify API）。
+function osIconCollection() {
+  const virtualId = "virtual:os-icons";
+  const resolvedId = `\0${virtualId}`;
+
+  return {
+    name: "xin-os-icon-collection",
+    resolveId: (id) => (id === virtualId ? resolvedId : null),
+    load(id) {
+      if (id !== resolvedId) return null;
+      const collection = JSON.parse(readFileSync(require.resolve("@iconify-json/devicon/icons.json"), "utf8"));
+      const icons = Object.fromEntries(DEVICON_NAMES.map((name) => {
+        const icon = collection.icons[name];
+        if (!icon) throw new Error(`devicon 中没有图标 "${name}"，请检查 src/config/osIcons.js`);
+        return [name, icon];
+      }));
+      const { prefix, width, height } = collection;
+      return `export default ${JSON.stringify({ prefix, width, height, icons })};`;
+    },
+  };
+}
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
@@ -16,6 +43,7 @@ export default defineConfig(async () => ({
       },
     },
   }),
+  osIconCollection(),
   ],
 
   // 把体积大的三方库拆出主 chunk，避免 ~1MB 单文件（xterm / UI 库 / 其余依赖各一份）
