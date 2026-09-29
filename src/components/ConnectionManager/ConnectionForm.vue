@@ -364,7 +364,7 @@ async function createInlineGroup() {
 
 <template>
   <div class="modal-backdrop">
-    <form class="connection-form" @submit.prevent="submitProfile">
+    <form class="connection-form liquid-sheet" @submit.prevent="submitProfile">
       <header>
         <h2>{{ formTitle }}</h2>
         <UButton

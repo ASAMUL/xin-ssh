@@ -1,6 +1,6 @@
-/* 快速连接弹层（标题栏加号）。
+/* 快速连接弹层（会话标签条的加号）。
    内容经 Popover portal 渲染到 body，样式必须全局；
-   浮层遵循应用玻璃 chrome：浅玻璃令牌 + specular + 大阴影。 */
+   玻璃材质由全局的 .liquid-menu 提供（vite.config.js 给所有 Popover 挂上），这里只管尺寸。 */
 
 .quick-connect-popover {
   width: 324px;
@@ -8,14 +8,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--xin-glass-border);
-  border-radius: 18px;
-  background: var(--xin-glass-strong);
-  /* 同时覆盖默认 shadow-lg 与 ring（两者都走 box-shadow） */
-  box-shadow:
-    var(--xin-specular),
-    0 24px 64px rgb(var(--xin-shadow-rgb) / 0.24);
-  backdrop-filter: var(--xin-glass-blur);
 }
 
 .quick-connect-empty {

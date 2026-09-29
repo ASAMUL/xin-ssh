@@ -1,271 +1,268 @@
+/* 连接页 = 一张铺在玻璃窗面上的「纸」：标题与工具栏常驻，只有下方列表滚动。 */
 .home-dashboard {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
-  gap: 14px;
-  width: min(100%, 1560px);
-  margin: 0 auto;
-  padding: 14px 18px 18px;
+  display: flex;
+  /* 和悬浮顶栏同一条 8px 边线 */
+  padding: 8px;
 }
 
-.home-main {
+.home-sheet {
+  /* 左右留白：列表区的内边距和工具栏背后的渐隐层都按它对齐 */
+  --home-gutter: 32px;
+  flex: 1;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  overflow: hidden;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: 24px;
+  background: rgb(var(--xin-fill-rgb) / 0.58);
+  box-shadow:
+    var(--xin-specular-strong),
+    0 0 0 1px rgb(var(--xin-ink-rgb) / 0.03),
+    0 24px 60px -36px rgb(var(--xin-shadow-rgb) / 0.3);
+  backdrop-filter: var(--xin-glass-blur);
+  -webkit-backdrop-filter: var(--xin-glass-blur);
+}
+
+/* —— 标题行 —— */
+
+.home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 30px var(--home-gutter) 0;
+}
+
+.home-title {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.home-title h1 {
+  margin: 0;
+  color: var(--xin-text);
+  font-size: 34px;
+  font-weight: 740;
+  letter-spacing: -0.8px;
+  line-height: 1.1;
+}
+
+.home-title span {
+  color: var(--xin-text-muted);
+  font-size: 16px;
+  font-weight: 560;
+  white-space: nowrap;
+}
+
+/* 新建连接：墨色液态玻璃（.liquid-glass--ink），整页唯一一块「压得住」的按钮 */
+.home-create {
+  height: 48px;
+  flex: 0 0 auto;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+/* —— 列表区：工具栏在里面吸顶，卡片从玻璃底下滚过去 —— */
+
+.home-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   overflow: auto;
-  padding: 14px 8px 40px 4px;
+  padding: 0 var(--home-gutter) 32px;
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.34) transparent;
 }
 
-.home-main::-webkit-scrollbar {
+.home-scroll::-webkit-scrollbar {
   width: 8px;
 }
 
-.home-main::-webkit-scrollbar-thumb {
+.home-scroll::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
   background: rgb(var(--xin-neutral-rgb) / 0.32);
   background-clip: padding-box;
 }
 
-/* —— 问候头 —— */
+/* —— 工具栏：一排各自独立的玻璃胶囊，胶囊之间是空的，内容从缝里透出来 —— */
 
-.home-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 20px;
-}
-
-.home-hero-copy {
-  min-width: 0;
+.home-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.home-hero-copy h1 {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin: 0;
-  color: var(--xin-text);
-  font-size: 27px;
-  font-weight: 740;
-  letter-spacing: -0.3px;
+  gap: 12px;
+  padding: 20px 0 14px;
 }
 
-.home-hero-wave {
-  font-size: 25px;
+/* 滚动边缘：工具栏背后一层渐隐的模糊（iOS 26 的 scroll edge effect），
+   卡片滑到胶囊底下前先被柔化，胶囊上的字不会和卡片文字打架 */
+.home-toolbar::before {
+  content: "";
+  position: absolute;
+  inset: 0 calc(var(--home-gutter) * -1) -18px;
+  z-index: -1;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
 }
 
-.home-hero-copy p {
-  margin: 0;
-  color: var(--xin-text-muted);
-  font-size: 13px;
-}
-
-.home-hero-actions {
-  display: grid;
-  grid-template-columns: minmax(220px, 300px) repeat(2, auto);
-  align-items: center;
-  gap: 10px;
-  justify-self: end;
-  padding: 6px;
-  border: 1px solid var(--xin-glass-border);
-  border-radius: 16px;
-  background: var(--xin-glass);
-  box-shadow:
-    var(--xin-specular),
-    0 12px 30px rgb(var(--xin-shadow-rgb) / 0.06);
-  backdrop-filter: var(--xin-glass-blur);
+.home-toolbar > * {
+  height: 46px;
+  border-radius: 999px;
 }
 
 .home-search {
-  width: 100%;
+  min-width: 220px;
+  flex: 1 1 280px;
 }
 
+/* 胶囊两端是半圆，图标离边缘 12px 会显得贴边；统一退到 16px，文字起点跟着让位。
+   注意只能改「起点」的内边距：整条 padding-inline 覆盖会把 Nuxt UI 给图标留的位置吃掉，
+   文字就压到图标上（分组下拉就这么出过 bug）。 */
 .home-search :deep(input) {
+  height: 100%;
+  padding-inline-start: 44px;
+  font-size: 14px;
+  background: transparent;
+}
+
+.home-search :deep([data-slot="leading"]) {
+  padding-inline-start: 16px;
+}
+
+.home-group-select {
+  min-width: 176px;
+  display: flex;
+}
+
+/* 玻璃在外层容器上，里面的触发器只保留内容，铺满整颗胶囊。
+   两端内边距分别给前面的文件夹图标和后面的下拉箭头留位置 */
+.home-group-select :deep(.home-group-trigger) {
+  flex: 1;
+  height: 100%;
+  padding-inline: 44px 40px;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.home-group-select :deep(.home-group-trigger [data-slot="leading"]) {
+  padding-inline-start: 16px;
+}
+
+.home-group-select :deep(.home-group-trigger [data-slot="trailing"]) {
+  padding-inline-end: 14px;
+}
+
+.home-more {
+  width: 46px;
+  justify-content: center;
+  color: var(--xin-text-body);
+}
+
+/* 全部 / 收藏 / 最近：和顶栏「连接 | 工作区」同一套——玻璃胶囊里一颗樱色水滴 */
+.home-filter :deep(.home-segment-list) {
+  height: 100%;
+  gap: 2px;
+  padding: 4px;
+  border-radius: inherit;
+  background: transparent;
+}
+
+.home-filter :deep(.home-segment-indicator) {
+  border-radius: 999px;
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
+  transition-property: translate, width;
+  transition-duration: 460ms;
+  transition-timing-function: var(--lg-spring);
+}
+
+.home-filter :deep(.home-segment-trigger) {
+  z-index: 1;
   height: 38px;
-  border-radius: 11px;
-  background: rgb(var(--xin-fill-rgb) / 0.6);
+  padding: 0 20px;
+  color: var(--xin-text-body);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 620;
+  transition: color 200ms ease;
 }
 
-.home-hero-actions :deep(button) {
-  min-height: 38px;
-  border-radius: 11px;
-  font-weight: 640;
-}
-
-/* —— 快捷操作卡 —— */
-
-.home-quick-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
-  gap: 12px;
-}
-
-.home-quick-card {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 15px 16px;
-  border: 1px solid var(--xin-glass-border);
-  border-radius: var(--xin-radius-lg);
-  background: var(--xin-glass);
-  box-shadow:
-    var(--xin-specular),
-    0 14px 30px rgb(var(--xin-shadow-rgb) / 0.06);
-  backdrop-filter: var(--xin-glass-blur);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    transform 150ms ease,
-    box-shadow 150ms ease,
-    background 150ms ease,
-    border-color 150ms ease;
-}
-
-.home-quick-card:hover:not(:disabled) {
-  border-color: rgb(var(--xin-accent-rgb) / 0.3);
-  background: rgb(var(--xin-fill-rgb) / 0.72);
-  box-shadow:
-    var(--xin-specular),
-    0 20px 42px rgb(var(--xin-shadow-rgb) / 0.11);
-  transform: translateY(-2px);
-}
-
-.home-quick-card:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.home-quick-icon {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 12px;
-  font-size: 18px;
-}
-
-.home-quick-icon.blue {
-  color: var(--xin-accent);
-  background: rgb(var(--xin-accent-rgb) / 0.13);
-}
-
-.home-quick-icon.green {
-  color: #1ea467;
-  background: rgb(var(--xin-success-rgb) / 0.14);
-}
-
-.home-quick-icon.amber {
-  color: #d78e2c;
-  background: rgb(var(--xin-warning-rgb) / 0.16);
-}
-
-.home-quick-icon.purple {
-  color: #9333ea;
-  background: rgba(168, 85, 247, 0.13);
-}
-
-.home-quick-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.home-quick-copy strong {
-  overflow: hidden;
-  color: var(--xin-text);
-  font-size: 13.5px;
-  font-weight: 670;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.home-quick-copy small {
-  overflow: hidden;
-  color: var(--xin-text-muted);
-  font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* —— 区块与标题 —— */
-
-.home-section {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.home-section-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 30px;
-}
-
-.home-section-header h2 {
-  margin: 0;
-  color: var(--xin-text);
-  font-size: 17px;
-  font-weight: 710;
-  letter-spacing: -0.2px;
-}
-
-.home-section-header > small {
-  color: var(--xin-text-soft);
-  font-size: 12px;
+.home-filter :deep(.home-segment-trigger[data-state="active"]) {
+  color: var(--xin-accent-strong);
 }
 
 .home-view-toggle {
   display: inline-flex;
+  align-items: center;
   gap: 2px;
-  margin-left: auto;
-  padding: 3px;
-  border: 1px solid var(--xin-glass-border);
-  border-radius: 11px;
-  background: var(--xin-glass);
-  box-shadow: var(--xin-specular);
-  backdrop-filter: var(--xin-glass-blur);
+  padding: 4px;
+}
+
+.home-view-toggle :deep(button) {
+  width: 38px;
+  height: 38px;
+  justify-content: center;
+  color: var(--xin-text-muted);
+  border-radius: 999px;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .home-view-toggle :deep(button.active) {
-  color: #ffffff;
-  background: linear-gradient(180deg, #5f8bff 0%, var(--xin-accent-strong) 100%);
-  box-shadow: 0 6px 14px rgb(var(--xin-accent-rgb) / 0.32);
+  color: var(--xin-accent-strong);
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
 }
 
-/* —— 卡片网格 —— */
-
-.home-recent-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(238px, 100%), 1fr));
-  gap: 12px;
+@media (prefers-reduced-motion: reduce) {
+  .home-filter :deep(.home-segment-indicator) {
+    transition-timing-function: ease;
+    transition-duration: 160ms;
+  }
 }
 
+/* 440px 起步：常见窗口宽度下稳定两列，宽屏自然长到三列 */
 .home-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
-  gap: 13px;
+  grid-template-columns: repeat(auto-fill, minmax(min(440px, 100%), 1fr));
+  gap: 16px;
+}
+
+.home-card-grid :deep(.home-sort-ghost) {
+  opacity: 0.3;
+}
+
+.home-card-grid :deep(.home-sort-chosen) {
+  border-color: rgb(var(--xin-accent-rgb) / 0.5);
 }
 
 /* —— 空状态 —— */
 
 .home-section-empty {
   margin: 0;
-  padding: 34px 0;
+  padding: 48px 0;
   color: var(--xin-text-muted);
   font-size: 13px;
   text-align: center;
@@ -274,22 +271,24 @@
 .home-empty {
   display: grid;
   place-items: center;
-  gap: 12px;
-  padding: 60px 0;
+  gap: 10px;
+  padding: 72px 0;
   text-align: center;
 }
 
 .home-empty-icon {
-  width: 58px;
-  height: 58px;
+  width: 64px;
+  height: 64px;
   display: grid;
   place-items: center;
-  color: var(--xin-accent);
-  border: 1px solid var(--xin-glass-border);
-  border-radius: 18px;
-  background: var(--xin-glass);
-  box-shadow: var(--xin-specular);
-  font-size: 26px;
+  margin-bottom: 6px;
+  color: var(--xin-on-ink-accent);
+  border-radius: 20px;
+  background: linear-gradient(160deg, var(--xin-ink-surface-raised), var(--xin-ink-surface));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 16px 32px -14px rgb(var(--xin-shadow-rgb) / 0.5);
+  font-size: 28px;
 }
 
 .home-empty h3 {
@@ -299,15 +298,18 @@
   font-weight: 720;
 }
 
-@media (max-width: 920px) {
-  .home-dashboard {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(120px, 180px) minmax(0, 1fr);
+.home-empty p {
+  margin: 0 0 10px;
+  color: var(--xin-text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .home-sheet {
+    --home-gutter: 18px;
   }
 
-  .home-hero,
-  .home-hero-actions {
-    grid-template-columns: 1fr;
-    justify-self: stretch;
+  .home-title h1 {
+    font-size: 28px;
   }
 }

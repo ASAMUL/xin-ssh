@@ -24,6 +24,7 @@ import { createRouter, createWebHashHistory } from "vue-router";
 import App from "./App.vue";
 import { i18n } from "./i18n";
 import { applyAppearanceMode } from "./utils/appearanceMode";
+import { autoAttachLiquidGlass, vLiquidGlass } from "./directives/liquidGlass";
 import ui from "@nuxt/ui/vue-plugin";
 
 addCollection(lucideIcons);
@@ -60,4 +61,13 @@ app.use(createPinia());
 app.use(router);
 app.use(i18n);
 app.use(ui);
+// 液态玻璃折射层，配合 .liquid-glass 材质类使用（见 assets/css/liquid-glass.css）
+app.directive("liquid-glass", vLiquidGlass);
 app.mount("#app");
+
+// 弹出层才是真正展示玻璃的地方：它们浮在卡片、终端、文件列表上，边缘的弯折最明显。
+// 菜单要读字，滤镜里的模糊比控件胶囊重；对话框面积大、离内容远，折射和模糊都再加一档。
+autoAttachLiquidGlass([
+  { selector: ".liquid-menu", options: { scale: 22, blur: 8 } },
+  { selector: ".liquid-sheet", options: { scale: 32, blur: 12 } },
+]);

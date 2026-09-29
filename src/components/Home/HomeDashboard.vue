@@ -8,8 +8,8 @@ import ConnectionTable from "./ConnectionTable.vue";
 import DeleteConnectionDialog from "./DeleteConnectionDialog.vue";
 import DeleteGroupDialog from "./DeleteGroupDialog.vue";
 import GroupNameDialog from "./GroupNameDialog.vue";
-import HomeSidebar from "./HomeSidebar.vue";
-import HomeConnectionGroup from "./HomeConnectionGroup.vue";
+import HomeSessionCard from "./HomeSessionCard.vue";
+import { useHomeSortable } from "../../composables/useHomeSortable";
 import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -17,7 +17,10 @@ import { useUiStore } from "../../stores/uiStore";
 import { localizeError } from "../../utils/appError";
 import { exportProfiles, readSshConfig } from "../../services/workspaceApi";
 
-const RECENT_ROW_LIMIT = 5;
+// 默认分组是「未分组」兜底位：不能改名、不能删，也不在卡片上显示分组标签
+const DEFAULT_GROUP_ID = "group-default";
+// USelect 的值不能为空，用哨兵代表「不按分组筛选」；分组 id 是 UUID，不会撞上
+const ALL_GROUPS = "all";
 
 const { t } = useI18n();
 const toast = useToast();
@@ -27,7 +30,7 @@ const settingsStore = useSettingsStore();
 const uiStore = useUiStore();
 
 const query = ref("");
-const isDraggingProfiles = ref(false);
+const cardGrid = ref(null);
 const groupDialogOpen = ref(false);
 const groupDialogMode = ref("create");
 const groupDialogInitialName = ref("");
@@ -41,161 +44,163 @@ const pendingDeleteGroup = ref(null);
 const isImportingSshConfig = ref(false);
 const isExportingProfiles = ref(false);
 
-const greeting = computed(() => {
-  const hour = new Date().getHours();
-  if (hour >= 5 && hour < 12) return t("home.greeting.morning");
-  if (hour >= 12 && hour < 18) return t("home.greeting.afternoon");
-  return t("home.greeting.evening");
+const activeNav = computed({
+  get: () => uiStore.homeNav,
+  set: (nav) => uiStore.setHomeNav(nav),
 });
-
-const profileStatuses = computed(() => sessionStore.statusByProfile);
-
-const activeNav = computed(() => uiStore.homeNav);
-const activeGroupId = computed(() => uiStore.homeGroupFilter);
+const activeGroupFilter = computed({
+  get: () => uiStore.homeGroupFilter ?? ALL_GROUPS,
+  set: (value) => uiStore.setHomeGroupFilter(value === ALL_GROUPS ? null : value),
+});
 const viewMode = computed(() => settingsStore.homeViewMode);
 const hasProfiles = computed(() => profileStore.activeProfiles.length > 0);
-
-const navItems = computed(() => [
-  { id: "home", icon: "i-lucide-house", label: t("home.nav.home") },
-  {
-    id: "all",
-    icon: "i-lucide-folder-open",
-    label: t("home.nav.all"),
-    count: profileStore.activeProfiles.length,
-  },
-  {
-    id: "favorites",
-    icon: "i-lucide-star",
-    label: t("home.nav.favorites"),
-    count: profileStore.favoriteProfiles.length,
-  },
-  {
-    id: "recents",
-    icon: "i-lucide-clock",
-    label: t("home.nav.recents"),
-    count: profileStore.recentProfiles.length,
-  },
-]);
-
-const sidebarGroups = computed(() =>
-  profileStore.profilesByGroup.map(({ group, profiles }) => ({
-    group,
-    name: groupDisplayName(group),
-    count: profiles.length,
-  })),
-);
-
-const groupNames = computed(() =>
-  Object.fromEntries(sidebarGroups.value.map(({ group, name }) => [group.id, name])),
-);
-
+const profileStatuses = computed(() => sessionStore.statusByProfile);
 const normalizedQuery = computed(() => query.value.trim().toLowerCase());
 
-// 当前导航下的扁平连接列表（收藏 / 最近直接用对应 getter，主页与全部再叠加分组筛选）
-const visibleProfiles = computed(() => {
-  let profiles;
-  if (activeNav.value === "favorites") {
-    profiles = profileStore.favoriteProfiles;
-  } else if (activeNav.value === "recents") {
-    profiles = profileStore.recentProfiles;
-  } else {
-    profiles = profileStore.activeProfiles;
-    if (activeGroupId.value) {
-      const grouped = profileStore.profilesByGroup.find(
-        ({ group }) => group.id === activeGroupId.value,
-      );
-      profiles = grouped?.profiles ?? [];
-    }
-  }
+const navItems = computed(() => [
+  { value: "all", label: t("home.filter.all") },
+  { value: "favorites", label: t("home.filter.favorites") },
+  { value: "recents", label: t("home.filter.recents") },
+]);
 
-  return normalizedQuery.value
-    ? profiles.filter((profile) => matchesProfile(profile, normalizedQuery.value))
-    : profiles;
+// profilesByGroup 已把分组被删的孤儿连接归进默认分组，筛选和标签都沿用这套归属
+const profileGroupIds = computed(() => new Map(profileStore.profilesByGroup.flatMap(
+  ({ group, profiles }) => profiles.map((profile) => [profile.id, group.id]),
+)));
+
+const groupNames = computed(() => Object.fromEntries(
+  profileStore.profilesByGroup.map(({ group }) => [group.id, groupDisplayName(group)]),
+));
+
+const groupItems = computed(() => [
+  { value: ALL_GROUPS, label: t("home.allGroups") },
+  ...profileStore.profilesByGroup.map(({ group }) => ({ value: group.id, label: groupDisplayName(group) })),
+]);
+
+const filteredProfiles = computed(() => {
+  const base = activeNav.value === "favorites" ? profileStore.favoriteProfiles
+    : activeNav.value === "recents" ? profileStore.recentProfiles
+      : profileStore.activeProfiles;
+  const groupId = uiStore.homeGroupFilter;
+
+  return base.filter((profile) => (!groupId || profileGroupIds.value.get(profile.id) === groupId)
+    && (!normalizedQuery.value || matchesProfile(profile, normalizedQuery.value)));
 });
 
-// 卡片视图在主页/全部按分组分区展示；收藏、最近为扁平网格
-const groupedView = computed(() => ["home", "all"].includes(activeNav.value));
-const visibleGroups = computed(() =>
-  profileStore.profilesByGroup
-    .filter(({ group }) => !activeGroupId.value || group.id === activeGroupId.value)
-    .map(({ group, profiles }) => ({
-      group,
-      name: groupDisplayName(group),
-      profiles: normalizedQuery.value
-        ? profiles.filter((profile) => matchesProfile(profile, normalizedQuery.value))
-        : profiles,
-    }))
-    .filter(({ profiles }) => !normalizedQuery.value || profiles.length > 0),
-);
+// 当前会话卡只在它的连接落在筛选结果里时出现：筛到别的分组或搜别的机器时不硬塞进来
+const featuredSession = computed(() => sessionStore.workspaceSession);
+const featuredProfile = computed(() => {
+  const session = featuredSession.value;
+  return session ? filteredProfiles.value.find((profile) => profile.id === session.profileId) ?? null : null;
+});
+// 已经在墨色卡里展示的连接不在下方网格重复出现
+const listedProfiles = computed(() => featuredProfile.value
+  ? filteredProfiles.value.filter((profile) => profile.id !== featuredProfile.value.id)
+  : filteredProfiles.value);
 
 const profileMenus = computed(() =>
   Object.fromEntries(profileStore.activeProfiles.map((profile) => [profile.id, menuItemsFor(profile)])),
 );
 
 const tableRows = computed(() =>
-  visibleProfiles.value.map((profile) => ({
+  listedProfiles.value.map((profile) => ({
     profile,
-    groupName: groupNames.value[profile.groupId] ?? t("sidebar.ungrouped"),
+    groupName: cardGroupName(profile),
     status: profileStatus(profile),
     menuItems: profileMenus.value[profile.id],
   })),
 );
 
-const recentRow = computed(() => profileStore.recentProfiles.slice(0, RECENT_ROW_LIMIT));
-const showHomeSections = computed(() => activeNav.value === "home" && !normalizedQuery.value);
-
-const sectionTitle = computed(() => {
-  if (activeNav.value === "favorites") return t("home.nav.favorites");
-  if (activeNav.value === "recents") return t("home.nav.recents");
-  return t("home.nav.all");
-});
-
-const sectionEmptyText = computed(() => {
-  if (!hasProfiles.value || normalizedQuery.value) return t("sidebar.noMatches");
+const emptyText = computed(() => {
+  if (normalizedQuery.value) return t("sidebar.noMatches");
   if (activeNav.value === "favorites") return t("home.emptyFavorites");
   if (activeNav.value === "recents") return t("home.emptyRecents");
-  return t("sidebar.noMatches");
+  return t("home.emptyGroup");
 });
 
-const quickActions = computed(() => [
-  {
-    id: "new",
-    icon: "i-lucide-plus",
-    tone: "blue",
-    title: t("home.quick.newConnection"),
-    description: t("home.quick.newConnectionDesc"),
-    disabled: false,
-    run: () => uiStore.openConnectionForm(),
-  },
-  {
-    id: "tunnel",
-    icon: "i-lucide-waypoints",
-    tone: "green",
-    title: t("home.quick.tunnel"),
-    description: t("home.quick.tunnelDesc"),
-    disabled: false,
-    run: () => uiStore.openTunnelPanel(),
-  },
-  {
-    id: "favorites",
-    icon: "i-lucide-star",
-    tone: "amber",
-    title: t("home.quick.favorites"),
-    description: t("home.quick.favoritesDesc", {
-      count: profileStore.favoriteProfiles.length,
-    }),
-    disabled: false,
-    run: () => uiStore.setHomeNav("favorites"),
-  },
-  {
-    id: "settings",
-    icon: "i-lucide-settings",
-    tone: "purple",
-    title: t("home.quick.settings"),
-    description: t("home.quick.settingsDesc"),
-    disabled: false,
-    run: () => uiStore.openSettings(),
-  },
+// 平铺网格里只有「全部 + 选中单个分组 + 未搜索」时顺序才等于该分组的真实顺序，
+// 其余视图是跨组或筛过的子集，拖动结果无法落回某个分组，干脆不给拖。
+const sortableGroupId = computed(() =>
+  activeNav.value === "all" && !normalizedQuery.value ? uiStore.homeGroupFilter : null,
+);
+
+useHomeSortable(cardGrid, {
+  draggable: ".connection-card",
+  handle: ".connection-card-drag-handle",
+  disabled: () => !sortableGroupId.value || profileStore.isSavingLayout,
+  onDrop: ({ id, beforeId }) => moveProfile({ id, groupId: sortableGroupId.value, beforeId }),
+});
+
+const featuredMenuItems = computed(() => {
+  const session = featuredSession.value;
+  const profile = featuredProfile.value;
+  if (!session || !profile) return [];
+  return [
+    [
+      {
+        label: t("home.newTerminal"),
+        icon: "i-lucide-square-plus",
+        onSelect: () => sessionStore.openProfileSession(profile, { forceNew: true }),
+      },
+      {
+        label: t("sidebar.editConnection"),
+        icon: "i-lucide-pencil",
+        onSelect: () => uiStore.openConnectionForm(profile.id),
+      },
+    ],
+    [
+      {
+        label: t("terminal.closeSession"),
+        icon: "i-lucide-x",
+        color: "error",
+        onSelect: () => sessionStore.closeSession(session.id),
+      },
+    ],
+  ];
+});
+
+const manageableGroups = computed(() => profileStore.activeGroups.filter((group) => group.id !== DEFAULT_GROUP_ID));
+
+// 侧栏去掉后，分组管理、隧道和导入导出统一收进工具栏右端的「更多」菜单
+const moreMenuItems = computed(() => [
+  [
+    {
+      label: t("sidebar.addGroup"),
+      icon: "i-lucide-folder-plus",
+      onSelect: openCreateGroupDialog,
+    },
+    {
+      label: t("home.manageGroups"),
+      icon: "i-lucide-folder-cog",
+      disabled: !manageableGroups.value.length,
+      children: manageableGroups.value.map((group) => ({
+        label: groupDisplayName(group),
+        icon: "i-lucide-folder",
+        children: groupMenuItems(group),
+      })),
+    },
+  ],
+  [
+    {
+      label: t("tunnel.title"),
+      icon: "i-lucide-waypoints",
+      onSelect: () => uiStore.openTunnelPanel(),
+    },
+  ],
+  [
+    {
+      label: t("home.importSshConfig"),
+      icon: "i-lucide-file-input",
+      disabled: isImportingSshConfig.value,
+      onSelect: importSshConfig,
+    },
+    {
+      label: t("home.exportProfiles"),
+      icon: "i-lucide-file-output",
+      disabled: isExportingProfiles.value || !hasProfiles.value,
+      onSelect: exportConnectionProfiles,
+    },
+  ],
 ]);
 
 function matchesProfile(profile, keyword) {
@@ -205,7 +210,12 @@ function matchesProfile(profile, keyword) {
 }
 
 function groupDisplayName(group) {
-  return group.id === "group-default" ? t("sidebar.ungrouped") : group.name;
+  return group.id === DEFAULT_GROUP_ID ? t("sidebar.ungrouped") : group.name;
+}
+
+function cardGroupName(profile) {
+  const groupId = profileGroupIds.value.get(profile.id);
+  return groupId && groupId !== DEFAULT_GROUP_ID ? groupNames.value[groupId] ?? null : null;
 }
 
 function profileStatus(profile) {
@@ -266,6 +276,51 @@ function menuItemsFor(profile) {
       },
     ],
   ];
+}
+
+// 默认分组固定置顶，普通分组上移不能越过它（索引 1 即顶）
+function groupMenuItems(group) {
+  const groups = profileStore.activeGroups;
+  const index = groups.findIndex((item) => item.id === group.id);
+  const floor = groups[0]?.id === DEFAULT_GROUP_ID ? 1 : 0;
+  return [
+    [
+      {
+        label: t("sidebar.renameGroup"),
+        icon: "i-lucide-pencil",
+        onSelect: () => openRenameGroupDialog(group),
+      },
+    ],
+    [
+      {
+        label: t("home.moveUp"),
+        icon: "i-lucide-arrow-up",
+        disabled: profileStore.isSavingLayout || index <= floor,
+        onSelect: () => moveGroup(index, -1),
+      },
+      {
+        label: t("home.moveDown"),
+        icon: "i-lucide-arrow-down",
+        disabled: profileStore.isSavingLayout || index === groups.length - 1,
+        onSelect: () => moveGroup(index, 1),
+      },
+    ],
+    [
+      {
+        label: t("sidebar.deleteGroup"),
+        icon: "i-lucide-trash-2",
+        color: "error",
+        onSelect: () => openDeleteGroupDialog(group),
+      },
+    ],
+  ];
+}
+
+function moveGroup(index, offset) {
+  const ids = profileStore.activeGroups.map((group) => group.id);
+  const [id] = ids.splice(index, 1);
+  ids.splice(index + offset, 0, id);
+  profileStore.reorderGroups(ids).catch(showError);
 }
 
 function openProfile(profile) {
@@ -354,14 +409,6 @@ function toggleFavorite(profileId) {
 
 function moveProfile({ id, groupId, beforeId = null }) {
   profileStore.moveProfileToGroup(id, groupId, beforeId).catch(showError);
-}
-
-function reorderGroups(groupIds) {
-  profileStore.reorderGroups(groupIds).catch(showError);
-}
-
-function setGroupCollapsed(groupId, collapsed) {
-  profileStore.setGroupCollapsed(groupId, collapsed).catch(showError);
 }
 
 // ---- 删除连接 ----
@@ -458,129 +505,80 @@ function showError(error) {
 
 <template>
   <section class="home-dashboard">
-    <HomeSidebar
-      :nav-items="navItems"
-      :groups="sidebarGroups"
-      :active-nav="activeNav"
-      :active-group-id="activeGroupId"
-      :busy="profileStore.isSavingLayout"
-      @select-nav="uiStore.setHomeNav"
-      @select-group="uiStore.setHomeGroupFilter"
-      @create-group="openCreateGroupDialog"
-      @rename-group="openRenameGroupDialog"
-      @delete-group="openDeleteGroupDialog"
-      @reorder-groups="reorderGroups"
-      @open-settings="uiStore.openSettings"
-      @open-tunnels="uiStore.openTunnelPanel"
-    />
-
-    <div class="home-main">
-      <header class="home-hero">
-        <div class="home-hero-copy">
-          <h1>
-            <span class="home-hero-wave">👋</span>
-            {{ greeting }}
-          </h1>
-          <p>{{ t("home.subtitle") }}</p>
+    <div class="home-sheet">
+      <header class="home-header">
+        <div class="home-title">
+          <h1>{{ t("home.title") }}</h1>
+          <span>{{ t("home.hostCount", { count: profileStore.activeProfiles.length }) }}</span>
         </div>
-
-        <div class="home-hero-actions">
-          <UInput
-            v-model="query"
-            class="home-search"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            icon="i-lucide-search"
-            :placeholder="t('sidebar.search')"
-          />
-          <UButton
-            class="cta-button"
-            color="primary"
-            variant="solid"
-            size="sm"
-            icon="i-lucide-plus"
-            :label="t('workspace.addConnectionTitle')"
-            @click="uiStore.openConnectionForm()"
-          />
-          <UButton
-            color="neutral"
-            variant="outline"
-            size="sm"
-            icon="i-lucide-file-input"
-            :label="t('home.importSshConfig')"
-            :loading="isImportingSshConfig"
-            @click="importSshConfig"
-          />
-          <UButton
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            icon="i-lucide-file-output"
-            :label="t('home.exportProfiles')"
-            :loading="isExportingProfiles"
-            @click="exportConnectionProfiles"
-          />
-        </div>
+        <UButton
+          v-liquid-glass="{ scale: 16 }"
+          class="home-create liquid-glass liquid-glass--ink"
+          color="primary"
+          size="lg"
+          icon="i-lucide-plus"
+          :label="t('sidebar.add')"
+          @click="uiStore.openConnectionForm()"
+        />
       </header>
 
-      <section v-if="showHomeSections" class="home-quick-grid">
-        <button
-          v-for="action in quickActions"
-          :key="action.id"
-          type="button"
-          class="home-quick-card"
-          :disabled="action.disabled"
-          @click="action.run"
-        >
-          <span class="home-quick-icon" :class="action.tone">
-            <UIcon :name="action.icon" />
-          </span>
-          <span class="home-quick-copy">
-            <strong>{{ action.title }}</strong>
-            <small>{{ action.description }}</small>
-          </span>
-        </button>
-      </section>
-
-      <section v-if="showHomeSections && recentRow.length > 0" class="home-section">
-        <header class="home-section-header">
-          <h2>{{ t("home.nav.recents") }}</h2>
-          <UButton
+      <div class="home-scroll">
+        <!-- 工具栏吸顶、浮在列表之上：卡片从玻璃底下滑过时，边缘的折射才看得见 -->
+        <div class="home-toolbar">
+          <UInput
+            v-model="query"
+            v-liquid-glass
+            class="home-search liquid-glass"
             color="neutral"
-            variant="ghost"
-            size="xs"
-            trailing-icon="i-lucide-chevron-right"
-            :label="t('monitor.viewAll')"
-            @click="uiStore.setHomeNav('recents')"
+            variant="none"
+            size="lg"
+            icon="i-lucide-search"
+            :placeholder="t('home.searchPlaceholder')"
           />
-        </header>
-        <div class="home-recent-grid">
-          <ConnectionCard
-            v-for="profile in recentRow"
-            :key="profile.id"
-            :profile="profile"
-            :status="profileStatus(profile)"
-            :menu-items="profileMenus[profile.id]"
-            @open="openProfile"
-            @edit="uiStore.openConnectionForm"
-            @toggle-favorite="toggleFavorite"
+
+          <UTabs
+            v-model="activeNav"
+            v-liquid-glass
+            class="home-filter liquid-glass"
+            variant="pill"
+            :items="navItems"
+            :content="false"
+            :ui="{
+              list: 'home-segment-list',
+              indicator: 'home-segment-indicator',
+              trigger: 'home-segment-trigger',
+            }"
           />
-        </div>
-      </section>
 
-      <section class="home-section">
-        <header class="home-section-header">
-          <h2>{{ sectionTitle }}</h2>
-          <small>{{ t("workspace.connectionCount", { count: visibleProfiles.length }) }}</small>
+          <!-- USelect 渲染的是片段（触发器 + 弹层 portal），指令挂不上去，玻璃做在外面这层 -->
+          <div v-liquid-glass class="home-group-select liquid-glass">
+            <USelect
+              v-model="activeGroupFilter"
+              class="home-group-trigger"
+              color="neutral"
+              variant="none"
+              size="lg"
+              icon="i-lucide-folder"
+              :items="groupItems"
+              :aria-label="t('home.groupFilter')"
+              :content="{ align: 'start' }"
+            />
+          </div>
 
-          <span class="home-view-toggle">
+          <UFieldGroup
+            v-liquid-glass
+            class="home-view-toggle liquid-glass"
+            role="group"
+            :aria-label="t('home.viewMode')"
+          >
             <UButton
               :class="{ active: viewMode === 'grid' }"
               color="neutral"
               variant="ghost"
-              size="xs"
+              size="lg"
+              square
               icon="i-lucide-layout-grid"
+              :aria-pressed="viewMode === 'grid'"
               :aria-label="t('home.viewGrid')"
               :title="t('home.viewGrid')"
               @click="settingsStore.setHomeViewMode('grid')"
@@ -589,84 +587,88 @@ function showError(error) {
               :class="{ active: viewMode === 'list' }"
               color="neutral"
               variant="ghost"
-              size="xs"
+              size="lg"
+              square
               icon="i-lucide-list"
+              :aria-pressed="viewMode === 'list'"
               :aria-label="t('home.viewList')"
               :title="t('home.viewList')"
               @click="settingsStore.setHomeViewMode('list')"
             />
-          </span>
-        </header>
+          </UFieldGroup>
+
+          <UDropdownMenu :items="moreMenuItems" size="sm" :content="{ align: 'end' }">
+            <UButton
+              v-liquid-glass
+              class="home-more liquid-glass"
+              color="neutral"
+              variant="ghost"
+              size="lg"
+              square
+              icon="i-lucide-ellipsis"
+              :aria-label="t('home.moreActions')"
+              :title="t('home.moreActions')"
+            />
+          </UDropdownMenu>
+        </div>
 
         <div v-if="!hasProfiles" class="home-empty">
           <div class="home-empty-icon">
-            <UIcon name="i-lucide-plus" />
+            <UIcon name="i-lucide-server" />
           </div>
-          <h3>{{ t("workspace.addConnectionTitle") }}</h3>
+          <h3>{{ t("home.emptyTitle") }}</h3>
+          <p>{{ t("home.emptyDescription") }}</p>
           <UButton
             class="cta-button"
             color="primary"
-            variant="solid"
             size="lg"
             icon="i-lucide-plus"
-            :label="t('workspace.addConnectionTitle')"
+            :label="t('sidebar.add')"
             @click="uiStore.openConnectionForm()"
           />
         </div>
 
-        <template v-else-if="viewMode === 'grid'">
-          <template v-if="groupedView">
-            <template v-if="visibleGroups.length > 0">
-              <HomeConnectionGroup
-                v-for="{ group, name, profiles } in visibleGroups"
-                :key="group.id"
-                :group="group"
-                :name="name"
-                :profiles="profiles"
-                :statuses="profileStatuses"
-                :menu-items="profileMenus"
-                :disabled="profileStore.isSavingLayout || Boolean(normalizedQuery)"
-                :force-expanded="isDraggingProfiles || Boolean(normalizedQuery)"
-                @open="openProfile"
-                @edit="uiStore.openConnectionForm"
-                @toggle-favorite="toggleFavorite"
-                @collapse="setGroupCollapsed"
-                @move="moveProfile"
-                @drag-start="isDraggingProfiles = true"
-                @drag-end="isDraggingProfiles = false"
-              />
-            </template>
-            <p v-else class="home-section-empty">{{ sectionEmptyText }}</p>
-          </template>
-
-          <template v-else>
-            <div v-if="visibleProfiles.length > 0" class="home-card-grid">
-              <ConnectionCard
-                v-for="profile in visibleProfiles"
-                :key="profile.id"
-                :profile="profile"
-                :status="profileStatus(profile)"
-                :menu-items="profileMenus[profile.id]"
-                @open="openProfile"
-                @edit="uiStore.openConnectionForm"
-                @toggle-favorite="toggleFavorite"
-              />
-            </div>
-            <p v-else class="home-section-empty">{{ sectionEmptyText }}</p>
-          </template>
-        </template>
-
         <template v-else>
+          <HomeSessionCard
+            v-if="featuredSession && featuredProfile"
+            :session="featuredSession"
+            :profile="featuredProfile"
+            :menu-items="featuredMenuItems"
+            @resume="sessionStore.selectSession"
+          />
+
+          <p v-if="!listedProfiles.length && !featuredProfile" class="home-section-empty">{{ emptyText }}</p>
+
+          <div
+            v-else-if="viewMode === 'grid'"
+            ref="cardGrid"
+            class="home-card-grid"
+            :data-group-id="sortableGroupId"
+            :aria-busy="profileStore.isSavingLayout"
+          >
+            <ConnectionCard
+              v-for="profile in listedProfiles"
+              :key="profile.id"
+              :data-sort-id="profile.id"
+              :profile="profile"
+              :status="profileStatus(profile)"
+              :group-name="cardGroupName(profile)"
+              :menu-items="profileMenus[profile.id]"
+              :sortable="Boolean(sortableGroupId)"
+              @open="openProfile"
+              @toggle-favorite="toggleFavorite"
+            />
+          </div>
+
           <ConnectionTable
-            v-if="tableRows.length > 0"
+            v-else-if="tableRows.length"
             :rows="tableRows"
             @open="openProfile"
             @edit="uiStore.openConnectionForm"
             @toggle-favorite="toggleFavorite"
           />
-          <p v-else class="home-section-empty">{{ sectionEmptyText }}</p>
         </template>
-      </section>
+      </div>
     </div>
 
     <GroupNameDialog

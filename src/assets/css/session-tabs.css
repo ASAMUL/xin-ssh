@@ -1,24 +1,22 @@
+/* 外壳是液态玻璃胶囊（WorkspaceShell 上挂 .liquid-glass + v-liquid-glass），
+   这里只管里面的排布：会话标签 | 加号，加号紧跟最后一个标签（Chrome 模式） */
 .session-tabs {
   min-width: 0;
-  height: 100%;
-  /* 首页 | 会话标签 | 加号 | 拖拽空域 —— 加号紧跟最后一个标签（Chrome 模式） */
-  display: grid;
-  grid-template-columns: auto minmax(0, max-content) auto minmax(12px, 1fr);
+  max-width: 100%;
+  height: 46px;
+  display: inline-grid;
+  grid-template-columns: minmax(0, max-content) auto;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
-  padding: 0 6px 0 4px;
+  padding: 4px;
+  border-radius: 999px;
 }
 
-.tabs-drag-space {
-  height: 100%;
-}
-
-.home-tab,
 .session-tab {
-  height: 36px;
+  height: 38px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 999px;
   background: transparent;
   box-shadow: none;
   color: var(--xin-text-muted);
@@ -30,55 +28,29 @@
     transform 240ms cubic-bezier(0.32, 0.72, 0.24, 1);
 }
 
-.home-tab:hover,
 .session-tab:hover {
   color: var(--xin-text);
   background: rgb(var(--xin-fill-rgb) / 0.42);
 }
 
-/* iOS 的选中态靠「发丝描边 + 顶部高光 + 极紧的两层投影」立起来，
-   不是一团大扩散阴影：偏移 ≤2px、模糊 ≤6px。药丸这么小的尺寸下，
-   大模糊阴影只会糊成一片灰、显廉价，边缘必须由描边来交代。 */
-.home-tab.active,
+/* 选中的标签是胶囊里一颗透明的玻璃水滴（不用樱色：顶栏和首页的樱色水滴表示「去哪一页」，
+   这里只是「看哪台机器」，用中性的那颗区分层级）。外壳已经在折射，水滴自己不再叠 backdrop 模糊。 */
 .session-tab.active {
   color: var(--xin-text);
-  border-color: rgb(var(--xin-ink-rgb) / 0.07);
-  background: linear-gradient(180deg, rgb(var(--xin-fill-rgb) / 0.97) 0%, rgb(var(--xin-fill-rgb) / 0.8) 100%);
-  box-shadow:
-    var(--xin-specular-strong),
-    0 1px 1px rgb(var(--xin-shadow-rgb) / 0.05),
-    0 2px 6px -2px rgb(var(--xin-shadow-rgb) / 0.12);
-  backdrop-filter: var(--xin-glass-blur);
-  -webkit-backdrop-filter: var(--xin-glass-blur);
+  border-color: transparent;
+  background: var(--lg-droplet-clear);
+  box-shadow: var(--lg-droplet-clear-shadow);
 }
 
 /* 按下去要有回弹，这是 iOS 手感里最省事也最像的一处 */
-.home-tab:active,
 .session-tab:active {
   transform: scale(0.97);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-tab:active,
   .session-tab:active {
     transform: none;
   }
-}
-
-.home-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 104px;
-  padding: 0 15px;
-  font-size: 12px;
-  font-weight: 640;
-  white-space: nowrap;
-}
-
-.home-tab :deep(svg) {
-  width: 16px;
-  height: 16px;
 }
 
 .tabs-strip {
@@ -278,16 +250,6 @@
 }
 
 @media (max-width: 980px) {
-  .home-tab {
-    min-width: 44px;
-    justify-content: center;
-    padding: 0 10px;
-  }
-
-  .home-tab span {
-    display: none;
-  }
-
   .session-tab {
     max-width: 168px;
   }

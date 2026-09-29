@@ -16,7 +16,7 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(["showConnectionHub", "select", "close", "move", "dragging"]);
+const emit = defineEmits(["select", "close", "move", "dragging"]);
 const { t } = useI18n();
 
 const stripRef = ref(null);
@@ -134,19 +134,6 @@ watch(
 
 <template>
   <nav class="session-tabs" :aria-label="t('workspace.openSessions')">
-    <button
-      type="button"
-      class="home-tab"
-      :class="{ active: !activeSessionId }"
-      :title="t('workspace.connectionHub')"
-      :disabled="disabled || isDragging"
-      :aria-pressed="!activeSessionId"
-      @click.stop="emit('showConnectionHub')"
-    >
-      <UIcon name="i-lucide-house" />
-      <span>{{ t("workspace.connectionHub") }}</span>
-    </button>
-
     <div
       ref="stripRef"
       class="tabs-strip"
@@ -197,8 +184,6 @@ watch(
     </div>
 
     <QuickConnectMenu :disabled="disabled || isDragging" />
-
-    <div class="tabs-drag-space"></div>
   </nav>
 </template>
 

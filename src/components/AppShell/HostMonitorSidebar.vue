@@ -16,7 +16,8 @@ const settingsStore = useSettingsStore();
 const { refresh: refreshCurrentSystemInfo } = useSystemInfoPolling(sessionStore, settingsStore);
 
 const cardUi = {
-  root: "monitor-card-root",
+  // liquid-rim：监控卡是内容层，只借液态玻璃的高光描边，不做折射
+  root: "monitor-card-root liquid-rim",
   body: "p-0 sm:p-0 monitor-card-body",
 };
 const slideoverUi = {

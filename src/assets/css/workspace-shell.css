@@ -1,0 +1,30 @@
+/* 工作区 = 会话标签条 + 监控栏/终端分割。标签条从顶栏搬到这里后，
+   顶栏只负责「去哪个页面」，标签条只负责「看哪台机器」，两层职责不再挤在一行。 */
+.workspace-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workspace-session-bar {
+  flex: 0 0 auto;
+  height: 46px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* 标签条是一颗贴合内容宽度的玻璃胶囊，标签多了才撑满整行（再多就横向滚动） */
+.workspace-session-bar > * {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.workspace-split {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}

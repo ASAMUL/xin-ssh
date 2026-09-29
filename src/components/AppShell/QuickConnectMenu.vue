@@ -144,15 +144,15 @@ function createConnection() {
 </template>
 
 <style scoped>
-/* 加号：平时安静的幽灵按钮，悬停浮出玻璃，弹层打开时保持“按下”状态。
-   选中/打开态的描边与投影必须和 SessionTabs 的药丸完全一致，两者是并排的。 */
+/* 加号：平时安静的幽灵按钮，弹层打开时变成和选中标签同一颗透明玻璃水滴——
+   两者并排在同一条玻璃胶囊里，必须是同一种材质。 */
 .quick-connect-trigger {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   justify-content: center;
   color: var(--xin-text-muted);
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 999px;
   transition:
     background 160ms ease,
     color 160ms ease,
@@ -172,14 +172,8 @@ function createConnection() {
 
 .quick-connect-trigger.open {
   color: var(--xin-accent-strong);
-  border-color: rgb(var(--xin-ink-rgb) / 0.07);
-  background: linear-gradient(180deg, rgb(var(--xin-fill-rgb) / 0.97) 0%, rgb(var(--xin-fill-rgb) / 0.8) 100%);
-  box-shadow:
-    var(--xin-specular-strong),
-    0 1px 1px rgb(var(--xin-shadow-rgb) / 0.05),
-    0 2px 6px -2px rgb(var(--xin-shadow-rgb) / 0.12);
-  backdrop-filter: var(--xin-glass-blur);
-  -webkit-backdrop-filter: var(--xin-glass-blur);
+  background: var(--lg-droplet-clear);
+  box-shadow: var(--lg-droplet-clear-shadow);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -60,6 +60,8 @@ export const useSessionStore = defineStore("sessions", {
   state: () => ({
     sessions: [],
     activeSessionId: null,
+    // 回到连接页时记住离开的会话：顶栏「工作区」和首页「继续会话」都要回到这里
+    lastWorkspaceSessionId: null,
     unlistenTerminal: null,
     hasRestoredSessions: false,
     isRestoringSessions: false,
@@ -67,6 +69,12 @@ export const useSessionStore = defineStore("sessions", {
   getters: {
     activeSession: (state) =>
       state.sessions.find((session) => session.id === state.activeSessionId) ?? null,
+    // 上次停留的会话被关掉后退到第一个可用会话，保证「工作区」入口总有落点
+    workspaceSession: (state) => {
+      const available = state.sessions.filter((session) => !session.isClosing);
+      const preferredId = state.activeSessionId ?? state.lastWorkspaceSessionId;
+      return available.find((session) => session.id === preferredId) ?? available[0] ?? null;
+    },
     // profileId → 聚合状态（同一连接多个终端时取“最好”的一个），给首页/快速连接的状态点用
     statusByProfile: (state) => {
       const priority = { connected: 4, connecting: 3, error: 2, authRequired: 1, closed: 1 };
@@ -249,8 +257,13 @@ export const useSessionStore = defineStore("sessions", {
       this.persistSessionLayout();
     },
     showConnectionHub() {
+      if (this.activeSessionId) this.lastWorkspaceSessionId = this.activeSessionId;
       this.activeSessionId = null;
       this.persistSessionLayout();
+    },
+    showWorkspace() {
+      const session = this.workspaceSession;
+      if (session) this.selectSession(session.id);
     },
     // 同一标签的并发关闭共用结果，删除配置必须等后端关闭成功才能继续。
     async closeSession(sessionId, { requireDisconnect = false } = {}) {

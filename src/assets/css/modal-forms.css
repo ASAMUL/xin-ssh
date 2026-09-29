@@ -1,6 +1,7 @@
-/* 模态卡片（连接表单 / 设置面板）。
+/* 模态卡片（连接表单 / 设置面板 / 隧道面板）。
    布局要点：卡片 max-height 受限于 backdrop，中段 .form-body 内部滚动，
-   头尾常驻 —— 非全屏小窗口下保存按钮也始终可见。 */
+   头尾常驻 —— 非全屏小窗口下保存按钮也始终可见。
+   卡片材质是液态玻璃 .liquid-sheet（liquid-glass.css），折射由 main.js 的自动挂载补上。 */
 
 .modal-backdrop {
   position: absolute;
@@ -9,12 +10,25 @@
   display: grid;
   place-items: center;
   padding: 22px;
-  background: rgb(var(--xin-shadow-rgb) / 0.26);
-  backdrop-filter: blur(10px) saturate(1.1);
+  background: var(--lg-scrim);
+}
+
+/* 模糊放在伪元素上而不是遮罩本身：遮罩是弹窗卡片的祖先，自己带 backdrop-filter 就成了
+   「backdrop root」，卡片的折射只能看见遮罩这层灰、看不到后面的界面 */
+.modal-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  backdrop-filter: blur(3px) saturate(1.1);
+  -webkit-backdrop-filter: blur(3px) saturate(1.1);
 }
 
 .connection-form,
 .settings-panel {
+  /* .liquid-sheet 不带定位（UModal 靠 fixed 居中，不能被覆盖），高光描边的 ::before 要这里托住 */
+  position: relative;
   width: min(620px, 100%);
   /* flex item 默认 min-width:auto，内容一宽就会把上面这个 width 顶破。
      少了这行，弹窗会被最宽的一行内容撑开，还会连带冒出横向滚动条。 */
@@ -23,13 +37,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--xin-glass-border);
-  border-radius: var(--xin-radius-xl);
-  background: var(--xin-glass-strong);
-  box-shadow:
-    var(--xin-specular),
-    0 32px 90px rgb(var(--xin-shadow-rgb) / 0.28);
-  backdrop-filter: var(--xin-glass-blur);
 }
 
 .settings-panel {
@@ -143,12 +150,11 @@
     box-shadow 140ms ease;
 }
 
+/* 选中项和顶栏、首页筛选同一颗樱色玻璃水滴 */
 .segmented-control button.active {
-  color: var(--xin-accent-deep);
-  background: rgb(var(--xin-fill-rgb) / 0.94);
-  box-shadow:
-    0 1px 0 rgb(var(--xin-fill-rgb) / 0.9) inset,
-    0 4px 14px rgb(var(--xin-shadow-rgb) / 0.1);
+  color: var(--xin-accent-strong);
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
 }
 
 .connection-auth-methods {
@@ -175,7 +181,7 @@
   gap: 8px;
   padding: 8px 10px;
   color: var(--xin-text-muted);
-  border: 1px solid rgba(37, 99, 235, 0.16);
+  border: 1px solid rgb(var(--xin-accent-rgb) / 0.16);
   border-radius: var(--xin-radius);
   background: var(--xin-surface-raised);
   font-size: 16px;

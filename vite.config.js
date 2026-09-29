@@ -37,10 +37,21 @@ export default defineConfig(async () => ({
   ui({
     ui: {
       colors: {
-        primary: "blue",
+        // 墨樱主题：sakura 色阶定义在 main.css 的 @theme；mauve 是带紫调的中性灰，和墨色同源
+        primary: "sakura",
         success: "green",
-        neutral: "slate",
+        neutral: "mauve",
       },
+      // 所有浮在内容上的弹出层统一换成液态玻璃材质（类定义在 assets/css/liquid-glass.css，
+      // 未分层规则会压过这些 slot 默认的 bg-default / ring / shadow 工具类）
+      dropdownMenu: { slots: { content: "liquid-menu" } },
+      contextMenu: { slots: { content: "liquid-menu" } },
+      popover: { slots: { content: "liquid-menu" } },
+      select: { slots: { content: "liquid-menu" } },
+      selectMenu: { slots: { content: "liquid-menu" } },
+      tooltip: { slots: { content: "liquid-tooltip" } },
+      toast: { slots: { root: "liquid-menu" } },
+      modal: { slots: { content: "liquid-sheet", overlay: "liquid-scrim" } },
     },
   }),
   osIconCollection(),

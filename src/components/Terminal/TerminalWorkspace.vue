@@ -86,6 +86,8 @@ const themeStyleVars = computed(() => {
     "--term-text": ui.text,
     "--term-text-muted": ui.textMuted,
     "--term-soft": ui.soft,
+    // 液态玻璃的高光：浅色主题上要亮白，深色主题上收着，否则一圈白边像贴纸
+    "--term-highlight": displayTheme.value.mode === "light" ? "rgb(255 255 255 / 0.92)" : "rgb(255 255 255 / 0.24)",
   };
 });
 
@@ -456,7 +458,7 @@ async function savePendingCredential() {
       :size="settingsStore.showFileExplorer ? 100 - settingsStore.filePaneSize : 100"
       min-size="26"
     >
-      <section class="terminal-panel-top" :style="themeStyleVars">
+      <section class="terminal-panel-top liquid-rim" :style="themeStyleVars">
       <header class="terminal-panel-toolbar">
         <div class="terminal-title-block">
           <span class="terminal-live-dot" :class="activeSession?.status"></span>
@@ -471,57 +473,61 @@ async function savePendingCredential() {
 
         <div class="terminal-window-actions">
           <span class="terminal-state-label">{{ terminalStatusText }}</span>
-          <button
-            type="button"
-            :class="{ active: isSearchOpen }"
-            :aria-label="t('terminal.search.toggle')"
-            :title="`${t('terminal.search.toggle')} (Ctrl+Shift+F)`"
-            @click="toggleTerminalSearch"
-          >
-            <UIcon name="i-lucide-search" />
-          </button>
-          <button
-            type="button"
-            :class="{ active: !settingsStore.showMonitorSidebar }"
-            :aria-label="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
-            :title="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
-            @click="settingsStore.toggleMonitorSidebar()"
-          >
-            <UIcon :name="settingsStore.showMonitorSidebar ? 'i-lucide-panel-left-close' : 'i-lucide-panel-left-open'" />
-          </button>
-          <button
-            type="button"
-            :class="{ active: !settingsStore.showFileExplorer }"
-            :aria-label="t(settingsStore.showFileExplorer ? 'terminal.hideFilePanel' : 'terminal.showFilePanel')"
-            :title="t(settingsStore.showFileExplorer ? 'terminal.hideFilePanel' : 'terminal.showFilePanel')"
-            @click="settingsStore.toggleFileExplorer()"
-          >
-            <UIcon :name="settingsStore.showFileExplorer ? 'i-lucide-panel-bottom-close' : 'i-lucide-panel-bottom-open'" />
-          </button>
-          <button
-            type="button"
-            :class="{ active: isSnippetsOpen }"
-            :aria-label="t('snippets.title')"
-            :title="t('snippets.title')"
-            @click="toggleSnippets"
-          >
-            <UIcon name="i-lucide-scroll-text" />
-          </button>
-          <button
-            type="button"
-            :class="{ active: isAppearanceOpen }"
-            :aria-label="t('terminal.appearance')"
-            :title="t('terminal.appearance')"
-            @click="toggleAppearance"
-          >
-            <UIcon name="i-lucide-palette" />
-          </button>
-          <button type="button" :aria-label="t('terminal.clear')" @click="sessionStore.clearActiveTerminal">
-            <UIcon name="i-lucide-eraser" />
-          </button>
-          <button type="button" :aria-label="t('terminal.reconnect')" @click="reconnectTerminal">
-            <UIcon name="i-lucide-rotate-cw" />
-          </button>
+          <!-- 工具按钮收进一颗跟随终端主题的玻璃胶囊；终端面板自带 backdrop 模糊，
+               这里只借材质（高光描边 + 焦散），不再挂折射指令 -->
+          <div class="terminal-action-capsule liquid-glass">
+            <button
+              type="button"
+              :class="{ active: isSearchOpen }"
+              :aria-label="t('terminal.search.toggle')"
+              :title="`${t('terminal.search.toggle')} (Ctrl+Shift+F)`"
+              @click="toggleTerminalSearch"
+            >
+              <UIcon name="i-lucide-search" />
+            </button>
+            <button
+              type="button"
+              :class="{ active: !settingsStore.showMonitorSidebar }"
+              :aria-label="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
+              :title="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
+              @click="settingsStore.toggleMonitorSidebar()"
+            >
+              <UIcon :name="settingsStore.showMonitorSidebar ? 'i-lucide-panel-left-close' : 'i-lucide-panel-left-open'" />
+            </button>
+            <button
+              type="button"
+              :class="{ active: !settingsStore.showFileExplorer }"
+              :aria-label="t(settingsStore.showFileExplorer ? 'terminal.hideFilePanel' : 'terminal.showFilePanel')"
+              :title="t(settingsStore.showFileExplorer ? 'terminal.hideFilePanel' : 'terminal.showFilePanel')"
+              @click="settingsStore.toggleFileExplorer()"
+            >
+              <UIcon :name="settingsStore.showFileExplorer ? 'i-lucide-panel-bottom-close' : 'i-lucide-panel-bottom-open'" />
+            </button>
+            <button
+              type="button"
+              :class="{ active: isSnippetsOpen }"
+              :aria-label="t('snippets.title')"
+              :title="t('snippets.title')"
+              @click="toggleSnippets"
+            >
+              <UIcon name="i-lucide-scroll-text" />
+            </button>
+            <button
+              type="button"
+              :class="{ active: isAppearanceOpen }"
+              :aria-label="t('terminal.appearance')"
+              :title="t('terminal.appearance')"
+              @click="toggleAppearance"
+            >
+              <UIcon name="i-lucide-palette" />
+            </button>
+            <button type="button" :aria-label="t('terminal.clear')" @click="sessionStore.clearActiveTerminal">
+              <UIcon name="i-lucide-eraser" />
+            </button>
+            <button type="button" :aria-label="t('terminal.reconnect')" @click="reconnectTerminal">
+              <UIcon name="i-lucide-rotate-cw" />
+            </button>
+          </div>
         </div>
       </header>
 

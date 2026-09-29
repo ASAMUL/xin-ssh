@@ -8,6 +8,9 @@
 /* Panel chrome is themed through --term-* variables set inline by
    TerminalWorkspace.vue from the active terminal theme. */
 .terminal-panel-top {
+  /* .liquid-rim 的高光跟终端主题走：深色主题收着，浅色主题亮白 */
+  --lg-edge-light: var(--term-highlight, rgb(255 255 255 / 0.24));
+  --lg-edge-soft: rgb(255 255 255 / 0.06);
   min-height: 0;
   position: relative;
   display: grid;
@@ -126,21 +129,61 @@
   white-space: nowrap;
 }
 
+/* 工具按钮的玻璃胶囊：材质变量全部改用终端主题色，于是它在 Dracula 上是暗玻璃、
+   在浅色主题上是亮玻璃，底部焦散取主题强调色而不是固定樱色——终端画布是内容层，不跟品牌色走。 */
+.terminal-action-capsule {
+  --lg-fill: var(--term-soft, rgba(230, 235, 255, 0.08));
+  --lg-edge-light: var(--term-highlight, rgb(255 255 255 / 0.24));
+  --lg-edge-soft: rgb(255 255 255 / 0.05);
+  --lg-edge-ink: rgb(0 0 0 / 0.14);
+  --lg-inner-glow: rgb(255 255 255 / 0.08);
+  --lg-caustic: color-mix(in srgb, var(--term-accent, #8ea8ff) 36%, transparent);
+  --lg-shadow: 0 6px 16px -10px rgb(0 0 0 / 0.5);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+}
+
 .terminal-window-actions button {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   color: var(--term-text-muted, rgba(230, 235, 255, 0.6));
   border: 0;
-  border-radius: 10px;
+  border-radius: 999px;
   background: transparent;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 240ms var(--lg-spring);
 }
 
-.terminal-window-actions button:hover,
+.terminal-window-actions button:hover {
+  color: var(--term-text, #e6ebff);
+  background: color-mix(in srgb, var(--term-text, #e6ebff) 10%, transparent);
+}
+
+/* 选中的工具是胶囊里的一颗水滴：顶部一道高光把它从胶囊里「抬」出来 */
 .terminal-window-actions button.active {
   color: var(--term-text, #e6ebff);
-  background: var(--term-soft, rgba(230, 235, 255, 0.1));
+  background: color-mix(in srgb, var(--term-text, #e6ebff) 16%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--term-highlight, rgb(255 255 255 / 0.24)),
+    0 4px 10px -6px rgb(0 0 0 / 0.45);
+}
+
+.terminal-window-actions button:active {
+  transform: scale(0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-window-actions button:active {
+    transform: none;
+  }
 }
 
 .terminal-screen {

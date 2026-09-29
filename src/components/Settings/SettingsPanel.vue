@@ -49,7 +49,7 @@ const keepaliveItems = computed(() =>
 
 <template>
   <div class="modal-backdrop">
-    <section class="settings-panel">
+    <section class="settings-panel liquid-sheet">
       <header>
         <h2>{{ t("settings.title") }}</h2>
         <UButton

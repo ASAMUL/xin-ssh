@@ -1,19 +1,17 @@
+/* 连接卡片：压在玻璃上的一张「纸」。悬停时纸面泛一层樱色、描边转粉，
+   右下浮出「连接 →」——整张卡都可点，按钮只是把这件事说出来。 */
 .connection-card {
   --status-color: var(--xin-status-idle);
-  --status-soft: rgb(var(--xin-neutral-rgb) / 0.12);
+  --status-soft: rgb(var(--xin-neutral-rgb) / 0.16);
   position: relative;
   min-width: 0;
   display: grid;
-  overflow: hidden;
-  border: 1px solid var(--xin-glass-border);
+  border: 1px solid var(--xin-card-border);
   border-radius: var(--xin-radius-lg);
-  background: var(--xin-glass);
-  box-shadow:
-    var(--xin-specular),
-    0 16px 34px rgb(var(--xin-shadow-rgb) / 0.07);
-  backdrop-filter: var(--xin-glass-blur);
+  background: var(--xin-card);
+  box-shadow: var(--xin-specular), var(--xin-card-shadow);
   transition:
-    transform 160ms ease,
+    transform 200ms cubic-bezier(0.32, 0.72, 0.24, 1),
     border-color 160ms ease,
     box-shadow 160ms ease,
     background 160ms ease;
@@ -21,144 +19,64 @@
 
 .connection-card.connected {
   --status-color: var(--xin-success);
-  --status-soft: rgb(var(--xin-success-rgb) / 0.15);
+  --status-soft: rgb(var(--xin-success-rgb) / 0.2);
 }
 
 .connection-card.connecting {
   --status-color: var(--xin-warning);
-  --status-soft: rgb(var(--xin-warning-rgb) / 0.14);
+  --status-soft: rgb(var(--xin-warning-rgb) / 0.2);
 }
 
-.connection-card.authRequired {
-  --status-color: var(--xin-accent);
-  --status-soft: rgb(var(--xin-accent-rgb) / 0.14);
+.connection-card.authRequired,
+.connection-card.closed {
+  --status-color: var(--xin-status-idle);
+  --status-soft: rgb(var(--xin-neutral-rgb) / 0.18);
 }
 
 .connection-card.error {
   --status-color: var(--xin-danger);
-  --status-soft: rgb(var(--xin-danger-rgb) / 0.12);
+  --status-soft: rgb(var(--xin-danger-rgb) / 0.18);
 }
 
-.connection-card:hover {
-  border-color: rgb(var(--xin-accent-rgb) / 0.32);
-  background: rgb(var(--xin-fill-rgb) / 0.72);
+.connection-card:hover,
+.connection-card:focus-within {
+  border-color: rgb(var(--xin-accent-rgb) / 0.22);
+  background:
+    linear-gradient(135deg, rgb(var(--xin-accent-rgb) / 0.07), rgb(var(--xin-accent-rgb) / 0.02) 70%),
+    var(--xin-card);
   box-shadow:
     var(--xin-specular),
-    0 22px 46px rgb(var(--xin-shadow-rgb) / 0.12);
-  transform: translateY(-2px);
+    0 1px 2px rgb(var(--xin-shadow-rgb) / 0.04),
+    0 14px 32px -16px rgb(var(--xin-accent-rgb) / 0.35);
+}
+
+.connection-card:active {
+  transform: scale(0.992);
 }
 
 .connection-card-main {
   min-width: 0;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  grid-template-rows: auto auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 12px 13px;
-  padding: 16px;
+  gap: 16px;
+  /* 右侧给常驻的星标/更多和悬停的「连接」按钮让位，长名称不会被压住 */
+  padding: 22px 100px 22px 22px;
   color: var(--xin-text);
   border: 0;
+  border-radius: inherit;
   background: transparent;
   text-align: left;
   cursor: pointer;
 }
 
+.connection-card-main:focus-visible {
+  outline: 2px solid rgb(var(--xin-accent-rgb) / 0.55);
+  outline-offset: 2px;
+}
+
 .connection-card-icon {
-  width: 44px;
-  height: 44px;
   display: grid;
-  place-items: center;
-  color: #ffffff;
-  border-radius: 13px;
-  background: linear-gradient(160deg, #6f9aff 0%, var(--xin-accent) 100%);
-  box-shadow:
-    0 1px 0 rgb(var(--xin-fill-rgb) / 0.4) inset,
-    0 10px 22px rgb(var(--xin-accent-rgb) / 0.28);
-  font-size: 21px;
-}
-
-.connection-card-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  /* 三个操作按钮常驻占位，悬停时不会覆盖长名称。 */
-  padding-right: 78px;
-}
-
-.connection-card-copy strong,
-.connection-card-copy small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connection-card-copy strong {
-  color: var(--xin-text);
-  font-size: 14.5px;
-  font-weight: 680;
-}
-
-.connection-card-copy small {
-  color: var(--xin-text-muted);
-  font-size: 12px;
-}
-
-.connection-card-meta {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  grid-column: 1 / -1;
-}
-
-.connection-card-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  width: max-content;
-  max-width: 100%;
-  height: 25px;
-  padding: 0 10px;
-  color: var(--xin-text-secondary);
-  border-radius: 999px;
-  background: var(--status-soft);
-  font-size: 11px;
-  font-weight: 620;
-}
-
-.connection-card-status i {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--status-color);
-}
-
-.connection-card-status span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connection-card-meta > em {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--xin-text-soft);
-  font-size: 11.5px;
-  font-style: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connection-card-tools {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: inline-flex;
-  gap: 2px;
 }
 
 .connection-card-drag-handle {
@@ -170,23 +88,145 @@
   cursor: grabbing;
 }
 
+.connection-card-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.connection-card-copy strong {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--xin-text);
+  font-size: 15.5px;
+  font-weight: 680;
+  letter-spacing: -0.1px;
+}
+
+.connection-card-copy strong > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 有会话时名称前的状态点；没打开的连接不画点，首页保持安静 */
+.connection-card-status {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--status-color);
+  box-shadow: 0 0 0 3px var(--status-soft);
+}
+
+.connection-card.connecting .connection-card-status {
+  animation: connection-card-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes connection-card-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.connection-card-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--xin-text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.connection-card-address {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.connection-card-group {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 128px;
+  border-radius: 8px;
+  font-weight: 560;
+}
+
+.connection-card-meta > em {
+  flex: 0 0 auto;
+  color: var(--xin-text-soft);
+  font-style: normal;
+}
+
+.connection-card-tools {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  gap: 2px;
+}
+
 .connection-card-tools :deep(button) {
-  opacity: 0;
-  transition: opacity 140ms ease;
+  color: var(--xin-text-soft);
+  border-radius: 10px;
 }
 
-.connection-card:hover .connection-card-tools :deep(button),
-.connection-card-tools :deep(button:focus-visible),
+.connection-card-tools :deep(button:hover),
 .connection-card-tools :deep(button[data-state="open"]) {
-  opacity: 1;
+  color: var(--xin-text-body);
 }
 
-/* 已收藏的星标常显、着琥珀色 */
-.connection-card.favorite .connection-card-star {
-  opacity: 1;
+/* 已收藏：琥珀实心星。lucide 的星是描边图标，用 CSS fill 压过路径上的 fill="none" */
+.connection-card.favorite .connection-card-star :deep(svg) {
+  color: var(--xin-favorite);
 }
 
-.connection-card.favorite .connection-card-star :deep(svg),
-.connection-card.favorite .connection-card-star :deep(span) {
-  color: #f2a83b;
+.connection-card.favorite .connection-card-star :deep(svg path) {
+  fill: currentColor;
+}
+
+/* 悬停浮出的「连接 →」是一颗樱色玻璃水滴，和顶栏、筛选分段的选中态同一种材质 */
+.connection-card-connect {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  color: var(--xin-accent-strong);
+  border-radius: 999px;
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
+  font-weight: 650;
+  opacity: 0;
+  transform: translateX(-4px);
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    transform 200ms cubic-bezier(0.32, 0.72, 0.24, 1);
+}
+
+.connection-card:hover .connection-card-connect,
+.connection-card:focus-within .connection-card-connect {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connection-card,
+  .connection-card-connect {
+    transition: none;
+  }
+
+  .connection-card:active {
+    transform: none;
+  }
+
+  .connection-card.connecting .connection-card-status {
+    animation: none;
+  }
 }

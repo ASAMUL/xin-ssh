@@ -1,9 +1,11 @@
 <script setup>
 import { useI18n } from "vue-i18n";
+import OsIconTile from "../ConnectionManager/OsIconTile.vue";
+import { resolveProfileOsIcon } from "../../config/osIcons";
 import { formatRelativeTime } from "../../utils/relativeTime";
 
 defineProps({
-  // 行结构：{ profile, groupName, status, menuItems }
+  // 行结构：{ profile, groupName, status, menuItems }；默认分组的 groupName 为 null
   rows: {
     type: Array,
     default: () => [],
@@ -53,12 +55,13 @@ function statusLabel(status) {
                 @click="emit('toggleFavorite', profile.id)"
               />
               <button type="button" class="row-name" @click="emit('open', profile)">
-                {{ profile.name }}
+                <OsIconTile :icon="resolveProfileOsIcon(profile)" :size="28" />
+                <span>{{ profile.name }}</span>
               </button>
             </td>
             <td class="cell-muted">{{ profile.host }}</td>
             <td class="cell-muted">{{ profile.username }}</td>
-            <td class="cell-muted">{{ groupName }}</td>
+            <td class="cell-muted">{{ groupName ?? t("sidebar.ungrouped") }}</td>
             <td>
               <span class="row-status">
                 <i></i>

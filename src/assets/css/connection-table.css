@@ -1,13 +1,10 @@
 .connection-table {
   min-width: 0;
   overflow: auto hidden;
-  border: 1px solid var(--xin-glass-border);
+  border: 1px solid var(--xin-card-border);
   border-radius: var(--xin-radius-lg);
-  background: var(--xin-glass);
-  box-shadow:
-    var(--xin-specular),
-    0 16px 34px rgb(var(--xin-shadow-rgb) / 0.07);
-  backdrop-filter: var(--xin-glass-blur);
+  background: var(--xin-card);
+  box-shadow: var(--xin-specular), var(--xin-card-shadow);
 }
 
 .connection-table table {
@@ -48,7 +45,7 @@
 }
 
 .connection-table tbody tr:hover {
-  background: rgb(var(--xin-fill-rgb) / 0.55);
+  background: rgb(var(--xin-accent-rgb) / 0.05);
 }
 
 .connection-table tbody tr.connected {
@@ -62,8 +59,8 @@
 }
 
 .connection-table tbody tr.authRequired {
-  --status-color: var(--xin-accent);
-  --status-soft: rgb(var(--xin-accent-rgb) / 0.14);
+  --status-color: var(--xin-status-idle);
+  --status-soft: rgb(var(--xin-neutral-rgb) / 0.16);
 }
 
 .connection-table tbody tr.error {
@@ -93,13 +90,19 @@ td.col-name {
   opacity: 1;
 }
 
-.row-star.favorite :deep(svg),
-.row-star.favorite :deep(span) {
-  color: #f2a83b;
+.row-star.favorite :deep(svg) {
+  color: var(--xin-favorite);
+}
+
+.row-star.favorite :deep(svg path) {
+  fill: currentColor;
 }
 
 .row-name {
   min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   overflow: hidden;
   padding: 0;
   color: var(--xin-text);
@@ -111,6 +114,12 @@ td.col-name {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.row-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .row-name:hover {

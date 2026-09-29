@@ -190,7 +190,7 @@ function stopTunnel(tunnel) {
 
 <template>
   <div class="modal-backdrop">
-    <section class="settings-panel tunnel-panel">
+    <section class="settings-panel tunnel-panel liquid-sheet">
       <header>
         <h2>{{ mode === "form" ? t(editingTunnelId ? "tunnel.edit" : "tunnel.add") : t("tunnel.title") }}</h2>
         <UButton

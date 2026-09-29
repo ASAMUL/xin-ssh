@@ -4,70 +4,103 @@
 @import "./splitpanes.css";
 @import "./modal-forms.css";
 @import "./quick-connect.css";
+@import "./liquid-glass.css";
+
+/* —— 墨樱 / Ink & Rose 品牌色阶 ——
+   Tailwind 自带的 rose/pink 偏红偏艳，压在墨色上发廉价；这组是降了饱和、
+   往莓红偏一点的樱色。vite.config.js 里 primary 指向它，全部 Nuxt UI 控件随之换色。 */
+@theme static {
+  --color-sakura-50: #fdf2f6;
+  --color-sakura-100: #fce7ef;
+  --color-sakura-200: #f9cfe0;
+  --color-sakura-300: #f4a8c5;
+  --color-sakura-400: #ec7aa4;
+  --color-sakura-500: #df5188;
+  --color-sakura-600: #c93a72;
+  --color-sakura-700: #a82c5d;
+  --color-sakura-800: #8b284f;
+  --color-sakura-900: #742545;
+  --color-sakura-950: #460f25;
+}
 
 :root {
   --ui-radius: 0.7rem;
+  /* Nuxt UI 默认取 500 档，比我们的 --xin-accent 亮半级；对齐到 600，
+     否则同一屏里 Nuxt 控件和自绘控件是两种粉。 */
+  --ui-primary: var(--ui-color-primary-600);
 
   /* —— 叠加色的基色通道 ——
      全应用的半透明叠加（玻璃填充、描边墨色、投影、强调底、中性 hover）都写成
      `rgb(var(--xin-*-rgb) / <alpha>)`：alpha 留在使用处（各处需要的浓度本来就不同，
      强行收进固定阶梯会改变现有观感），只把**基色**抽出来。
-     深色模式于是变成「翻这几个基色 + 文本阶梯」，而不是逐条改几百个色值。 */
+     深色模式于是变成「翻这几个基色 + 文本阶梯」，而不是逐条改几百个色值。
+     墨樱主题下 ink / shadow / neutral 都带一点紫调：纯冷灰配樱色会显脏。 */
   --xin-fill-rgb: 255 255 255;
-  --xin-ink-rgb: 16 26 44;
-  --xin-shadow-rgb: 20 34 62;
-  --xin-neutral-rgb: 137 148 166;
-  --xin-accent-rgb: 47 109 246;
-  --xin-success-rgb: 53 184 113;
-  --xin-warning-rgb: 215 166 65;
-  --xin-danger-rgb: 239 68 68;
+  --xin-ink-rgb: 30 24 36;
+  --xin-shadow-rgb: 46 28 44;
+  --xin-neutral-rgb: 146 136 150;
+  --xin-accent-rgb: 201 58 114;
+  --xin-success-rgb: 52 178 110;
+  --xin-warning-rgb: 222 160 52;
+  --xin-danger-rgb: 228 64 74;
 
   /* —— 文本灰阶：深 → 浅 ——
      文字/图标只走这 7 级。深色模式整条阶梯换一组值即可；
      新 UI 别再写死灰色，否则暗色下必然漏翻一处。 */
-  --xin-text: #101a2c;
-  --xin-text-strong: #182230;
-  --xin-text-body: #344054;
-  --xin-text-secondary: #475569;
-  --xin-text-muted: #5d6c84;
-  --xin-text-soft: #8a94a6;
-  --xin-text-faint: #98a2b3;
+  --xin-text: #1b1720;
+  --xin-text-strong: #221d28;
+  --xin-text-body: #3b3540;
+  --xin-text-secondary: #4f4854;
+  --xin-text-muted: #6e6672;
+  --xin-text-soft: #8f8793;
+  --xin-text-faint: #a79fab;
 
   /* —— 品牌与状态实色 —— */
-  --xin-accent: #2f6df6;
-  --xin-accent-strong: #155eef;
-  --xin-accent-deep: #0757e6;
-  --xin-success: #35b871;
-  --xin-success-strong: #22b06c;
-  --xin-warning: #d7a641;
-  --xin-warning-strong: #d9951a;
-  --xin-danger: #ef4444;
-  --xin-danger-strong: #dc2626;
-  --xin-danger-deep: #b91c1c;
-  --xin-danger-text: #991b1b;
-  --xin-warning-text: #8a6410;
-  --xin-status-idle: #94a3b8;
+  --xin-accent: #c93a72;
+  --xin-accent-strong: #b02e62;
+  --xin-accent-deep: #962653;
+  --xin-success: #34b26e;
+  --xin-success-strong: #22a05e;
+  --xin-warning: #dea034;
+  --xin-warning-strong: #d08a16;
+  --xin-danger: #e4404a;
+  --xin-danger-strong: #cf2f3b;
+  --xin-danger-deep: #b3222e;
+  --xin-danger-text: #8f1d27;
+  --xin-warning-text: #85600f;
+  --xin-status-idle: #a39aa6;
+  --xin-favorite: #eea12c;
+
+  /* —— 墨面：主按钮、当前会话卡这类「压得住」的实底 ——
+     墨樱的层次靠「浅纸面 + 少量墨块」拉开，墨块上的文字与图标走 on-ink 两档。 */
+  --xin-ink-surface: #1f1c24;
+  --xin-ink-surface-raised: #37323e;
+  --xin-on-ink: #fbf7fa;
+  --xin-on-ink-muted: rgb(251 247 250 / 0.62);
+  --xin-on-ink-accent: #f4a8c5;
 
   /* —— 常用叠加的命名快捷方式（高频组合，避免每处重写 alpha）—— */
-  --xin-border-rgb: 120 136 160;
+  --xin-border-rgb: 140 124 140;
   --xin-accent-soft: rgb(var(--xin-accent-rgb) / 0.12);
   --xin-border: rgb(var(--xin-border-rgb) / 0.22);
   --xin-border-soft: rgb(var(--xin-border-rgb) / 0.16);
   --xin-border-strong: rgb(var(--xin-border-rgb) / 0.34);
 
   /* —— 环境光 ——
-     玻璃要有东西可折射，窗口底铺三团彩色光晕；深色下换成低明度高饱和的一组，
-     否则在近黑画布上会糊成灰。 */
-  --xin-ambient-a: rgb(88 134 255 / 0.18);
-  --xin-ambient-b: rgb(56 189 248 / 0.15);
-  --xin-ambient-c: rgb(167 139 250 / 0.14);
+     液态玻璃要有东西可折射：窗口底铺四团光晕——樱粉 / 腮红 / 藕荷，外加顶部正中一团樱色，
+     正好垫在「连接 | 工作区」切换后面，让它边缘的透镜弯折看得出来。
+     浓度仍然压着——墨樱要的是「纸面透一点粉」，不是粉色背景。 */
+  --xin-ambient-a: rgb(240 150 184 / 0.24);
+  --xin-ambient-b: rgb(255 196 218 / 0.3);
+  --xin-ambient-c: rgb(196 176 226 / 0.2);
+  --xin-ambient-d: rgb(236 122 164 / 0.2);
 
   /* —— 液态玻璃表面 ——
-     深色模式下 fill 基色换成一层**比画布更亮**的靛蓝（深色 UI 里"抬高"= 变亮），
+     深色模式下 fill 基色换成一层**比画布更亮**的墨紫（深色 UI 里"抬高"= 变亮），
      而不是把白色反成黑：直接反色只会得到一块脏灰，玻璃感全靠高光和边缘交代。 */
   --xin-glass: rgb(var(--xin-fill-rgb) / 0.55);
   --xin-glass-strong: rgb(var(--xin-fill-rgb) / 0.76);
-  --xin-glass-muted: rgb(248 250 253 / 0.45);
+  --xin-glass-muted: rgb(251 248 250 / 0.45);
   --xin-glass-border: rgb(var(--xin-fill-rgb) / 0.62);
   --xin-glass-edge: rgb(var(--xin-ink-rgb) / 0.09);
   --xin-glass-blur: blur(28px) saturate(1.55);
@@ -78,13 +111,21 @@
   --xin-surface-muted: var(--xin-glass-muted);
   /* 带语义的内嵌面：列表头、内联提示条、状态区块。深色模式最容易在这类
      「浅色调底」上翻车（淡粉淡绿直接变成刺眼白块），所以单独立令牌。 */
-  --xin-surface-raised: rgb(249 251 253 / 0.86);
-  --xin-surface-raised-soft: rgb(248 250 252 / 0.55);
-  --xin-surface-accent: rgb(239 244 255 / 0.82);
-  --xin-surface-success: rgb(240 253 244 / 0.7);
-  --xin-surface-danger: rgb(255 245 245 / 0.82);
+  --xin-surface-raised: rgb(252 250 251 / 0.86);
+  --xin-surface-raised-soft: rgb(250 247 249 / 0.55);
+  --xin-surface-accent: rgb(253 238 244 / 0.82);
+  --xin-surface-success: rgb(240 252 245 / 0.7);
+  --xin-surface-danger: rgb(255 244 245 / 0.82);
   --xin-shadow-soft: 0 10px 32px rgb(var(--xin-shadow-rgb) / 0.08);
   --xin-shadow-panel: 0 24px 64px rgb(var(--xin-shadow-rgb) / 0.14);
+
+  /* —— 卡片纸面 ——
+     首页卡片是「压在玻璃上的纸」：比玻璃更实、描边更清楚，列表扫读时边界不糊。 */
+  --xin-card: rgb(var(--xin-fill-rgb) / 0.82);
+  --xin-card-border: rgb(var(--xin-ink-rgb) / 0.07);
+  --xin-card-shadow:
+    0 1px 2px rgb(var(--xin-shadow-rgb) / 0.04),
+    0 8px 24px -12px rgb(var(--xin-shadow-rgb) / 0.12);
 
   /* —— 系统图标底座 ——
      devicon 是彩色品牌标，其中苹果 / Tux 身体是纯黑，只有浅底能同时托住所有标；
@@ -96,8 +137,8 @@
   /* —— 画布底色：窗口与首页的实底 ——
      Tauri 里 .native-glass 会把画布铺成半透明好透出系统 Mica，所以基色
      也得留成通道形式，否则深色模式下那层窗底会继续发白。 */
-  --xin-canvas-rgb: 238 242 249;
-  --xin-canvas-raised-rgb: 247 249 253;
+  --xin-canvas-rgb: 245 242 245;
+  --xin-canvas-raised-rgb: 251 249 251;
   --xin-canvas: rgb(var(--xin-canvas-rgb));
   --xin-canvas-raised: rgb(var(--xin-canvas-raised-rgb));
 
@@ -124,60 +165,68 @@
 }
 
 /* ————————————————————————————————————————————————————————————
-   深色模式。类名由 utils/appearanceMode.js 挂在 <html> 上。
+   深色模式（墨樱·夜）。类名由 utils/appearanceMode.js 挂在 <html> 上。
    同一个 .dark 也让 Nuxt UI v4 整体翻面——它不用 dark: 变体，而是靠
    .dark 重定义 --ui-* 语义变量，所以这里不用为任何 Nuxt UI 控件写 CSS。
 
    三条深色玻璃的设计原则（都不是「把浅色反过来」）：
    1. 抬高 = 变亮。浅色下面板靠白色叠加从画布里"浮"出来；深色下同理，
-      fill 基色取一层比画布更亮的靛蓝，0.55 alpha 压上去正好是抬起一级。
+      fill 基色取一层比画布更亮的墨紫，0.55 alpha 压上去正好是抬起一级。
    2. 边缘承担全部结构。深色下投影几乎不可见（黑压黑），所以 ink 基色翻成
-      亮蓝白，那些 0.05~0.14 的发丝描边在暗底上反而更要紧。
-   3. 高光必须留白。--xin-specular 不跟 fill 走（跟了就变成一条靛蓝线），
+      偏粉的亮白，那些 0.05~0.14 的发丝描边在暗底上反而更要紧。
+   3. 高光必须留白。--xin-specular 不跟 fill 走（跟了就变成一条紫线），
       固定用白色、压到 0.08——这一条亮边是"玻璃"和"灰塑料"的分界。
    ———————————————————————————————————————————————————————————— */
 .dark {
-  --xin-fill-rgb: 48 62 92;
-  --xin-ink-rgb: 176 196 236;
+  --ui-primary: var(--ui-color-primary-400);
+
+  --xin-fill-rgb: 56 48 62;
+  --xin-ink-rgb: 236 222 236;
   --xin-shadow-rgb: 0 0 0;
-  --xin-neutral-rgb: 158 178 214;
-  --xin-accent-rgb: 96 145 255;
-  --xin-success-rgb: 69 205 136;
-  --xin-warning-rgb: 229 185 95;
-  --xin-danger-rgb: 255 107 107;
-  --xin-border-rgb: 150 172 210;
+  --xin-neutral-rgb: 180 166 184;
+  --xin-accent-rgb: 236 122 164;
+  --xin-success-rgb: 72 204 138;
+  --xin-warning-rgb: 234 188 96;
+  --xin-danger-rgb: 255 112 118;
+  --xin-border-rgb: 200 180 204;
 
   /* 阶梯的**对比语义**不变，只是明度整条反过来：text 最高对比，faint 最低 */
-  --xin-text: #e8eefc;
+  --xin-text: #f4eef4;
   --xin-text-strong: #ffffff;
-  --xin-text-body: #c3cfe6;
-  --xin-text-secondary: #a6b3cd;
-  --xin-text-muted: #8794b0;
-  --xin-text-soft: #6c7995;
-  --xin-text-faint: #5a677f;
+  --xin-text-body: #d9d0db;
+  --xin-text-secondary: #bdb3c0;
+  --xin-text-muted: #9d93a1;
+  --xin-text-soft: #7f7584;
+  --xin-text-faint: #685f6d;
 
   /* 「更强调」在浅色下是更深，在深色下是更亮 */
-  --xin-accent: #6091ff;
-  --xin-accent-strong: #86adff;
-  --xin-accent-deep: #a8c6ff;
-  --xin-success: #45cd88;
-  --xin-success-strong: #6bdca2;
-  --xin-warning: #e5b95f;
-  --xin-warning-strong: #f0c877;
-  --xin-danger: #ff6b6b;
-  --xin-danger-strong: #ff8585;
-  --xin-danger-deep: #ffa0a0;
-  --xin-danger-text: #ffb0b0;
-  --xin-warning-text: #e8c489;
-  --xin-status-idle: #64748b;
+  --xin-accent: #ec7aa4;
+  --xin-accent-strong: #f398ba;
+  --xin-accent-deep: #f8b6cf;
+  --xin-success: #48cc8a;
+  --xin-success-strong: #6fdca5;
+  --xin-warning: #eabc60;
+  --xin-warning-strong: #f2cb7c;
+  --xin-danger: #ff7076;
+  --xin-danger-strong: #ff8a8f;
+  --xin-danger-deep: #ffa5a9;
+  --xin-danger-text: #ffb4b8;
+  --xin-warning-text: #ebc98e;
+  --xin-status-idle: #6f6674;
+  --xin-favorite: #f2b54a;
 
-  --xin-ambient-a: rgb(76 116 255 / 0.22);
-  --xin-ambient-b: rgb(34 170 230 / 0.14);
-  --xin-ambient-c: rgb(150 110 250 / 0.18);
+  /* 深色画布本身就是墨，墨面得再抬一级，否则会话卡和画布糊成一块 */
+  --xin-ink-surface: #2a2530;
+  --xin-ink-surface-raised: #3a3441;
 
-  --xin-glass-muted: rgb(26 34 54 / 0.5);
-  /* 玻璃的亮边：浅色下是白 0.62，深色下若跟着 fill 走会变成靛蓝，必须单独给 */
-  --xin-glass-border: rgb(190 210 245 / 0.14);
+  --xin-ambient-a: rgb(236 72 140 / 0.18);
+  --xin-ambient-b: rgb(170 90 200 / 0.14);
+  --xin-ambient-c: rgb(244 114 170 / 0.12);
+  --xin-ambient-d: rgb(236 72 140 / 0.2);
+
+  --xin-glass-muted: rgb(30 26 36 / 0.5);
+  /* 玻璃的亮边：浅色下是白 0.62，深色下若跟着 fill 走会变成紫灰，必须单独给 */
+  --xin-glass-border: rgb(240 214 232 / 0.12);
   --xin-glass-edge: rgb(var(--xin-ink-rgb) / 0.14);
   --xin-specular: inset 0 1px 0 rgb(255 255 255 / 0.08);
   --xin-specular-strong: inset 0 1px 0 rgb(255 255 255 / 0.12);
@@ -185,17 +234,21 @@
   --xin-shadow-soft: 0 10px 32px rgb(var(--xin-shadow-rgb) / 0.32);
   --xin-shadow-panel: 0 24px 64px rgb(var(--xin-shadow-rgb) / 0.5);
 
+  --xin-card: rgb(var(--xin-fill-rgb) / 0.5);
+  --xin-card-border: rgb(var(--xin-ink-rgb) / 0.09);
+  --xin-card-shadow: 0 10px 28px -14px rgb(var(--xin-shadow-rgb) / 0.6);
+
   --xin-os-tile: #ebe5ee;
   --xin-os-tile-border: rgb(255 255 255 / 0.1);
 
-  --xin-canvas-rgb: 10 14 24;
-  --xin-canvas-raised-rgb: 17 23 38;
+  --xin-canvas-rgb: 16 14 20;
+  --xin-canvas-raised-rgb: 24 21 29;
 
-  --xin-surface-raised: rgb(38 48 72 / 0.6);
-  --xin-surface-raised-soft: rgb(38 48 72 / 0.38);
-  --xin-surface-accent: rgb(34 52 96 / 0.6);
+  --xin-surface-raised: rgb(48 42 54 / 0.6);
+  --xin-surface-raised-soft: rgb(48 42 54 / 0.38);
+  --xin-surface-accent: rgb(82 34 58 / 0.6);
   --xin-surface-success: rgb(22 52 38 / 0.6);
-  --xin-surface-danger: rgb(64 26 30 / 0.62);
+  --xin-surface-danger: rgb(70 26 32 / 0.62);
 }
 
 * {
@@ -233,7 +286,7 @@ button {
 }
 
 /* Nuxt UI 的 neutral 组件聚焦时默认使用近黑的 inverted ring/outline，
-   与玻璃主题冲突；统一改成系统蓝。此规则必须保持在 layer 之外，
+   与玻璃主题冲突；统一改成品牌樱色。此规则必须保持在 layer 之外，
    以覆盖 utilities 层里的 ring 颜色。 */
 :where(input, select, textarea, button, [role="checkbox"], [role="radio"], [role="switch"], [role="combobox"]):focus-visible {
   --tw-ring-color: rgb(var(--xin-accent-rgb) / 0.55);
@@ -264,6 +317,7 @@ button {
   overflow: hidden;
   /* soft ambient color field so glass panels have something to refract */
   background:
+    radial-gradient(520px 150px at 50% -40px, var(--xin-ambient-d), transparent 72%),
     radial-gradient(1100px 720px at 6% -12%, var(--xin-ambient-a), transparent 62%),
     radial-gradient(920px 640px at 102% -4%, var(--xin-ambient-b), transparent 58%),
     radial-gradient(1100px 860px at 50% 118%, var(--xin-ambient-c), transparent 62%),
@@ -280,149 +334,11 @@ button {
 
 .native-glass .desktop-window {
   background:
+    radial-gradient(520px 150px at 50% -40px, var(--xin-ambient-d), transparent 72%),
     radial-gradient(1100px 720px at 6% -12%, var(--xin-ambient-a), transparent 62%),
     radial-gradient(920px 640px at 102% -4%, var(--xin-ambient-b), transparent 58%),
     radial-gradient(1100px 860px at 50% 118%, var(--xin-ambient-c), transparent 62%),
     linear-gradient(180deg, rgb(var(--xin-canvas-raised-rgb) / 0.84) 0%, rgb(var(--xin-canvas-rgb) / 0.88) 100%);
-}
-
-/* Title bar melts into the window surface: no fill, no seam — the session
-   pills float directly on the glass. */
-.window-chrome {
-  height: 60px;
-  min-height: 60px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  padding: 0 10px 0 0;
-  border-bottom: 0;
-  background: transparent;
-  box-shadow: none;
-  user-select: none;
-}
-
-.window-brand {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 4px 0 16px;
-  color: var(--xin-text);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-}
-
-.window-brand > span:last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 品牌区与会话 tab 之间的呼吸感分隔线 */
-.window-brand::after {
-  content: "";
-  flex: 0 0 auto;
-  width: 1px;
-  height: 18px;
-  margin-left: 13px;
-  border-radius: 1px;
-  background: rgb(var(--xin-ink-rgb) / 0.14);
-}
-
-.app-dot {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  font-size: 15px;
-  border-radius: 9px;
-  background: linear-gradient(145deg, #83a7ff, var(--xin-accent));
-  box-shadow:
-    0 1px 0 rgb(var(--xin-fill-rgb) / 0.4) inset,
-    0 6px 16px rgb(var(--xin-accent-rgb) / 0.3);
-}
-
-.window-drag-space {
-  height: 100%;
-}
-
-.window-tools {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 4px 0 8px;
-}
-
-.window-tools button {
-  width: 38px;
-  height: 38px;
-  justify-content: center;
-  color: var(--xin-text-body);
-  border-radius: 11px;
-}
-
-.window-tools button:hover {
-  background: rgb(var(--xin-neutral-rgb) / 0.14);
-}
-
-.window-tools button.transfer-entry-active {
-  color: var(--xin-accent-deep);
-  background: rgb(var(--xin-accent-rgb) / 0.12);
-}
-
-.window-controls {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.window-control {
-  width: 42px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  color: var(--xin-text-body);
-  border: 0;
-  border-radius: 11px;
-  background: transparent;
-}
-
-.window-control:hover {
-  background: rgb(var(--xin-neutral-rgb) / 0.14);
-}
-
-.window-control.close:hover {
-  color: #ffffff;
-  background: var(--xin-danger);
-}
-
-.window-controls.mac {
-  order: -1;
-  gap: 8px;
-  padding: 0 8px 0 18px;
-}
-
-.window-controls.mac .window-control {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-}
-
-.window-controls.mac .minimize {
-  background: #ffbd2e;
-}
-
-.window-controls.mac .maximize {
-  background: #28c840;
-}
-
-.window-controls.mac .close {
-  background: #ff5f57;
 }
 
 .desktop-content {
@@ -436,46 +352,52 @@ button {
   flex: 1;
   display: grid;
   place-items: center;
-}
-
-.startup-state {
   align-content: center;
   gap: 18px;
   color: var(--xin-text-secondary);
 }
 
-.startup-mark,
-.empty-icon {
+.startup-mark {
   width: 68px;
   height: 68px;
   display: grid;
   place-items: center;
-  color: #ffffff;
+  color: var(--xin-on-ink-accent);
   font-size: 30px;
   border-radius: 20px;
-  background: linear-gradient(145deg, #7fa3ff, #4264f4);
+  background: linear-gradient(160deg, var(--xin-ink-surface-raised), var(--xin-ink-surface));
   box-shadow:
-    0 1px 0 rgb(var(--xin-fill-rgb) / 0.42) inset,
-    0 20px 44px rgba(63, 99, 242, 0.28);
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 20px 44px rgb(var(--xin-shadow-rgb) / 0.24);
 }
 
-/* 品牌渐变主按钮：叠加在 UButton（color="primary" variant="solid"）上，
-   保留液态玻璃语言里的高光渐变 CTA 质感 */
+/* 墨色主按钮：叠加在 UButton（color="primary" variant="solid"）上。
+   墨樱里「最重要的一个动作」用墨块而不是樱色——樱色只做点缀（图标、选中态），
+   整块铺粉会把界面拉向甜腻。深色模式下墨块融进画布，改用樱色渐变。 */
 .cta-button {
-  background: linear-gradient(180deg, #5f8bff 0%, var(--xin-accent-strong) 100%);
+  color: var(--xin-on-ink);
+  background: linear-gradient(180deg, var(--xin-ink-surface-raised) 0%, var(--xin-ink-surface) 100%);
   box-shadow:
-    0 1px 0 rgb(var(--xin-fill-rgb) / 0.32) inset,
-    0 12px 26px rgb(var(--xin-accent-rgb) / 0.32);
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 1px 2px rgb(var(--xin-shadow-rgb) / 0.2),
+    0 10px 24px -8px rgb(var(--xin-shadow-rgb) / 0.42);
   transition:
     box-shadow 140ms ease,
-    filter 140ms ease;
+    filter 140ms ease,
+    transform 200ms cubic-bezier(0.32, 0.72, 0.24, 1);
+}
+
+.cta-button [data-slot="leadingIcon"] {
+  color: var(--xin-on-ink-accent);
 }
 
 .cta-button:hover:not(:disabled) {
-  filter: brightness(1.05);
-  box-shadow:
-    0 1px 0 rgb(var(--xin-fill-rgb) / 0.32) inset,
-    0 14px 30px rgb(var(--xin-accent-rgb) / 0.4);
+  filter: brightness(1.12);
+  background: linear-gradient(180deg, var(--xin-ink-surface-raised) 0%, var(--xin-ink-surface) 100%);
+}
+
+.cta-button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .cta-button:disabled {
@@ -483,23 +405,39 @@ button {
   filter: none;
 }
 
+.dark .cta-button {
+  color: #ffffff;
+  background: linear-gradient(180deg, #e8659a 0%, var(--ui-color-primary-600) 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    0 12px 26px -10px rgb(var(--xin-accent-rgb) / 0.55);
+}
+
+.dark .cta-button [data-slot="leadingIcon"] {
+  color: #ffffff;
+}
+
+.dark .cta-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #e8659a 0%, var(--ui-color-primary-600) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cta-button:active:not(:disabled) {
+    transform: none;
+  }
+}
+
 .workspace-layout {
   min-width: 0;
   display: flex;
   flex: 1;
-  padding: 12px;
+  /* 四周 8px，和悬浮顶栏离窗口边缘的距离对齐 */
+  padding: 8px;
   background: transparent;
 }
 
 .workspace-layout.connection-hub-layout {
   padding: 0;
-}
-
-/* 有会话时的三栏分割容器（splitpanes） */
-.workspace-split {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
 }
 
 .workspace-main {

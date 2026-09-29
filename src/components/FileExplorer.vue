@@ -1303,7 +1303,7 @@ function sortAriaLabel(key) {
 </script>
 
 <template>
-  <section ref="fileExplorerRoot" class="file-explorer" aria-label="Remote file explorer">
+  <section ref="fileExplorerRoot" class="file-explorer liquid-rim" aria-label="Remote file explorer">
     <header class="file-panel-tabs">
       <div class="file-tab-group">
         <button type="button" class="file-panel-tab active">
