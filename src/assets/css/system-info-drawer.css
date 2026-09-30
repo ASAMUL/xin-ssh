@@ -1,0 +1,167 @@
+/* 系统详情抽屉：Nuxt UI 的 Slideover 默认贴满右侧整高，这里让它离窗口边缘 8px 悬浮，
+   四角圆，和悬浮顶栏同一种「漂在上面的玻璃」。外壳经 portal 挂在 body 下，只能用 :global。
+   材质来自全局 .liquid-sheet，折射由 main.js 的自动挂载补上。 */
+:global(.system-info-drawer) {
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: min(430px, calc(100vw - 16px));
+  height: auto;
+  overflow: hidden;
+}
+
+:global(.system-info-drawer-body) {
+  padding: 12px;
+}
+
+.system-info-detail {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-section {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--xin-card-border);
+  border-radius: var(--xin-radius-lg);
+  background: var(--xin-card);
+  box-shadow: var(--xin-specular);
+}
+
+.detail-section h3 {
+  margin: 0;
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.detail-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.detail-list div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.detail-list dt,
+.detail-list dd {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.detail-list dt {
+  color: var(--xin-text-muted);
+  font-weight: 600;
+}
+
+.detail-list dd {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--xin-text-body);
+  font-weight: 650;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-stack,
+.detail-row-list {
+  display: grid;
+  gap: 7px;
+}
+
+.detail-mini-block {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border-radius: 10px;
+  background: rgb(var(--xin-ink-rgb) / 0.045);
+}
+
+.detail-mini-block > strong {
+  overflow: hidden;
+  color: var(--xin-text);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-process-row,
+.detail-service-row {
+  min-width: 0;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: rgb(var(--xin-ink-rgb) / 0.045);
+}
+
+.detail-process-row {
+  grid-template-columns: minmax(0, 1fr) 48px 64px;
+}
+
+.detail-service-row {
+  grid-template-columns: 8px minmax(0, 1fr);
+}
+
+.detail-service-row i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--xin-success);
+  box-shadow: 0 0 6px rgb(var(--xin-success-rgb) / 0.6);
+}
+
+.detail-process-row div,
+.detail-service-row div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.detail-process-row strong,
+.detail-process-row small,
+.detail-service-row strong,
+.detail-service-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-process-row strong,
+.detail-service-row strong {
+  color: var(--xin-text-body);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.detail-process-row small,
+.detail-service-row small {
+  color: var(--xin-text-muted);
+  font-size: 10.5px;
+}
+
+.detail-process-row span {
+  color: var(--xin-text-body);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.detail-empty {
+  margin: 0;
+  color: var(--xin-text-muted);
+  font-size: 12px;
+}

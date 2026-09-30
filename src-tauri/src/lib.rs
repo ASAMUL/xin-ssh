@@ -33,6 +33,7 @@ pub fn run() {
             workspace::get_app_status,
             workspace::init_workspace,
             system_info::get_remote_system_info,
+            system_info::measure_session_latency,
             background::import_terminal_background,
             sftp::ops::list_remote_directory,
             workspace::list_snippets,

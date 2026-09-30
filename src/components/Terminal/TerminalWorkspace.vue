@@ -54,6 +54,13 @@ const backgroundSelections = new Map();
 const isSearchOpen = computed(() => activeTerminal.value?.isSearchOpen ?? false);
 
 const activeSession = computed(() => sessionStore.activeSession);
+const terminalEndpoint = computed(() => {
+  const session = activeSession.value;
+  return session ? `${session.username}@${session.host}:${session.port}` : "";
+});
+// 沉浸时文件区整个不渲染，splitpanes 才会把高度全部让给终端
+const showFilePane = computed(() => settingsStore.showFileExplorer && !uiStore.isWorkspaceImmersive);
+const showMonitorPane = computed(() => settingsStore.showMonitorSidebar && !uiStore.isWorkspaceImmersive);
 const isAppearanceOpen = ref(false);
 const isSnippetsOpen = ref(false);
 const hoveredThemeId = ref(null);
@@ -242,6 +249,96 @@ function focusActiveInput() {
   focusTerminal();
 }
 
+const toolbarGroups = computed(() => [
+  {
+    id: "layout",
+    actions: [
+      {
+        id: "sidebar",
+        icon: "i-lucide-panel-left",
+        label: t("terminal.toolbar.sidebar"),
+        title: t(showMonitorPane.value ? "terminal.hideSidebar" : "terminal.showSidebar"),
+        active: showMonitorPane.value,
+        run: () => togglePanel(settingsStore.showMonitorSidebar, settingsStore.toggleMonitorSidebar),
+      },
+      {
+        id: "files",
+        icon: "i-lucide-panel-bottom",
+        label: t("terminal.toolbar.files"),
+        title: t(showFilePane.value ? "terminal.hideFilePanel" : "terminal.showFilePanel"),
+        active: showFilePane.value,
+        run: () => togglePanel(settingsStore.showFileExplorer, settingsStore.toggleFileExplorer),
+      },
+      {
+        id: "immersive",
+        icon: uiStore.isWorkspaceImmersive ? "i-lucide-minimize" : "i-lucide-maximize",
+        label: t("terminal.toolbar.immersive"),
+        title: t(uiStore.isWorkspaceImmersive ? "terminal.exitImmersive" : "terminal.enterImmersive"),
+        active: uiStore.isWorkspaceImmersive,
+        run: () => uiStore.toggleWorkspaceImmersive(),
+      },
+    ],
+  },
+  {
+    id: "tools",
+    actions: [
+      {
+        id: "snippets",
+        icon: "i-lucide-square-terminal",
+        label: t("terminal.toolbar.snippets"),
+        title: t("snippets.title"),
+        active: isSnippetsOpen.value,
+        run: toggleSnippets,
+      },
+      {
+        id: "appearance",
+        icon: "i-lucide-palette",
+        label: t("terminal.toolbar.theme"),
+        title: t("terminal.appearance"),
+        active: isAppearanceOpen.value,
+        run: toggleAppearance,
+      },
+    ],
+  },
+  {
+    id: "session",
+    actions: [
+      {
+        id: "search",
+        icon: "i-lucide-search",
+        label: t("terminal.toolbar.search"),
+        title: `${t("terminal.search.toggle")} (Ctrl+Shift+F)`,
+        active: isSearchOpen.value,
+        run: toggleTerminalSearch,
+      },
+      {
+        id: "clear",
+        icon: "i-lucide-eraser",
+        label: t("terminal.toolbar.clear"),
+        title: t("terminal.clear"),
+        run: () => sessionStore.clearActiveTerminal(),
+      },
+      {
+        id: "reconnect",
+        icon: "i-lucide-rotate-cw",
+        label: t("terminal.toolbar.reconnect"),
+        title: t("terminal.reconnect"),
+        run: reconnectTerminal,
+      },
+    ],
+  },
+]);
+
+// 沉浸中点「左栏 / 下方文件」＝想把它叫回来：先退出沉浸，面板原本关着就顺手打开
+function togglePanel(isShown, toggle) {
+  if (!uiStore.isWorkspaceImmersive) {
+    toggle();
+    return;
+  }
+  uiStore.toggleWorkspaceImmersive(false);
+  if (!isShown) toggle();
+}
+
 function toggleTerminalSearch() {
   activeTerminal.value?.toggleSearch();
 }
@@ -404,7 +501,7 @@ function toggleSnippets() {
 // 文件面板拖拽结束后持久化高度占比（xterm 的 ResizeObserver 会自动 refit）
 function persistFilePaneSize(event) {
   const panes = Array.isArray(event) ? event : event?.panes ?? [];
-  if (!settingsStore.showFileExplorer || panes.length < 2) return;
+  if (!showFilePane.value || panes.length < 2) return;
 
   settingsStore.applySettingsPatch({ filePaneSize: panes[panes.length - 1].size });
 }
@@ -455,78 +552,33 @@ async function savePendingCredential() {
   <Splitpanes horizontal class="xin-split terminal-split" @resized="persistFilePaneSize">
     <Pane
       key="terminal"
-      :size="settingsStore.showFileExplorer ? 100 - settingsStore.filePaneSize : 100"
+      :size="showFilePane ? 100 - settingsStore.filePaneSize : 100"
       min-size="26"
     >
       <section class="terminal-panel-top liquid-rim" :style="themeStyleVars">
       <header class="terminal-panel-toolbar">
-        <div class="terminal-title-block">
+        <div class="terminal-title-block" :title="terminalStatusText">
           <span class="terminal-live-dot" :class="activeSession?.status"></span>
-          <div class="terminal-title-copy">
-            <span class="terminal-name-row">
-              <strong>{{ activeSession?.name }}</strong>
-              <em>SSH</em>
-            </span>
-            <small>{{ activeSession?.username }}@{{ activeSession?.host }}:{{ activeSession?.port }}</small>
-          </div>
+          <strong class="terminal-endpoint">{{ terminalEndpoint }}</strong>
         </div>
 
+        <!-- 三组玻璃胶囊：布局（左栏 / 下方文件 / 沉浸）· 工具（片段 / 主题）· 会话（搜索 / 清空 / 重连）。
+             窄窗口下文字收起只留图标（容器查询，见 terminal-workspace.css） -->
         <div class="terminal-window-actions">
-          <span class="terminal-state-label">{{ terminalStatusText }}</span>
-          <!-- 工具按钮收进一颗跟随终端主题的玻璃胶囊；终端面板自带 backdrop 模糊，
-               这里只借材质（高光描边 + 焦散），不再挂折射指令 -->
-          <div class="terminal-action-capsule liquid-glass">
-            <button
-              type="button"
-              :class="{ active: isSearchOpen }"
-              :aria-label="t('terminal.search.toggle')"
-              :title="`${t('terminal.search.toggle')} (Ctrl+Shift+F)`"
-              @click="toggleTerminalSearch"
-            >
-              <UIcon name="i-lucide-search" />
-            </button>
-            <button
-              type="button"
-              :class="{ active: !settingsStore.showMonitorSidebar }"
-              :aria-label="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
-              :title="t(settingsStore.showMonitorSidebar ? 'terminal.hideSidebar' : 'terminal.showSidebar')"
-              @click="settingsStore.toggleMonitorSidebar()"
-            >
-              <UIcon :name="settingsStore.showMonitorSidebar ? 'i-lucide-panel-left-close' : 'i-lucide-panel-left-open'" />
-            </button>
-            <button
-              type="button"
-              :class="{ active: !settingsStore.showFileExplorer }"
-              :aria-label="t(settingsStore.showFileExplorer ? 'terminal.hideFilePanel' : 'terminal.showFilePanel')"
-              :title="t(settingsStore.showFileExplorer ? 'terminal.hideFilePanel' : 'terminal.showFilePanel')"
-              @click="settingsStore.toggleFileExplorer()"
-            >
-              <UIcon :name="settingsStore.showFileExplorer ? 'i-lucide-panel-bottom-close' : 'i-lucide-panel-bottom-open'" />
-            </button>
-            <button
-              type="button"
-              :class="{ active: isSnippetsOpen }"
-              :aria-label="t('snippets.title')"
-              :title="t('snippets.title')"
-              @click="toggleSnippets"
-            >
-              <UIcon name="i-lucide-scroll-text" />
-            </button>
-            <button
-              type="button"
-              :class="{ active: isAppearanceOpen }"
-              :aria-label="t('terminal.appearance')"
-              :title="t('terminal.appearance')"
-              @click="toggleAppearance"
-            >
-              <UIcon name="i-lucide-palette" />
-            </button>
-            <button type="button" :aria-label="t('terminal.clear')" @click="sessionStore.clearActiveTerminal">
-              <UIcon name="i-lucide-eraser" />
-            </button>
-            <button type="button" :aria-label="t('terminal.reconnect')" @click="reconnectTerminal">
-              <UIcon name="i-lucide-rotate-cw" />
-            </button>
+          <div v-for="group in toolbarGroups" :key="group.id" class="terminal-action-capsule liquid-glass">
+            <UButton
+              v-for="action in group.actions"
+              :key="action.id"
+              :class="{ active: action.active }"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              :icon="action.icon"
+              :label="action.label"
+              :aria-pressed="action.active ?? undefined"
+              :title="action.title ?? action.label"
+              @click="action.run"
+            />
           </div>
         </div>
       </header>
@@ -867,7 +919,7 @@ async function savePendingCredential() {
     </Pane>
 
     <Pane
-      v-if="settingsStore.showFileExplorer"
+      v-if="showFilePane"
       key="files"
       :size="settingsStore.filePaneSize"
       min-size="16"

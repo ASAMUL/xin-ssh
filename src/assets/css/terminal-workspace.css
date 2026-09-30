@@ -29,16 +29,19 @@
     box-shadow 220ms ease;
 }
 
+/* 终端头部：左边是连接目标（user@host:port）+ 状态点，右边三颗玻璃胶囊。
+   开 inline-size 容器查询，窄的时候按钮文字收起只留图标，工具栏不换行不挤爆。 */
 .terminal-panel-toolbar {
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 18px;
+  padding: 0 12px 0 18px;
   color: var(--term-text, #e6ebff);
   border-bottom: 1px solid var(--term-divider, rgba(255, 255, 255, 0.08));
   background: var(--term-toolbar-bg, rgba(255, 255, 255, 0.04));
+  container-type: inline-size;
 }
 
 .terminal-title-block {
@@ -48,54 +51,20 @@
   gap: 10px;
 }
 
-.terminal-title-copy {
+.terminal-endpoint {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.terminal-title-block strong,
-.terminal-title-block small,
-.terminal-name-row {
   overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.terminal-name-row {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.terminal-title-block strong {
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.terminal-name-row em {
-  flex: 0 0 auto;
-  padding: 2px 8px;
-  color: var(--term-text-muted, rgba(230, 235, 255, 0.6));
-  border: 1px solid var(--term-soft, rgba(230, 235, 255, 0.1));
-  border-radius: 999px;
-  background: var(--term-soft, rgba(230, 235, 255, 0.1));
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 640;
-  letter-spacing: 0;
-}
-
-.terminal-title-block small {
-  color: var(--term-text-muted, rgba(230, 235, 255, 0.6));
-  font-size: 11px;
 }
 
 .terminal-live-dot {
   width: 10px;
   height: 10px;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: #8b98a8;
 }
@@ -115,18 +84,10 @@
 }
 
 .terminal-window-actions {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.terminal-state-label {
-  max-width: 130px;
-  overflow: hidden;
-  color: var(--term-text-muted, rgba(230, 235, 255, 0.6));
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* 工具按钮的玻璃胶囊：材质变量全部改用终端主题色，于是它在 Dracula 上是暗玻璃、
@@ -146,15 +107,15 @@
   border-radius: 999px;
 }
 
-.terminal-window-actions button {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
+.terminal-window-actions :deep(button) {
+  height: 28px;
+  gap: 5px;
+  padding: 0 10px;
   color: var(--term-text-muted, rgba(230, 235, 255, 0.6));
-  border: 0;
   border-radius: 999px;
   background: transparent;
+  font-size: 12px;
+  font-weight: 560;
   transition:
     color 160ms ease,
     background 160ms ease,
@@ -162,26 +123,43 @@
     transform 240ms var(--lg-spring);
 }
 
-.terminal-window-actions button:hover {
+.terminal-window-actions :deep(button svg) {
+  width: 15px;
+  height: 15px;
+}
+
+.terminal-window-actions :deep(button:hover) {
   color: var(--term-text, #e6ebff);
   background: color-mix(in srgb, var(--term-text, #e6ebff) 10%, transparent);
 }
 
-/* 选中的工具是胶囊里的一颗水滴：顶部一道高光把它从胶囊里「抬」出来 */
-.terminal-window-actions button.active {
-  color: var(--term-text, #e6ebff);
-  background: color-mix(in srgb, var(--term-text, #e6ebff) 16%, transparent);
+/* 开着的面板 / 工具是胶囊里的一颗水滴：顶部一道高光把它从胶囊里「抬」出来，字色取主题强调色 */
+.terminal-window-actions :deep(button.active) {
+  color: var(--term-accent, #e6ebff);
+  background: color-mix(in srgb, var(--term-accent, #e6ebff) 18%, transparent);
   box-shadow:
     inset 0 1px 0 var(--term-highlight, rgb(255 255 255 / 0.24)),
     0 4px 10px -6px rgb(0 0 0 / 0.45);
 }
 
-.terminal-window-actions button:active {
-  transform: scale(0.9);
+.terminal-window-actions :deep(button:active) {
+  transform: scale(0.94);
+}
+
+@container (max-width: 860px) {
+  .terminal-window-actions :deep(button [data-slot="label"]) {
+    display: none;
+  }
+
+  .terminal-window-actions :deep(button) {
+    width: 30px;
+    justify-content: center;
+    padding: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .terminal-window-actions button:active {
+  .terminal-window-actions :deep(button:active) {
     transform: none;
   }
 }
@@ -410,11 +388,5 @@
 @keyframes terminal-caret-blink {
   50% {
     opacity: 0;
-  }
-}
-
-@media (max-width: 900px) {
-  .terminal-state-label {
-    display: none;
   }
 }

@@ -153,10 +153,10 @@
   min-width: 0;
   height: 100%;
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr);
+  grid-template-columns: auto 8px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  padding: 0 8px 0 13px;
+  padding: 0 6px 0 9px;
   color: inherit;
   border: 0;
   background: transparent;

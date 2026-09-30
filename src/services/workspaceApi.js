@@ -199,3 +199,7 @@ export function startDownloadTransfer(request) {
 export function cancelTransfer(taskId) {
   return invoke("cancel_transfer", { taskId });
 }
+
+export function measureSessionLatency(request) {
+  return invoke("measure_session_latency", { request });
+}

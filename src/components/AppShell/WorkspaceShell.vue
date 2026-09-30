@@ -9,6 +9,7 @@ import TerminalWorkspace from "../Terminal/TerminalWorkspace.vue";
 import TunnelPanel from "../Tunnels/TunnelPanel.vue";
 import HomeDashboard from "../Home/HomeDashboard.vue";
 import HostMonitorSidebar from "./HostMonitorSidebar.vue";
+import WorkspaceStatusBar from "./WorkspaceStatusBar.vue";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
@@ -20,11 +21,13 @@ const uiStore = useUiStore();
 const navigationLocked = useWorkspaceNavigationLock();
 
 const hasActiveSession = computed(() => Boolean(sessionStore.activeSession));
+// 沉浸时概览栏整个不渲染（不是只隐藏），splitpanes 才会把宽度全部让给终端
+const showMonitor = computed(() => settingsStore.showMonitorSidebar && !uiStore.isWorkspaceImmersive);
 
 // splitpanes 拖拽结束才落盘；兼容事件载荷为数组或 { panes } 两种形态
 function persistMonitorPaneSize(event) {
   const panes = Array.isArray(event) ? event : event?.panes ?? [];
-  if (!settingsStore.showMonitorSidebar || panes.length < 2) return;
+  if (!showMonitor.value || panes.length < 2) return;
 
   settingsStore.applySettingsPatch({ monitorPaneSize: panes[0].size });
 }
@@ -32,8 +35,13 @@ function persistMonitorPaneSize(event) {
 
 <template>
   <section class="workspace-layout" :class="{ 'connection-hub-layout': !hasActiveSession }">
-    <div v-if="sessionStore.sessions.length" v-show="hasActiveSession" class="workspace-stage">
-      <div class="workspace-session-bar">
+    <div
+      v-if="sessionStore.sessions.length"
+      v-show="hasActiveSession"
+      class="workspace-stage"
+      :class="{ immersive: uiStore.isWorkspaceImmersive }"
+    >
+      <div v-if="!uiStore.isWorkspaceImmersive" class="workspace-session-bar">
         <SessionTabs
           v-liquid-glass="{ scale: 16 }"
           class="liquid-glass"
@@ -49,7 +57,7 @@ function persistMonitorPaneSize(event) {
 
       <Splitpanes class="xin-split workspace-split" @resized="persistMonitorPaneSize">
         <Pane
-          v-if="settingsStore.showMonitorSidebar"
+          v-if="showMonitor"
           key="monitor"
           :size="settingsStore.monitorPaneSize"
           min-size="14"
@@ -57,10 +65,12 @@ function persistMonitorPaneSize(event) {
         >
           <HostMonitorSidebar />
         </Pane>
-        <Pane key="terminal" :size="settingsStore.showMonitorSidebar ? 100 - settingsStore.monitorPaneSize : 100">
+        <Pane key="terminal" :size="showMonitor ? 100 - settingsStore.monitorPaneSize : 100">
           <TerminalWorkspace />
         </Pane>
       </Splitpanes>
+
+      <WorkspaceStatusBar v-if="!uiStore.isWorkspaceImmersive" />
     </div>
 
     <section v-if="!hasActiveSession" class="workspace-main">

@@ -629,6 +629,8 @@ pub struct RemoteSystemSnapshot {
     pub kernel: Option<String>,
     // /etc/os-release 的 ID（ubuntu / debian / rhel …），前端据此挑连接图标
     pub os_id: Option<String>,
+    // /etc/os-release 的 PRETTY_NAME（如 "Ubuntu 24.04 LTS"），概览卡片的标题
+    pub os_name: Option<String>,
     pub uptime_seconds: Option<u64>,
     pub load_average: Vec<f64>,
     pub cpu: RemoteCpuInfo,
@@ -637,6 +639,16 @@ pub struct RemoteSystemSnapshot {
     pub networks: Vec<RemoteNetworkInfo>,
     pub processes: Vec<RemoteProcessInfo>,
     pub disks: Vec<RemoteDiskInfo>,
+    // 运行中的 systemd 服务；None = 这台机器没有 systemd（Alpine、容器等），和「一个都没跑」区分开
+    pub services: Option<Vec<RemoteServiceInfo>>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteServiceInfo {
+    pub name: String,
+    pub sub_state: String,
+    pub description: String,
 }
 
 #[derive(Clone, Default, Serialize)]

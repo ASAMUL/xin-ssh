@@ -46,6 +46,9 @@ pub(crate) enum TerminalControl {
     GetSystemInfo {
         responder: oneshot::Sender<Result<RemoteSystemSnapshot, AppError>>,
     },
+    MeasureLatency {
+        responder: oneshot::Sender<Result<u64, AppError>>,
+    },
     CreateDirectory {
         path: String,
         responder: oneshot::Sender<Result<(), AppError>>,
@@ -227,6 +230,19 @@ impl TerminalRegistry {
         receiver
             .await
             .map_err(|_| request_canceled("systemInfo"))?
+    }
+
+    pub(crate) async fn measure_latency(&self, session_id: &str) -> Result<u64, AppError> {
+        let sender = self.sender_for(session_id)?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::MeasureLatency { responder })
+            .map_err(|_| not_accepting("latency"))?;
+
+        receiver
+            .await
+            .map_err(|_| request_canceled("latency"))?
     }
 
     pub(crate) async fn create_directory(

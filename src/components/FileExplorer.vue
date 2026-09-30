@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useVirtualizer } from "@tanstack/vue-virtual";
@@ -35,6 +35,7 @@ const fileExplorerRoot = ref(null);
 const fileTableWrap = ref(null);
 const pathInput = ref("/");
 const pathInputControl = ref(null);
+const isEditingPath = ref(false);
 const searchInputControl = ref(null);
 const isDragOver = ref(false);
 const lastSelectedPath = ref("");
@@ -71,11 +72,13 @@ const conflictDialog = reactive({
   error: "",
   isSubmitting: false,
 });
+// 右侧留出 pe-10 给当前目录的项数角标
 const fileSearchInputUi = {
   root: "file-search",
-  base: "h-8 rounded-lg bg-default ps-8 pe-3 text-xs font-semibold shadow-[inset_0_1px_0_rgb(var(--xin-fill-rgb) / 0.9)] placeholder:text-dimmed",
-  leading: "ps-2.5",
+  base: "h-8 rounded-full bg-default ps-8 pe-10 text-xs font-semibold placeholder:text-dimmed",
+  leading: "ps-3",
   leadingIcon: "size-4 text-muted",
+  trailing: "pe-2",
 };
 const fileContextMenuUi = {
   content: "min-w-40 rounded-lg border border-default bg-default shadow-xl backdrop-blur-xl",
@@ -349,6 +352,49 @@ const historyMenuItems = computed(() => {
   return [items];
 });
 const hasHistory = computed(() => historyMenuItems.value[0].length > 0);
+
+// 路径太深时只留根、省略号和最后三级，工具栏一行放得下
+const PATH_CRUMB_TAIL = 3;
+const pathCrumbs = computed(() => {
+  const segments = currentPath.value.split("/").filter(Boolean);
+  const crumbs = segments.map((segment, index) => ({
+    label: segment,
+    path: `/${segments.slice(0, index + 1).join("/")}`,
+  }));
+  const tail = crumbs.length > PATH_CRUMB_TAIL + 1
+    ? [{ label: "…", path: `ellipsis:${currentPath.value}`, ellipsis: true }, ...crumbs.slice(-PATH_CRUMB_TAIL)]
+    : crumbs;
+  return [{ label: "/", path: "/" }, ...tail];
+});
+
+const createMenuItems = computed(() => [[
+  { label: t("files.newFolder"), icon: "i-lucide-folder-plus", disabled: !canTransfer.value, onSelect: openCreateFolderDialog },
+  { label: t("files.newFile"), icon: "i-lucide-file-plus", disabled: !canTransfer.value, onSelect: openCreateFileDialog },
+]]);
+
+const moreMenuItems = computed(() => [
+  [
+    { label: t("files.uploadFolder"), icon: "i-lucide-folder-up", disabled: !canTransfer.value, onSelect: chooseUploadFolder },
+    { label: t("files.download"), icon: "i-lucide-download", disabled: !canDownload.value, onSelect: downloadSelectedEntries },
+    { label: t("files.rename"), icon: "i-lucide-pencil", disabled: !canRename.value, onSelect: () => openRenameDialog() },
+    {
+      label: t("files.delete"),
+      icon: "i-lucide-trash-2",
+      color: "error",
+      disabled: !canDelete.value,
+      onSelect: () => openDeleteDialog(),
+    },
+  ],
+  [
+    { label: t("files.refresh"), icon: "i-lucide-refresh-cw", disabled: !canRefresh.value, onSelect: refreshDirectory },
+    { label: t("files.history"), icon: "i-lucide-history", disabled: !hasHistory.value, children: historyMenuItems.value },
+    {
+      label: t(settingsStore.showHiddenFiles ? "files.hideHidden" : "files.showHidden"),
+      icon: settingsStore.showHiddenFiles ? "i-lucide-eye-off" : "i-lucide-eye",
+      onSelect: () => settingsStore.toggleHiddenFiles(),
+    },
+  ],
+]);
 const nameDialogTitle = computed(() => {
   if (nameDialog.mode === "create") return t("files.createFolderTitle");
   if (nameDialog.mode === "createFile") return t("files.createFileTitle");
@@ -535,7 +581,25 @@ onBeforeUnmount(() => {
 function submitPath() {
   if (!props.activeSession || !canNavigate.value) return;
 
+  isEditingPath.value = false;
   fileExplorerStore.loadDirectory(props.activeSession, pathInput.value);
+}
+
+function navigateToPath(path) {
+  if (!props.activeSession || !canNavigate.value || path === currentPath.value) return;
+
+  fileExplorerStore.loadDirectory(props.activeSession, path);
+}
+
+// 点面包屑本身是跳转，点它旁边的空白才进入手输
+function startPathEdit(event) {
+  if (isEditingPath.value || !isConnected.value || event.target.closest(".path-crumb")) return;
+  focusPathInput();
+}
+
+function cancelPathEdit() {
+  isEditingPath.value = false;
+  pathInput.value = currentPath.value;
 }
 
 function refreshDirectory() {
@@ -550,7 +614,9 @@ function refreshDirectory() {
   fileExplorerStore.refreshDirectory(props.activeSession);
 }
 
-function focusPathInput() {
+async function focusPathInput() {
+  isEditingPath.value = true;
+  await nextTick();
   pathInputControl.value?.focus();
   pathInputControl.value?.select();
 }
@@ -1304,160 +1370,155 @@ function sortAriaLabel(key) {
 
 <template>
   <section ref="fileExplorerRoot" class="file-explorer liquid-rim" aria-label="Remote file explorer">
-    <header class="file-panel-tabs">
-      <div class="file-tab-group">
-        <button type="button" class="file-panel-tab active">
-          <UIcon name="i-lucide-folder" />
-          <span>{{ t("files.fileTab") }}</span>
-        </button>
-        <button
-          type="button"
-          class="file-panel-tab"
-          :class="{ active: settingsStore.showFileTree }"
-          :aria-label="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
-          :title="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
-          @click="settingsStore.toggleFileTree()"
-        >
-          <UIcon name="i-lucide-list-tree" />
-          <span>{{ t("files.treeTab") }}</span>
-        </button>
+    <!-- 一行工具栏：标题 · 目录树开关 · 前进后退 · 面包屑路径 ‖ 筛选 · 上传 · 新建 · 更多。
+         低频操作（上传文件夹、下载、重命名、删除、刷新、历史、隐藏文件）收进「更多」，右键菜单保留全部 -->
+    <header class="file-toolbar">
+      <h3 class="file-toolbar-title">{{ t("files.fileTab") }}</h3>
+
+      <UButton
+        class="file-tool"
+        :class="{ active: settingsStore.showFileTree }"
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        square
+        icon="i-lucide-panel-left"
+        :aria-pressed="settingsStore.showFileTree"
+        :aria-label="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
+        :title="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
+        @click="settingsStore.toggleFileTree()"
+      />
+
+      <div class="navigation-tools">
+        <UButton
+          class="file-tool"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          square
+          icon="i-lucide-chevron-left"
+          :aria-label="t('files.back')"
+          :title="t('files.back')"
+          :disabled="!canNavigate || !canGoBack"
+          @click="goBack"
+        />
+        <UButton
+          class="file-tool"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          square
+          icon="i-lucide-chevron-right"
+          :aria-label="t('files.forward')"
+          :title="t('files.forward')"
+          :disabled="!canNavigate || !canGoForward"
+          @click="goForward"
+        />
+        <UButton
+          class="file-tool"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          square
+          icon="i-lucide-arrow-up"
+          :aria-label="t('files.parent')"
+          :title="t('files.parent')"
+          :disabled="!canNavigate || currentPath === '/'"
+          @click="goToParent"
+        />
       </div>
 
-      <div class="file-panel-actions">
-        <UInput
-          ref="searchInputControl"
-          v-model="query"
+      <!-- 平时是可点的面包屑；点空白处 / Ctrl+L 进入输入模式，回车跳转，Esc 或失焦退出 -->
+      <form
+        class="path-bar"
+        :class="{ editing: isEditingPath }"
+        aria-label="Current remote path"
+        @submit.prevent="submitPath"
+        @click="startPathEdit"
+      >
+        <input
+          v-if="isEditingPath"
+          ref="pathInputControl"
+          v-model="pathInput"
+          type="text"
+          spellcheck="false"
+          :disabled="!isConnected"
+          @blur="cancelPathEdit"
+          @keydown.esc.prevent="cancelPathEdit"
+        />
+        <nav v-else class="path-crumbs" :aria-label="t('files.pathCrumbs')">
+          <template v-for="(crumb, index) in pathCrumbs" :key="crumb.path">
+            <span v-if="index > 1" class="path-separator" aria-hidden="true">/</span>
+            <button
+              type="button"
+              class="path-crumb"
+              :class="{ current: crumb.path === currentPath, ellipsis: crumb.ellipsis }"
+              :disabled="!canNavigate || crumb.ellipsis"
+              :title="crumb.ellipsis ? currentPath : crumb.path"
+              @click.stop="navigateToPath(crumb.path)"
+            >
+              {{ crumb.label }}
+            </button>
+          </template>
+        </nav>
+      </form>
+
+      <UInput
+        ref="searchInputControl"
+        v-model="query"
+        color="neutral"
+        variant="outline"
+        size="sm"
+        type="search"
+        icon="i-lucide-search"
+        :placeholder="t('files.search')"
+        :ui="fileSearchInputUi"
+      >
+        <template #trailing>
+          <span class="file-count" :title="t('files.itemCount', { count: visibleEntries.length })">
+            {{ visibleEntries.length }}
+          </span>
+        </template>
+      </UInput>
+
+      <UButton
+        v-liquid-glass="{ scale: 12 }"
+        class="file-upload liquid-glass liquid-glass--ink"
+        color="primary"
+        size="sm"
+        icon="i-lucide-upload"
+        :label="t('files.upload')"
+        :title="t('files.uploadFiles')"
+        :disabled="!canTransfer"
+        @click="chooseUploadFiles"
+      />
+
+      <UDropdownMenu :items="createMenuItems" size="sm" :content="{ align: 'end' }">
+        <UButton
+          class="file-create"
           color="neutral"
           variant="outline"
           size="sm"
-          type="search"
-          icon="i-lucide-search"
-          :placeholder="t('files.search')"
-          :ui="fileSearchInputUi"
+          icon="i-lucide-plus"
+          trailing-icon="i-lucide-chevron-down"
+          :label="t('files.create')"
+          :disabled="!canTransfer"
         />
-        <span class="file-count">{{ t("files.itemCount", { count: visibleEntries.length }) }}</span>
-        <button
-          type="button"
-          :class="{ 'toggle-on': settingsStore.showHiddenFiles }"
-          :aria-label="t(settingsStore.showHiddenFiles ? 'files.hideHidden' : 'files.showHidden')"
-          :title="t(settingsStore.showHiddenFiles ? 'files.hideHidden' : 'files.showHidden')"
-          @click="settingsStore.toggleHiddenFiles()"
-        >
-          <UIcon :name="settingsStore.showHiddenFiles ? 'i-lucide-eye' : 'i-lucide-eye-off'" />
-        </button>
-        <UDropdownMenu :items="historyMenuItems" size="xs" :ui="fileContextMenuUi">
-          <button
-            type="button"
-            :aria-label="t('files.history')"
-            :title="t('files.history')"
-            :disabled="!hasHistory"
-          >
-            <UIcon name="i-lucide-history" />
-          </button>
-        </UDropdownMenu>
-        <button
-          type="button"
-          :aria-label="t('files.refresh')"
-          :title="t('files.refresh')"
-          :disabled="!canRefresh"
-          @click="refreshDirectory"
-        >
-          <UIcon name="i-lucide-refresh-cw" :class="{ 'spin-icon': fileState.isLoading || isConnecting }" />
-        </button>
-        <button
-          type="button"
-          :aria-label="t('files.download')"
-          :title="t('files.download')"
-          :disabled="!canDownload"
-          @click="downloadSelectedEntries"
-        >
-          <UIcon name="i-lucide-download" />
-        </button>
-        <button
-          type="button"
-          :aria-label="t('files.rename')"
-          :title="t('files.rename')"
-          :disabled="!canRename"
-          @click="openRenameDialog()"
-        >
-          <UIcon name="i-lucide-pencil" />
-        </button>
-        <button
-          type="button"
-          :aria-label="t('files.delete')"
-          :title="t('files.delete')"
-          :disabled="!canDelete"
-          @click="openDeleteDialog()"
-        >
-          <UIcon name="i-lucide-trash-2" />
-        </button>
-        <button
-          type="button"
-          :aria-label="t('files.uploadFiles')"
-          :title="t('files.uploadFiles')"
-          :disabled="!canTransfer"
-          @click="chooseUploadFiles"
-        >
-          <UIcon name="i-lucide-upload" />
-        </button>
-        <button
-          type="button"
-          :aria-label="t('files.uploadFolder')"
-          :title="t('files.uploadFolder')"
-          :disabled="!canTransfer"
-          @click="chooseUploadFolder"
-        >
-          <UIcon name="i-lucide-folder-up" />
-        </button>
-        <button
-          type="button"
-          :aria-label="t('files.newFolder')"
-          :title="t('files.newFolder')"
-          :disabled="!canTransfer"
-          @click="openCreateFolderDialog"
-        >
-          <UIcon name="i-lucide-folder-plus" />
-        </button>
-        <button
-          type="button"
-          :aria-label="t('files.newFile')"
-          :title="t('files.newFile')"
-          :disabled="!canTransfer"
-          @click="openCreateFileDialog"
-        >
-          <UIcon name="i-lucide-file-plus" />
-        </button>
-      </div>
+      </UDropdownMenu>
+
+      <UDropdownMenu :items="moreMenuItems" size="sm" :content="{ align: 'end' }">
+        <UButton
+          class="file-tool"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          square
+          icon="i-lucide-ellipsis"
+          :aria-label="t('files.moreActions')"
+          :title="t('files.moreActions')"
+        />
+      </UDropdownMenu>
     </header>
-
-    <div class="file-path-row">
-      <div class="navigation-tools">
-        <button type="button" :aria-label="t('files.back')" :disabled="!canNavigate || !canGoBack" @click="goBack">
-          <UIcon name="i-lucide-arrow-left" />
-        </button>
-        <button
-          type="button"
-          :aria-label="t('files.forward')"
-          :disabled="!canNavigate || !canGoForward"
-          @click="goForward"
-        >
-          <UIcon name="i-lucide-arrow-right" />
-        </button>
-        <button
-          type="button"
-          :aria-label="t('files.parent')"
-          :disabled="!canNavigate || currentPath === '/'"
-          @click="goToParent"
-        >
-          <UIcon name="i-lucide-arrow-up" />
-        </button>
-      </div>
-
-      <form class="path-bar" aria-label="Current remote path" @submit.prevent="submitPath">
-        <UIcon name="i-lucide-map" />
-        <input ref="pathInputControl" v-model="pathInput" type="text" :disabled="!isConnected" spellcheck="false" />
-      </form>
-    </div>
 
     <Splitpanes class="xin-split explorer-split" @resized="persistTreeSize">
       <Pane

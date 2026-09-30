@@ -25,7 +25,9 @@ use crate::sftp::transfer::{
 use crate::ssh::client::{authenticate_session, connect_with_tofu, disconnect_session};
 use crate::ssh::interactive::{AuthenticationContext, AuthenticationEvent};
 use crate::ssh::registry::{TerminalControl, TerminalRegistry};
-use crate::system_info::{collect_system_info_on_session, SystemInfoSampler};
+use crate::system_info::{
+    collect_system_info_on_session, measure_latency_on_session, SystemInfoSampler,
+};
 use crate::util::shell_quote;
 
 const TERMINAL_EVENT: &str = "terminal-event";
@@ -270,6 +272,19 @@ async fn run_terminal_shell(
                                     let mut sampler = sampler.lock().await;
                                     collect_system_info_on_session(&session_id, session, &mut sampler).await
                                 } => result,
+                            };
+                            let _ = responder.send(result);
+                        });
+                    }
+                    TerminalControl::MeasureLatency { mut responder } => {
+                        let session = Arc::clone(&session);
+                        let cancellation = cancellation.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let result = tokio::select! {
+                                biased;
+                                _ = cancellation.cancelled() => return,
+                                _ = responder.closed() => return,
+                                result = measure_latency_on_session(session) => result,
                             };
                             let _ = responder.send(result);
                         });

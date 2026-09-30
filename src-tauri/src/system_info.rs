@@ -11,7 +11,7 @@ use tokio::time::{timeout, Duration};
 use crate::error::{codes, connection_error, required, timeout as timeout_error, AppError};
 use crate::models::{
     RemoteCpuInfo, RemoteDiskInfo, RemoteMemoryInfo, RemoteNetworkInfo, RemoteProcessInfo,
-    RemoteSystemInfoRequest, RemoteSystemSnapshot,
+    RemoteServiceInfo, RemoteSystemInfoRequest, RemoteSystemSnapshot,
 };
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
@@ -20,6 +20,40 @@ use crate::util::{now_millis, shell_quote};
 const SYSTEM_INFO_SECTION_MARKER: &str = "__XIN_SYSTEM_INFO__";
 const SYSTEM_INFO_REQUEST_TIMEOUT_SECONDS: u64 = 8;
 const SYSTEM_INFO_COMMAND_TIMEOUT_SECONDS: u64 = 7;
+const LATENCY_TIMEOUT_SECONDS: u64 = 5;
+// 概览只展示前几项，「查看全部」也只是扫一眼；服务多的机器不必每轮都整表传回来
+const SERVICE_ROW_LIMIT: usize = 80;
+const NO_SYSTEMD_MARKER: &str = "__XIN_NO_SYSTEMD__";
+
+// 状态栏的「延迟」：给已连接的会话发一个要求回复的 SSH 保活请求并计时，
+// 量到的是真实网络往返（不含远端命令执行时间）。
+#[tauri::command]
+pub async fn measure_session_latency(
+    registry: State<'_, TerminalRegistry>,
+    request: RemoteSystemInfoRequest,
+) -> Result<u64, AppError> {
+    validate_system_info_request(&request)?;
+
+    timeout(
+        Duration::from_secs(LATENCY_TIMEOUT_SECONDS),
+        registry.measure_latency(&request.session_id),
+    )
+    .await
+    .map_err(|_| timeout_error("latency", LATENCY_TIMEOUT_SECONDS))?
+}
+
+pub(crate) async fn measure_latency_on_session(
+    session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
+) -> Result<u64, AppError> {
+    let started = std::time::Instant::now();
+    session
+        .lock()
+        .await
+        .send_ping()
+        .await
+        .map_err(connection_error)?;
+    Ok(started.elapsed().as_millis() as u64)
+}
 
 #[tauri::command]
 pub async fn get_remote_system_info(
@@ -142,6 +176,16 @@ uname -srmo 2>/dev/null || uname -a 2>/dev/null || true
 section OS
 awk -F= '$1=="ID" {gsub(/"/, "", $2); print $2; exit}' /etc/os-release 2>/dev/null || true
 
+section OS_NAME
+awk '/^PRETTY_NAME=/ {sub(/^PRETTY_NAME=/, ""); gsub(/"/, ""); print; exit}' /etc/os-release 2>/dev/null || true
+
+section SERVICES
+if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+  systemctl list-units --type=service --state=running --no-legend --no-pager --plain 2>/dev/null | head -n 80 || true
+else
+  echo __XIN_NO_SYSTEMD__
+fi
+
 section UPTIME
 cat /proc/uptime 2>/dev/null || true
 
@@ -203,6 +247,7 @@ fn parse_system_snapshot(
         hostname: host_lines.first().cloned(),
         kernel: host_lines.get(1).cloned(),
         os_id: first_non_empty(lines_for(&sections, "OS")).map(|id| id.to_lowercase()),
+        os_name: first_non_empty(lines_for(&sections, "OS_NAME")),
         uptime_seconds: first_non_empty(lines_for(&sections, "UPTIME"))
             .and_then(|line| parse_uptime_seconds(&line)),
         load_average: first_non_empty(lines_for(&sections, "LOAD"))
@@ -216,6 +261,7 @@ fn parse_system_snapshot(
             lines_for(&sections, "NET_ADDR"),
         ),
         processes: parse_processes(lines_for(&sections, "PS")),
+        services: parse_services(&sections),
         disks: parse_disks(&sections),
     }
 }
@@ -435,6 +481,32 @@ fn parse_network_ipv4_addresses(lines: &[String]) -> HashMap<String, String> {
     }
 
     addresses
+}
+
+// systemctl --plain 的每行：UNIT LOAD ACTIVE SUB DESCRIPTION…；描述可能带空格，放最后整段取
+fn parse_services(sections: &HashMap<String, Vec<String>>) -> Option<Vec<RemoteServiceInfo>> {
+    let lines = sections.get("SERVICES")?;
+    if lines.iter().any(|line| line.trim() == NO_SYSTEMD_MARKER) {
+        return None;
+    }
+
+    Some(
+        lines
+            .iter()
+            .filter_map(|line| {
+                let parts = split_whitespace_tail(line.trim(), 5);
+                if parts.len() < 4 {
+                    return None;
+                }
+                Some(RemoteServiceInfo {
+                    name: parts[0].trim_end_matches(".service").to_string(),
+                    sub_state: parts[3].clone(),
+                    description: parts.get(4).cloned().unwrap_or_default(),
+                })
+            })
+            .take(SERVICE_ROW_LIMIT)
+            .collect(),
+    )
 }
 
 fn parse_processes(lines: &[String]) -> Vec<RemoteProcessInfo> {

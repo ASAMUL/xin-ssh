@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   closeTerminalSession,
   getRemoteSystemInfo,
+  measureSessionLatency,
   resizeTerminal,
   sendTerminalInput,
   startTerminalSession,
@@ -39,7 +40,8 @@ import { detectOsIcon } from "../config/osIcons";
 const TERMINAL_EVENT_NAME = "terminal-event";
 const INITIAL_TERMINAL_COLUMNS = 120;
 const INITIAL_TERMINAL_ROWS = 32;
-const NETWORK_HISTORY_LIMIT = 30;
+// 概览里 CPU / 网络走势图的采样点数：默认 5 秒一轮，约两分半的窗口
+const METRIC_HISTORY_LIMIT = 30;
 const MAX_AUTO_RECONNECT_ATTEMPTS = 1;
 const STABLE_CONNECTION_RESET_MS = 30_000;
 const TERMINAL_CLOSE_REASON_CLIENT = "client";
@@ -177,7 +179,8 @@ export const useSessionStore = defineStore("sessions", {
         systemInfoError: null,
         systemInfoLoading: false,
         systemInfoUpdatedAt: null,
-        networkHistory: [],
+        metricHistory: [],
+        latencyMs: null,
       };
 
       this.sessions.push(session);
@@ -357,7 +360,8 @@ export const useSessionStore = defineStore("sessions", {
       session.systemInfoLoading = false;
       session.systemInfoError = null;
       session.systemInfoUpdatedAt = null;
-      session.networkHistory = [];
+      session.metricHistory = [];
+      session.latencyMs = null;
       if (options.resetReconnectAttempts !== false) {
         session.autoReconnectAttempts = 0;
       }
@@ -649,7 +653,7 @@ export const useSessionStore = defineStore("sessions", {
 
         latestSession.systemInfo = normalizeSystemInfoSnapshot(snapshot);
         latestSession.systemInfoUpdatedAt = Date.now();
-        appendNetworkSample(latestSession, latestSession.systemInfo);
+        appendMetricSample(latestSession, latestSession.systemInfo);
         if (latestSession.workspaceDir === useSettingsStore().workspaceDir) {
           useProfileStore().recordDetectedOs(latestSession.profileId, detectOsIcon(latestSession.systemInfo));
         }
@@ -666,6 +670,24 @@ export const useSessionStore = defineStore("sessions", {
         if (latestSession && latestSession.currentAttemptId === attemptId) {
           latestSession.systemInfoLoading = false;
         }
+      }
+    },
+    // 状态栏的延迟：失败只清空读数，不打扰用户；断线由终端事件和系统信息采样负责发现
+    async measureLatency(sessionId = this.activeSessionId) {
+      const session = this.findSession(sessionId);
+      if (!session || session.isClosing || session.status !== "connected") return null;
+      const attemptId = session.currentAttemptId;
+
+      try {
+        const latencyMs = await measureSessionLatency({ sessionId: session.id });
+        const latestSession = this.findSession(session.id);
+        if (!latestSession || latestSession.currentAttemptId !== attemptId) return null;
+        latestSession.latencyMs = latencyMs;
+        return latencyMs;
+      } catch {
+        const latestSession = this.findSession(session.id);
+        if (latestSession?.currentAttemptId === attemptId) latestSession.latencyMs = null;
+        return null;
       }
     },
     findSession(sessionId) {
@@ -852,13 +874,14 @@ function normalizeSystemInfoSnapshot(snapshot) {
   };
 }
 
-function appendNetworkSample(session, snapshot) {
+// 每轮采样留一个点：网络速率靠相邻两点的累计字节差算，CPU / 内存直接取当轮读数，供概览画走势
+function appendMetricSample(session, snapshot) {
   ensureSystemInfoState(session);
   const capturedAt = Number(snapshot?.capturedAt) || Date.now();
   const rxBytes = sumNetworkBytes(snapshot, "rxBytes");
   const txBytes = sumNetworkBytes(snapshot, "txBytes");
   const totalBytes = rxBytes + txBytes;
-  const previousSample = session.networkHistory.at(-1);
+  const previousSample = session.metricHistory.at(-1);
   const secondsElapsed = previousSample
     ? Math.max((capturedAt - previousSample.capturedAt) / 1000, 0.001)
     : 0;
@@ -869,10 +892,10 @@ function appendNetworkSample(session, snapshot) {
   const rxBytesPerSecond = secondsElapsed > 0 ? rxBytesDelta / secondsElapsed : 0;
   const txBytesPerSecond = secondsElapsed > 0 ? txBytesDelta / secondsElapsed : 0;
 
-  session.networkHistory = [
-    ...session.networkHistory,
+  session.metricHistory = [
+    ...session.metricHistory,
     {
-      id: `${capturedAt}-${session.networkHistory.length}`,
+      id: `${capturedAt}-${session.metricHistory.length}`,
       capturedAt,
       rxBytes,
       txBytes,
@@ -880,8 +903,10 @@ function appendNetworkSample(session, snapshot) {
       bytesPerSecond,
       rxBytesPerSecond,
       txBytesPerSecond,
+      cpuPercent: snapshot?.cpu?.usagePercent ?? null,
+      memoryPercent: snapshot?.memory?.usagePercent ?? null,
     },
-  ].slice(-NETWORK_HISTORY_LIMIT);
+  ].slice(-METRIC_HISTORY_LIMIT);
 }
 
 function sumNetworkBytes(snapshot, field) {
@@ -896,5 +921,5 @@ function ensureSystemInfoState(session) {
   session.systemInfoError ??= null;
   session.systemInfoLoading ??= false;
   session.systemInfoUpdatedAt ??= null;
-  session.networkHistory ??= [];
+  session.metricHistory ??= [];
 }

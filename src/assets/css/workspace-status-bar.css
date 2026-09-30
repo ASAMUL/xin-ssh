@@ -1,0 +1,100 @@
+/* 工作区底部状态栏：一条贴着窗口下沿的细玻璃带，和顶栏上下呼应。
+   只放扫一眼就够的读数（连接、编码、延迟、传输、终端尺寸），不放操作。 */
+.workspace-status-bar {
+  flex: 0 0 auto;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+  color: var(--xin-text-secondary);
+  border-radius: 14px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-item {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+/* 竖线分隔：用伪元素画，免得模板里夹一堆空 span */
+.status-item + .status-item::before {
+  content: "";
+  width: 1px;
+  height: 12px;
+  margin: 0 10px 0 -10px;
+  background: rgb(var(--xin-ink-rgb) / 0.12);
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.status-spacer + .status-item::before {
+  display: none;
+}
+
+.status-item strong {
+  color: var(--xin-text);
+  font-weight: 650;
+}
+
+.status-connection {
+  color: var(--xin-text);
+  font-weight: 650;
+}
+
+.status-connection i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--xin-status-idle);
+}
+
+.status-connection.connected i {
+  background: var(--xin-success);
+  box-shadow: 0 0 0 3px rgb(var(--xin-success-rgb) / 0.18);
+}
+
+.status-connection.connecting i {
+  background: var(--xin-warning);
+  box-shadow: 0 0 0 3px rgb(var(--xin-warning-rgb) / 0.18);
+}
+
+.status-connection.error i {
+  background: var(--xin-danger);
+}
+
+.status-latency.good {
+  color: var(--xin-success-strong);
+}
+
+.status-latency.fair {
+  color: var(--xin-warning-strong);
+}
+
+.status-latency.poor {
+  color: var(--xin-danger-strong);
+}
+
+.status-transfers {
+  color: var(--xin-text-secondary);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-transfers:hover,
+.status-transfers.active {
+  color: var(--xin-accent-strong);
+  background: rgb(var(--xin-accent-rgb) / 0.1);
+}
+
+.status-muted {
+  color: var(--xin-text-muted);
+}

@@ -2,7 +2,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import QuickConnectMenu from "./AppShell/QuickConnectMenu.vue";
+import OsIconTile from "./ConnectionManager/OsIconTile.vue";
 import { useSortableList } from "../composables/useSortableList";
+import { useProfileStore } from "../stores/profileStore";
+import { resolveProfileOsIcon } from "../config/osIcons";
 
 const props = defineProps({
   sessions: {
@@ -18,6 +21,15 @@ const props = defineProps({
 
 const emit = defineEmits(["select", "close", "move", "dragging"]);
 const { t } = useI18n();
+const profileStore = useProfileStore();
+
+// 标签上带系统图标：同名的生产 / 测试机，一眼靠发行版标就能分开
+const osIcons = computed(() => Object.fromEntries(
+  props.sessions.map((session) => [
+    session.id,
+    resolveProfileOsIcon(profileStore.profiles.find((profile) => profile.id === session.profileId)),
+  ]),
+));
 
 const stripRef = ref(null);
 const fadeStart = ref(false);
@@ -165,6 +177,7 @@ watch(
                 @keydown.ctrl.shift.left.exact.stop.prevent="moveSessionTab(session.id, -1)"
                 @keydown.ctrl.shift.right.exact.stop.prevent="moveSessionTab(session.id, 1)"
               >
+                <OsIconTile class="tab-os-icon" :icon="osIcons[session.id]" :size="20" />
                 <span class="tab-status" :class="session.status"></span>
                 <span class="tab-title">{{ session.name }}</span>
               </button>

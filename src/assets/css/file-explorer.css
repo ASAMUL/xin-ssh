@@ -2,7 +2,7 @@
   position: relative;
   min-height: 0;
   display: grid;
-  grid-template-rows: 44px 44px minmax(0, 1fr);
+  grid-template-rows: 52px minmax(0, 1fr);
   overflow: hidden;
   color: var(--xin-text);
   border: 1px solid var(--xin-glass-border);
@@ -14,188 +14,161 @@
   backdrop-filter: var(--xin-glass-blur);
 }
 
-.file-panel-tabs,
-.file-path-row,
-.file-panel-actions,
-.file-tab-group,
-.navigation-tools {
+/* —— 一行工具栏 ——
+   左半边是「在哪」（标题、目录树、前进后退、面包屑），右半边是「做什么」（筛选、上传、新建、更多）；
+   面包屑吃掉中间剩余宽度，窗口窄了先压缩它，按钮不会被挤掉。 */
+.file-toolbar {
+  min-width: 0;
   display: flex;
   align-items: center;
-}
-
-.file-panel-tabs {
-  justify-content: space-between;
-  gap: 14px;
-  padding: 0 14px;
+  gap: 6px;
+  padding: 0 10px 0 16px;
   border-bottom: 1px solid var(--xin-glass-edge);
   background: rgb(var(--xin-fill-rgb) / 0.32);
 }
 
-.file-tab-group {
-  height: 100%;
-  gap: 4px;
-}
-
-.file-panel-tab {
-  height: 30px;
-  min-width: 86px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: var(--xin-text-muted);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 720;
-  transition:
-    background 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease;
-}
-
-.file-panel-tab.active {
-  color: var(--xin-accent-strong);
-  border-color: rgb(var(--xin-accent-rgb) / 0.2);
-  background: rgb(var(--xin-accent-rgb) / 0.1);
-}
-
-.file-panel-actions {
-  min-width: 0;
-  gap: 5px;
-  justify-content: flex-end;
-  flex: 1;
-}
-
-.file-count {
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 7px;
-  color: var(--xin-text-muted);
-  font-size: 11px;
-  font-weight: 680;
-}
-
-.file-panel-actions button,
-.navigation-tools button {
-  height: 28px;
-  min-width: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  color: var(--xin-text-muted);
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  font-size: 12px;
-}
-
-.file-panel-actions button:hover,
-.navigation-tools button:hover {
+.file-toolbar-title {
+  flex: 0 0 auto;
+  margin: 0 6px 0 0;
   color: var(--xin-text);
-  border-color: rgb(var(--xin-neutral-rgb) / 0.22);
-  background: rgb(var(--xin-fill-rgb) / 0.86);
-}
-
-.file-panel-actions button:disabled,
-.navigation-tools button:disabled {
-  opacity: 0.42;
-}
-
-.file-panel-actions button:disabled:hover,
-.navigation-tools button:disabled:hover {
-  color: var(--xin-text-secondary);
-  border-color: transparent;
-  background: transparent;
-}
-
-/* 开关型工具按钮的“开启”态（如显示隐藏文件） */
-.file-panel-actions button.toggle-on {
-  color: var(--xin-accent-strong);
-  background: rgb(var(--xin-accent-rgb) / 0.1);
-}
-
-.file-path-row {
-  display: grid;
-  grid-template-columns: auto minmax(180px, 1fr);
-  gap: 10px;
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--xin-glass-edge);
-  background: rgb(var(--xin-fill-rgb) / 0.24);
+  font-size: 15px;
+  font-weight: 720;
 }
 
 .navigation-tools {
-  gap: 3px;
-}
-
-.path-bar {
-  min-width: 0;
-  height: 30px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 9px;
-  border: 1px solid var(--xin-border);
-  border-radius: 10px;
-  background: rgb(var(--xin-fill-rgb) / 0.6);
-  box-shadow: 0 1px 0 rgb(var(--xin-fill-rgb) / 0.75) inset;
+  gap: 1px;
 }
 
-.file-search {
-  width: min(260px, 28vw);
-  flex: 0 1 260px;
-  min-width: 190px;
-}
-
-.path-bar {
-  overflow: hidden;
-}
-
-.path-bar :deep(svg) {
-  flex: 0 0 auto;
-}
-
-.file-search :deep([data-slot="base"]) {
-  height: 32px;
-  min-height: 32px;
-  padding-top: 0;
-  padding-bottom: 0;
-  border-radius: 10px;
-  border-color: rgb(var(--xin-neutral-rgb) / 0.22);
-  line-height: 32px;
-}
-
-.file-search :deep([data-slot="leading"]) {
+.file-tool {
   width: 30px;
+  height: 30px;
   justify-content: center;
-  padding-left: 0;
+  color: var(--xin-text-secondary);
+  border-radius: 10px;
+}
+
+.file-tool.active {
+  color: var(--xin-accent-strong);
+  background: rgb(var(--xin-accent-rgb) / 0.12);
+}
+
+/* 面包屑：一条浅玻璃槽，段落可点，当前目录加粗 */
+.path-bar {
+  min-width: 120px;
+  height: 32px;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 1px solid var(--xin-border-soft);
+  border-radius: 999px;
+  background: rgb(var(--xin-fill-rgb) / 0.55);
+  box-shadow: inset 0 1px 2px rgb(var(--xin-shadow-rgb) / 0.05);
+  cursor: text;
+}
+
+.path-bar.editing {
+  border-color: rgb(var(--xin-accent-rgb) / 0.45);
+  box-shadow: 0 0 0 3px rgb(var(--xin-accent-rgb) / 0.12);
+}
+
+.path-crumbs {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.path-crumb {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 180px;
+  height: 24px;
+  overflow: hidden;
+  padding: 0 7px;
+  color: var(--xin-text-secondary);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.path-crumb:hover:not(:disabled) {
+  color: var(--xin-text);
+  background: rgb(var(--xin-ink-rgb) / 0.06);
+}
+
+.path-crumb.current {
+  color: var(--xin-text);
+  font-weight: 680;
+}
+
+.path-crumb.ellipsis,
+.path-crumb:disabled {
+  cursor: default;
+}
+
+.path-separator {
+  flex: 0 0 auto;
+  color: var(--xin-text-faint);
+  font-size: 12px;
 }
 
 .path-bar input {
   flex: 1;
   min-width: 0;
   height: 26px;
-  padding: 0;
+  padding: 0 6px;
   border: 0;
-  border-radius: 0;
   outline: 0;
   background: transparent;
   box-shadow: none;
   color: var(--xin-accent-strong);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
-.path-bar input:disabled {
-  color: var(--xin-text-muted);
-  opacity: 1;
+.file-search {
+  width: min(220px, 24vw);
+  flex: 0 1 220px;
+  min-width: 150px;
 }
 
-.path-bar input:focus {
-  box-shadow: none;
+.file-count {
+  min-width: 22px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  color: var(--xin-text-muted);
+  border-radius: 999px;
+  background: rgb(var(--xin-ink-rgb) / 0.06);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 上传是这一栏唯一的「主动作」，用墨玻璃；新建是次要动作，保持描边胶囊 */
+.file-upload,
+.file-create {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-weight: 620;
+}
+
+.file-create {
+  padding-right: 10px;
 }
 
 .file-workbench {
@@ -418,8 +391,18 @@
   font-size: 16px;
 }
 
+/* 目录是实心的 Finder 蓝：和彩色的文件类型标拉开，一列扫下来先认出哪些能点进去 */
 .file-icon.directory {
-  color: var(--xin-warning-strong);
+  color: #3d8bea;
+}
+
+.file-icon.directory :deep(svg path) {
+  fill: currentColor;
+  fill-opacity: 0.88;
+}
+
+.dark .file-icon.directory {
+  color: #6aa9f5;
 }
 
 .file-icon.symlink {
@@ -581,18 +564,19 @@
   white-space: nowrap;
 }
 
-@media (max-width: 980px) {
-  .file-path-row {
-    grid-template-columns: auto minmax(150px, 1fr);
+@media (max-width: 1080px) {
+  .file-upload :deep([data-slot="label"]),
+  .file-create :deep([data-slot="label"]) {
+    display: none;
   }
 
-  .file-search {
-    width: min(220px, 34vw);
-    flex-basis: 220px;
+  .file-upload,
+  .file-create {
+    padding: 0 10px;
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 860px) {
   .file-search {
     display: none;
   }
