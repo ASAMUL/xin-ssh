@@ -73,7 +73,9 @@ function persistMonitorPaneSize(event) {
       <WorkspaceStatusBar v-if="!uiStore.isWorkspaceImmersive" />
     </div>
 
-    <section v-if="!hasActiveSession" class="workspace-main">
+    <!-- 首页常驻、只切显隐：用 v-if 的话每次从工作区点回「连接」都要重建整页卡片、
+         重算样式布局、重新生成玻璃的位移图，切换时能卡上半秒 -->
+    <section v-show="!hasActiveSession" class="workspace-main">
       <HomeDashboard />
     </section>
 

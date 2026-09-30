@@ -110,8 +110,13 @@ watch(() => props.active, (active) => {
   else {
     closeSearch(false);
     terminal?.blur();
-    releaseWebgl();
   }
+}, { flush: "post" });
+// GPU 上下文只在「别的终端要显示」时才让出去。切回连接首页时没有终端可见，
+// 这时释放 WebGL 反而最贵：xterm 会先退回 DOM 渲染器把整屏重画一遍（强制重排几百毫秒），
+// 回到工作区再重建 WebGL 又卡一次。留着不渲染也不耗电——终端不可见时 xterm 自己会暂停绘制。
+watch(() => sessionStore.activeSessionId, (activeId) => {
+  if (activeId && activeId !== props.sessionId) releaseWebgl();
 }, { flush: "post" });
 watch(() => [props.theme, props.fontFamily, props.fontSize], updateAppearance);
 
@@ -139,7 +144,8 @@ function updateAppearance() {
   document.fonts?.ready.then(scheduleLayout);
 }
 
-// 每个可见终端才占用 GPU 上下文；磷光主题依赖 DOM text-shadow，保留原有渲染效果。
+// 同一时刻只有一个终端占用 GPU 上下文（当前可见的那个，或切到首页前最后可见的那个）；
+// 磷光主题依赖 DOM text-shadow，保留原有渲染效果。
 function updateRenderer() {
   const glow = getThemeTypography(props.theme).glow;
   if (!props.active || (glow && glow !== "none")) {

@@ -89,7 +89,7 @@ function toDataUrl({ canvas, context, image }) {
 // - 位移图：折射用，交给 SVG feDisplacementMap（只有 Chromium 需要）；
 // - 高光图：沿斜面的一圈柔光——法线朝向光源的地方最亮，离外沿越远越暗。
 //   这是「一块有厚度的玻璃」和「一个描了 1px 亮边的胶囊」的区别，做成普通背景图，所有内核都能用。
-export function createGlassMaps({ width, height, radius, bezel, displacement = true }) {
+function createGlassMaps({ width, height, radius, bezel, displacement }) {
   const displacementMap = displacement ? mapCanvas(width, height) : null;
   const specularMap = mapCanvas(width, height);
   const profile = getRefractionProfile();
@@ -136,6 +136,27 @@ export function createGlassMaps({ width, height, radius, bezel, displacement = t
     displacementUrl: displacementMap ? toDataUrl(displacementMap) : null,
     specularUrl: toDataUrl(specularMap),
   };
+}
+
+// 贴图只和几何有关：同样尺寸的玻璃（同一排胶囊、每次弹出的同一个菜单、窗口来回缩放）
+// 不必每次重画像素、重编码 PNG。Map 按插入顺序迭代，命中时删了重插就是「最近用过」，
+// 超出上限从最旧的一头淘汰；一张图几 KB 到几十 KB，48 张封顶。
+const MAP_CACHE_LIMIT = 48;
+const mapCache = new Map();
+
+export function getGlassMaps({ width, height, radius, bezel, displacement = true }) {
+  const key = [width, height, radius, bezel, displacement ? 1 : 0].join(":");
+  const cached = mapCache.get(key);
+  if (cached) {
+    mapCache.delete(key);
+    mapCache.set(key, cached);
+    return cached;
+  }
+
+  const maps = createGlassMaps({ width, height, radius, bezel, displacement });
+  mapCache.set(key, maps);
+  if (mapCache.size > MAP_CACHE_LIMIT) mapCache.delete(mapCache.keys().next().value);
+  return maps;
 }
 
 // 滤镜宿主不能 display:none——那样 Chromium 会当滤镜不存在

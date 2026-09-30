@@ -137,6 +137,9 @@ onBeforeUnmount(() => {
 watch(
   () => [props.sessions.map((session) => session.id).join(","), props.activeSessionId],
   async ([, activeId], previous = []) => {
+    // 没有当前会话 = 切回了连接首页，标签条跟着工作区一起被隐藏；这时去量滚动宽度
+    // 会逼浏览器在切页那一刻提前整页重排，回到工作区时 activeId 变化还会再量一次
+    if (!activeId) return;
     await nextTick();
     if (activeId !== previous[1]) scrollActiveTabIntoView();
     updateOverflowFades();

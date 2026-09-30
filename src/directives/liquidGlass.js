@@ -1,5 +1,5 @@
 import {
-  createGlassMaps,
+  getGlassMaps,
   removeLiquidGlassFilter,
   supportsLiquidRefraction,
   upsertLiquidGlassFilter,
@@ -26,46 +26,59 @@ const DISPERSION_MAX_AREA = 160_000;
 
 let sequence = 0;
 
+// 所有玻璃共用一个 ResizeObserver，尺寸直接取回调给的 borderBoxSize。
+// 以前是每块玻璃在 requestAnimationFrame 里自己读 offsetWidth：页面刚切换、布局还脏着的时候，
+// 这一读会逼浏览器当场把整页重排一遍，几块玻璃读写交错还会反复重排（控制台里的 Forced reflow）。
+// ResizeObserver 回调在浏览器自己排完版之后才调用，这时读尺寸、读计算样式都不会再触发重排；
+// 先把这一轮所有玻璃都量完，再统一生成贴图、写样式。
+// borderBoxSize 和 offsetWidth 一样不受 transform 影响，按下时的缩放不会让贴图重算。
+const surfaces = new Map();
+const resizeObserver = new ResizeObserver((entries) => {
+  const measured = [];
+  for (const entry of entries) {
+    const surface = surfaces.get(entry.target);
+    const box = entry.borderBoxSize?.[0];
+    if (!surface || !box) continue;
+    const width = Math.round(box.inlineSize);
+    const height = Math.round(box.blockSize);
+    // 被隐藏（display: none）时尺寸是 0：留着上一次的贴图，重新显示且尺寸没变时什么都不用做
+    if (!width || !height) continue;
+    const radius = parseFloat(getComputedStyle(entry.target).borderTopLeftRadius) || 0;
+    measured.push([surface, { width, height, radius }]);
+  }
+  for (const [surface, geometry] of measured) surface.render(geometry);
+});
+
 class LiquidGlassSurface {
   constructor(element, options) {
     this.element = element;
     this.id = `xin-liquid-glass-${++sequence}`;
-    this.frame = 0;
     this.signature = "";
+    this.geometry = null;
     this.options = { ...DEFAULTS, ...options };
-    this.observer = new ResizeObserver(() => this.schedule());
-    this.observer.observe(element);
-    this.schedule();
+    surfaces.set(element, this);
+    resizeObserver.observe(element);
   }
 
+  // 模板每次重渲染都会传进一个新的选项对象，值没变就不用重算
   update(options) {
-    this.options = { ...DEFAULTS, ...options };
-    this.schedule();
+    const next = { ...DEFAULTS, ...options };
+    if (Object.keys(next).every((key) => next[key] === this.options[key])) return;
+    this.options = next;
+    if (this.geometry) this.render(this.geometry);
   }
 
-  // 尺寸在过渡动画里会连续变化，合并到每帧最多重算一次
-  schedule() {
-    if (this.frame) return;
-    this.frame = requestAnimationFrame(() => {
-      this.frame = 0;
-      this.render();
-    });
-  }
-
-  render() {
-    // offsetWidth 不受按下缩放等 transform 影响，位移图按布局尺寸生成才不会每次点击都重算
-    const width = this.element.offsetWidth;
-    const height = this.element.offsetHeight;
-    if (!width || !height) return;
-
-    const radius = Math.min(parseFloat(getComputedStyle(this.element).borderTopLeftRadius) || 0, width / 2, height / 2);
+  render(geometry) {
+    this.geometry = geometry;
+    const { width, height } = geometry;
+    const radius = Math.min(geometry.radius, width / 2, height / 2);
     const { scale, blur, saturation } = this.options;
     const dispersion = width * height <= DISPERSION_MAX_AREA ? this.options.dispersion : 0;
     const bezel = Math.max(2, Math.min(this.options.bezel ?? Math.max(radius * 0.8, 8), width / 2, height / 2));
     const signature = [width, height, radius, bezel, scale, blur, saturation, dispersion].join(":");
     if (signature !== this.signature) {
       this.signature = signature;
-      const { displacementUrl, specularUrl } = createGlassMaps({
+      const { displacementUrl, specularUrl } = getGlassMaps({
         width, height, radius, bezel, displacement: supportsLiquidRefraction,
       });
       this.element.style.setProperty("--lg-specular", `url("${specularUrl}")`);
@@ -80,8 +93,8 @@ class LiquidGlassSurface {
   }
 
   destroy() {
-    cancelAnimationFrame(this.frame);
-    this.observer.disconnect();
+    resizeObserver.unobserve(this.element);
+    surfaces.delete(this.element);
     removeLiquidGlassFilter(this.id);
     this.element.style.removeProperty("backdrop-filter");
     this.element.style.removeProperty("--lg-specular");
@@ -141,15 +154,22 @@ export function autoAttachLiquidGlass(rules) {
 // 鼠标当光源：iOS 靠陀螺仪让玻璃上的光跟着手机转，桌面没有陀螺仪，就让一团柔光跟着指针走。
 // 整个文档只挂一个 pointermove、每帧最多写一次坐标，只写进指针正下方那块玻璃；
 // 显不显示、多亮由 CSS 决定（liquid-glass.css 的 --lg-glow-*），这里不碰样式。
+// 玻璃的位置只在指针刚移进来时量一次：点「连接 | 工作区」这类按钮时指针正停在玻璃上，
+// 每帧都 getBoundingClientRect 的话，切换页面那一帧会被它逼着提前整页重排。滚动、缩放窗口后作废重量。
 export function trackLiquidGlassPointer() {
   let frame = 0;
   let latest = null;
+  let hovered = null;
 
   function paint() {
     frame = 0;
     const glass = latest.target instanceof Element ? latest.target.closest(".liquid-glass") : null;
-    if (!glass) return;
-    const rect = glass.getBoundingClientRect();
+    if (!glass) {
+      hovered = null;
+      return;
+    }
+    if (hovered?.glass !== glass) hovered = { glass, rect: glass.getBoundingClientRect() };
+    const { rect } = hovered;
     glass.style.setProperty("--lg-pointer-x", `${latest.clientX - rect.left}px`);
     glass.style.setProperty("--lg-pointer-y", `${latest.clientY - rect.top}px`);
   }
@@ -159,10 +179,18 @@ export function trackLiquidGlassPointer() {
     if (!frame) frame = requestAnimationFrame(paint);
   }
 
+  function forgetPosition() {
+    hovered = null;
+  }
+
   document.addEventListener("pointermove", handlePointerMove, { passive: true });
+  window.addEventListener("scroll", forgetPosition, { capture: true, passive: true });
+  window.addEventListener("resize", forgetPosition, { passive: true });
   return () => {
     cancelAnimationFrame(frame);
     document.removeEventListener("pointermove", handlePointerMove);
+    window.removeEventListener("scroll", forgetPosition, { capture: true });
+    window.removeEventListener("resize", forgetPosition);
   };
 }
 
