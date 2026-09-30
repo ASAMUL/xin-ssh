@@ -75,10 +75,10 @@ const conflictDialog = reactive({
 // 右侧留出 pe-10 给当前目录的项数角标
 const fileSearchInputUi = {
   root: "file-search",
-  base: "h-8 rounded-full bg-default ps-8 pe-10 text-xs font-semibold placeholder:text-dimmed",
-  leading: "ps-3",
+  base: "h-full rounded-full bg-transparent ps-9 pe-11 text-xs font-semibold placeholder:text-dimmed",
+  leading: "ps-3.5",
   leadingIcon: "size-4 text-muted",
-  trailing: "pe-2",
+  trailing: "pe-2.5",
 };
 const fileContextMenuUi = {
   content: "min-w-40 rounded-lg border border-default bg-default shadow-xl backdrop-blur-xl",
@@ -1370,26 +1370,27 @@ function sortAriaLabel(key) {
 
 <template>
   <section ref="fileExplorerRoot" class="file-explorer liquid-rim" aria-label="Remote file explorer">
-    <!-- 一行工具栏：标题 · 目录树开关 · 前进后退 · 面包屑路径 ‖ 筛选 · 上传 · 新建 · 更多。
+    <!-- 工具栏浮在列表上：标题 · [目录树 | 后退 前进 上级] · 面包屑 ‖ 筛选 · 上传 · 新建 · 更多，每组一颗玻璃胶囊。
+         目录树和文件列表都从它底下滚过去，玻璃边缘才有东西可折射（样式见 file-explorer.css）。
          低频操作（上传文件夹、下载、重命名、删除、刷新、历史、隐藏文件）收进「更多」，右键菜单保留全部 -->
     <header class="file-toolbar">
       <h3 class="file-toolbar-title">{{ t("files.fileTab") }}</h3>
 
-      <UButton
-        class="file-tool"
-        :class="{ active: settingsStore.showFileTree }"
-        color="neutral"
-        variant="ghost"
-        size="sm"
-        square
-        icon="i-lucide-panel-left"
-        :aria-pressed="settingsStore.showFileTree"
-        :aria-label="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
-        :title="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
-        @click="settingsStore.toggleFileTree()"
-      />
-
-      <div class="navigation-tools">
+      <div v-liquid-glass="{ scale: 12 }" class="file-nav-capsule liquid-glass">
+        <UButton
+          class="file-tool"
+          :class="{ active: settingsStore.showFileTree }"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          square
+          icon="i-lucide-panel-left"
+          :aria-pressed="settingsStore.showFileTree"
+          :aria-label="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
+          :title="t(settingsStore.showFileTree ? 'files.hideTree' : 'files.showTree')"
+          @click="settingsStore.toggleFileTree()"
+        />
+        <span class="file-nav-divider" aria-hidden="true"></span>
         <UButton
           class="file-tool"
           color="neutral"
@@ -1430,7 +1431,8 @@ function sortAriaLabel(key) {
 
       <!-- 平时是可点的面包屑；点空白处 / Ctrl+L 进入输入模式，回车跳转，Esc 或失焦退出 -->
       <form
-        class="path-bar"
+        v-liquid-glass="{ scale: 12 }"
+        class="path-bar liquid-glass"
         :class="{ editing: isEditingPath }"
         aria-label="Current remote path"
         @submit.prevent="submitPath"
@@ -1466,8 +1468,10 @@ function sortAriaLabel(key) {
       <UInput
         ref="searchInputControl"
         v-model="query"
+        v-liquid-glass="{ scale: 12 }"
+        class="liquid-glass"
         color="neutral"
-        variant="outline"
+        variant="none"
         size="sm"
         type="search"
         icon="i-lucide-search"
@@ -1495,9 +1499,10 @@ function sortAriaLabel(key) {
 
       <UDropdownMenu :items="createMenuItems" size="sm" :content="{ align: 'end' }">
         <UButton
-          class="file-create"
+          v-liquid-glass="{ scale: 12 }"
+          class="file-create liquid-glass"
           color="neutral"
-          variant="outline"
+          variant="ghost"
           size="sm"
           icon="i-lucide-plus"
           trailing-icon="i-lucide-chevron-down"
@@ -1508,7 +1513,8 @@ function sortAriaLabel(key) {
 
       <UDropdownMenu :items="moreMenuItems" size="sm" :content="{ align: 'end' }">
         <UButton
-          class="file-tool"
+          v-liquid-glass="{ scale: 12 }"
+          class="file-more liquid-glass"
           color="neutral"
           variant="ghost"
           size="sm"

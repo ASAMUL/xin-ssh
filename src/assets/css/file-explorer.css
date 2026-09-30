@@ -1,8 +1,12 @@
+/* 文件区：工具栏不占行，浮在内容上（iOS 26 / Finder 的做法），目录树和文件列表都从它底下滚过去——
+   玻璃胶囊边缘这才有东西可折射。列表停在顶部时底下是留白，一滚动就看得见弯折。
+   --file-toolbar-height 是工具栏占的高度，两个滚动区都按它留出顶部空白。 */
 .file-explorer {
+  --file-toolbar-height: 56px;
   position: relative;
   min-height: 0;
   display: grid;
-  grid-template-rows: 52px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   color: var(--xin-text);
   border: 1px solid var(--xin-glass-border);
@@ -14,32 +18,77 @@
   backdrop-filter: var(--xin-glass-blur);
 }
 
-/* —— 一行工具栏 ——
-   左半边是「在哪」（标题、目录树、前进后退、面包屑），右半边是「做什么」（筛选、上传、新建、更多）；
-   面包屑吃掉中间剩余宽度，窗口窄了先压缩它，按钮不会被挤掉。 */
+/* —— 浮动工具栏 ——
+   左半边是「在哪」（标题、目录树 + 前进后退、面包屑），右半边是「做什么」（筛选、上传、新建、更多）；
+   面包屑吃掉中间剩余宽度，窗口窄了先压缩它，按钮不会被挤掉。
+   工具栏本身不接指针：胶囊之间的空隙照样能滚动底下的列表，只有胶囊和标题接点击。 */
 .file-toolbar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  height: var(--file-toolbar-height);
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px 0 16px;
-  border-bottom: 1px solid var(--xin-glass-edge);
-  background: rgb(var(--xin-fill-rgb) / 0.32);
+  gap: 8px;
+  padding: 0 12px 0 18px;
+  pointer-events: none;
+}
+
+.file-toolbar > * {
+  pointer-events: auto;
+}
+
+/* 滚动边缘：一层从上往下淡掉的纱，滚到工具栏底下的行先被压淡，标题和胶囊上的字不和行文字打架。
+   故意不用 backdrop 模糊——模糊会先把底下的行糊成一片，胶囊边缘的折射就只剩虚影 */
+.file-toolbar::before {
+  content: "";
+  position: absolute;
+  /* 让出 1px：面板自己那圈高光描边（.liquid-rim）不能被这层纱盖掉 */
+  inset: 1px 1px -10px;
+  z-index: -1;
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--xin-fill-rgb) / 0.8) 0%,
+    rgb(var(--xin-fill-rgb) / 0.52) 64%,
+    rgb(var(--xin-fill-rgb) / 0) 100%
+  );
+  pointer-events: none;
 }
 
 .file-toolbar-title {
   flex: 0 0 auto;
-  margin: 0 6px 0 0;
+  margin: 0 4px 0 0;
   color: var(--xin-text);
   font-size: 15px;
   font-weight: 720;
+  pointer-events: none;
 }
 
-.navigation-tools {
+/* 胶囊统一 36px 高、两端半圆；材质全部来自 .liquid-glass，这里不写底色和投影 */
+.file-nav-capsule,
+.path-bar,
+.file-search,
+.file-upload,
+.file-create,
+.file-more {
   flex: 0 0 auto;
+  height: 36px;
+  border-radius: 999px;
+}
+
+.file-nav-capsule {
   display: flex;
   align-items: center;
   gap: 1px;
+  padding: 0 3px;
+}
+
+.file-nav-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: rgb(var(--xin-ink-rgb) / 0.1);
 }
 
 .file-tool {
@@ -47,33 +96,32 @@
   height: 30px;
   justify-content: center;
   color: var(--xin-text-secondary);
-  border-radius: 10px;
+  border-radius: 999px;
 }
 
+/* 目录树开着 = 胶囊里一颗樱色水滴，和终端工具栏里开着的面板同一种语言 */
 .file-tool.active {
   color: var(--xin-accent-strong);
-  background: rgb(var(--xin-accent-rgb) / 0.12);
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
 }
 
-/* 面包屑：一条浅玻璃槽，段落可点，当前目录加粗 */
+/* 面包屑：一颗长胶囊，段落可点，当前目录加粗 */
 .path-bar {
   min-width: 120px;
-  height: 32px;
   flex: 1 1 auto;
   display: flex;
   align-items: center;
   overflow: hidden;
-  padding: 0 6px;
-  border: 1px solid var(--xin-border-soft);
-  border-radius: 999px;
-  background: rgb(var(--xin-fill-rgb) / 0.55);
-  box-shadow: inset 0 1px 2px rgb(var(--xin-shadow-rgb) / 0.05);
+  padding: 0 8px;
   cursor: text;
 }
 
 .path-bar.editing {
-  border-color: rgb(var(--xin-accent-rgb) / 0.45);
-  box-shadow: 0 0 0 3px rgb(var(--xin-accent-rgb) / 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--xin-accent-rgb) / 0.45),
+    0 0 0 3px rgb(var(--xin-accent-rgb) / 0.14),
+    var(--lg-shadow);
 }
 
 .path-crumbs {
@@ -88,7 +136,7 @@
   flex: 0 1 auto;
   min-width: 0;
   max-width: 180px;
-  height: 24px;
+  height: 26px;
   overflow: hidden;
   padding: 0 7px;
   color: var(--xin-text-secondary);
@@ -125,7 +173,7 @@
 .path-bar input {
   flex: 1;
   min-width: 0;
-  height: 26px;
+  height: 28px;
   padding: 0 6px;
   border: 0;
   outline: 0;
@@ -157,18 +205,27 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 上传是这一栏唯一的「主动作」，用墨玻璃；新建是次要动作，保持描边胶囊 */
+/* 上传是这一栏唯一的「主动作」，用墨玻璃；新建和更多是普通的透明玻璃 */
 .file-upload,
 .file-create {
-  flex: 0 0 auto;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 999px;
+  padding: 0 16px;
   font-weight: 620;
 }
 
 .file-create {
-  padding-right: 10px;
+  padding-right: 12px;
+  color: var(--xin-text);
+}
+
+.file-more {
+  width: 36px;
+  justify-content: center;
+  color: var(--xin-text-secondary);
+}
+
+/* 分割条的 z-index 是 5：不把它圈在自己的层叠上下文里，它会从工具栏上面穿过去、抢走点击 */
+.explorer-split {
+  isolation: isolate;
 }
 
 .file-workbench {
@@ -184,10 +241,13 @@
 }
 
 /* ---- 左侧目录树 ---- */
+/* 两个滚动区都一直伸到面板顶上（工具栏底下），顶部留出工具栏的高度作起始空白；
+   scroll-padding 让键盘选中、滚动到某一行时停在工具栏下沿，而不是躲进玻璃底下 */
 .file-tree {
   min-height: 0;
   overflow: auto;
-  padding: 6px 5px 12px;
+  padding: calc(var(--file-toolbar-height) + 6px) 5px 12px;
+  scroll-padding-top: var(--file-toolbar-height);
   background: rgb(var(--xin-fill-rgb) / 0.3);
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.34) transparent;
@@ -301,6 +361,8 @@
 .file-table-wrap {
   min-height: 0;
   overflow: auto;
+  padding-top: var(--file-toolbar-height);
+  scroll-padding-top: calc(var(--file-toolbar-height) + 32px);
   background: rgb(var(--xin-fill-rgb) / 0.4);
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.34) transparent;
@@ -344,14 +406,19 @@
   width: 100%;
 }
 
+/* 表头吸在工具栏下沿。top 必须是 0：吸顶的参照框已经扣掉了滚动区的 padding-top（工具栏高度），
+   再写 top: 56px 会叠成 112px——表头被推下去压住第一行，滚动时还有行从它上面冒出来。
+   表头是表格结构、不是浮在内容上的控件，所以用实底不用玻璃：半透明时滚过去的文件名会和列名叠在一起。
+   实底 = 面板那层白纱叠在不透明画布上，和面板的观感基本一致，只是底下的行透不上来 */
 .file-heading {
   position: sticky;
   z-index: 2;
   top: 0;
   color: var(--xin-text-secondary);
   border-bottom-color: var(--xin-glass-edge);
-  background: var(--xin-surface-raised);
-  backdrop-filter: blur(14px) saturate(1.3);
+  background:
+    linear-gradient(rgb(var(--xin-fill-rgb) / 0.62), rgb(var(--xin-fill-rgb) / 0.62)),
+    rgb(var(--xin-canvas-rgb));
   font-weight: 650;
 }
 
@@ -572,7 +639,7 @@
 
   .file-upload,
   .file-create {
-    padding: 0 10px;
+    padding: 0 11px;
   }
 }
 
