@@ -305,6 +305,8 @@ button {
 }
 
 .desktop-window {
+  /* 应用壁纸层（AppWallpaper）按它绝对定位铺满 */
+  position: relative;
   width: 100vw;
   height: 100vh;
   display: flex;

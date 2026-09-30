@@ -49,6 +49,8 @@ export const useSettingsStore = defineStore("settings", {
     terminalBackground: (state) => normalizeTerminalBackground(state.settings?.terminalBackground),
     appearanceMode: (state) => normalizeAppearanceMode(state.settings?.appearanceMode),
     glassStyle: (state) => normalizeGlassStyle(state.settings?.glassStyle),
+    // 应用壁纸和终端背景图同一个数据形状（file / opacity / blur / fit），校验也复用
+    appWallpaper: (state) => normalizeTerminalBackground(state.settings?.appWallpaper),
     sessionRestore: (state) => normalizeSessionRestore(state.settings?.sessionRestore),
   },
   actions: {
@@ -85,6 +87,9 @@ export const useSettingsStore = defineStore("settings", {
       const patch = { ...partial };
       if (Object.hasOwn(patch, "terminalBackground")) {
         patch.terminalBackground = normalizeTerminalBackground(patch.terminalBackground);
+      }
+      if (Object.hasOwn(patch, "appWallpaper")) {
+        patch.appWallpaper = normalizeTerminalBackground(patch.appWallpaper);
       }
       this.previewSettings(patch);
       if (!workspaceDir) return null;
@@ -153,6 +158,10 @@ export const useSettingsStore = defineStore("settings", {
     },
     setGlassStyle(glassStyle) {
       return this.applySettingsPatch({ glassStyle: normalizeGlassStyle(glassStyle) });
+    },
+    // null = 移除壁纸，窗口回到近白 / 近黑的画布
+    setAppWallpaper(appWallpaper) {
+      return this.patchSettings({ appWallpaper });
     },
   },
 });

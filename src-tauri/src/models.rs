@@ -87,6 +87,11 @@ pub struct WorkspaceSettings {
     // 液态玻璃强度：clear（通透，透出桌面壁纸）| tinted（着色，更实、对比更高）
     #[serde(default = "default_glass_style")]
     pub glass_style: String,
+    // 应用壁纸：铺在整个窗口最底层，给液态玻璃「底下的东西」。默认没有。
+    // 和终端背景图同一套存储（图片复制进 <workspace>/backgrounds/，这里只记文件名），
+    // opacity 是图片压在画布上的可见度，blur 是模糊半径，fit 固定 cover。
+    #[serde(default)]
+    pub app_wallpaper: Option<TerminalBackground>,
     // 只恢复连接引用和界面位置；密码、OTP、sessionId 与终端输出永不进入配置。
     #[serde(default)]
     pub session_restore: SessionRestoreState,
@@ -114,6 +119,7 @@ impl Default for WorkspaceSettings {
             terminal_background: None,
             appearance_mode: default_appearance_mode(),
             glass_style: default_glass_style(),
+            app_wallpaper: None,
             session_restore: SessionRestoreState::default(),
         }
     }

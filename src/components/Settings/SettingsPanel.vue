@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore, SSH_KEEPALIVE_SECONDS_OPTIONS } from "../../stores/settingsStore";
+import WallpaperSetting from "./WallpaperSetting.vue";
 
 const emit = defineEmits(["close"]);
 const { t } = useI18n();
@@ -102,6 +103,8 @@ const keepaliveItems = computed(() =>
             :content="false"
           />
         </div>
+
+        <WallpaperSetting />
 
         <div class="settings-row">
           <div>

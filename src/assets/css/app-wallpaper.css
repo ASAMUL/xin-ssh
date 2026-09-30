@@ -1,0 +1,15 @@
+/* 应用壁纸层（AppWallpaper.vue 专用，scoped 引入）。
+   可见度就是图片的不透明度：调低时透出底下的画布色（浅色近白、深色近黑），相当于自动铺了一层淡化纱。
+   模糊会把图层边缘吸成半透明，所以按模糊半径向外扩一圈，窗口 overflow: hidden 兜住溢出。
+   单独一层、没有子元素：带 filter 的元素只对自己的后代构成 backdrop root，挡不住上面玻璃的折射。 */
+.app-wallpaper {
+  position: absolute;
+  inset: calc(-2 * var(--wallpaper-blur, 0px));
+  background-image: var(--wallpaper-image);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: var(--wallpaper-opacity, 1);
+  filter: blur(var(--wallpaper-blur, 0px));
+  pointer-events: none;
+}

@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useToast } from "@nuxt/ui/composables";
 import { en, zh_cn } from "@nuxt/ui/locale";
 import TransferPanel from "./components/TransferPanel.vue";
+import AppWallpaper from "./components/AppShell/AppWallpaper.vue";
 import WindowChrome from "./components/AppShell/WindowChrome.vue";
 import WindowCloseGuard from "./components/AppShell/WindowCloseGuard.vue";
 import AuthenticationDialog from "./components/ConnectionManager/AuthenticationDialog.vue";
@@ -152,6 +153,7 @@ onMounted(() => {
 <template>
   <UApp :locale="uiLocale" :toaster="{ position: 'top-right' }">
     <main class="desktop-window">
+      <AppWallpaper />
       <WindowChrome />
 
       <section class="desktop-content" aria-label="Xin SSH">

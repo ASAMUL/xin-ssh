@@ -1,0 +1,61 @@
+/* 设置 → 应用壁纸（WallpaperSetting.vue 专用，scoped 引入）。行的外框、标题样式沿用 modal-forms.css 的 .settings-row。
+   左边一张缩略图，右边操作和滑块；没有壁纸时缩略图是虚线空位。 */
+.wallpaper-setting {
+  display: grid;
+  grid-template-columns: 152px minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.wallpaper-preview {
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--xin-border-soft);
+  border-radius: var(--xin-radius);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  box-shadow: var(--xin-card-shadow);
+}
+
+.wallpaper-preview.empty {
+  display: grid;
+  place-items: center;
+  color: var(--xin-text-faint);
+  border-style: dashed;
+  background-color: rgb(var(--xin-ink-rgb) / 0.03);
+  box-shadow: none;
+  font-size: 22px;
+}
+
+.wallpaper-controls {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wallpaper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wallpaper-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wallpaper-slider span {
+  display: flex;
+  justify-content: space-between;
+  color: var(--xin-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wallpaper-slider em {
+  color: var(--xin-text-muted);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
