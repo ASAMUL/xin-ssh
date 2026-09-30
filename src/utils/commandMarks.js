@@ -129,7 +129,7 @@ export function createCommandMarks(terminal) {
     const existing = findMark(line);
     if (existing && existing.prompt && existing.enteredAt === null) return;
     // 同一行上已经执行过的旧标记：屏幕被清过、提示符又画回了这一行
-    existing?.marker.dispose();
+    if (existing) discardMark(existing);
 
     const mark = addMark(line, prompt, row.text.slice(0, prompt.end));
     hasInput = false;
@@ -147,7 +147,7 @@ export function createCommandMarks(terminal) {
     for (const mark of [...marks]) {
       if (mark.marker.line < top) continue;
       const text = readTerminalRow(buffer(), mark.marker.line)?.text ?? "";
-      if (!text.startsWith(mark.signature)) mark.marker.dispose();
+      if (!text.startsWith(mark.signature)) discardMark(mark);
     }
   }
 
@@ -192,18 +192,30 @@ export function createCommandMarks(terminal) {
     });
     if (!decoration) return;
 
+    // 排版写在自己套的一层里：xterm 每次渲染都会往装饰元素上写内联 display: block，
+    // 直接给它设 flex 会被盖掉
+    const content = document.createElement("div");
+    content.className = "terminal-command-label";
+    content.style.color = palette.label;
+    content.style.fontFamily = terminal.options.fontFamily;
+    // 比正文小一号：它是旁注，不该和命令抢视线
+    content.style.fontSize = `${Math.round(terminal.options.fontSize * 0.86)}px`;
+    content.append(
+      ...(duration ? [labelPart(duration, "duration", palette.duration)] : []),
+      labelPart(time, "time"),
+    );
     decoration.onRender((element) => {
-      element.classList.add("terminal-command-label");
-      element.style.color = palette.label;
-      element.style.fontFamily = terminal.options.fontFamily;
-      // 比正文小一号：它是旁注，不该和命令抢视线
-      element.style.fontSize = `${Math.round(terminal.options.fontSize * 0.86)}px`;
-      element.replaceChildren(
-        ...(duration ? [labelPart(duration, "duration", palette.duration)] : []),
-        labelPart(time, "time"),
-      );
+      if (element.firstChild !== content) element.replaceChildren(content);
     });
     mark.label = decoration;
+  }
+
+  // 必须先撤装饰、再销毁标记：xterm 的 Marker.dispose() 会先把 line 改成 -1 再通知装饰销毁，
+  // 而装饰服务按 line 在有序列表里找要删的项——找不到就删不掉，还带着 -1 留在列表中间，
+  // 把排序搅乱，之后按行号查装饰会漏掉别的行（表现为上一条命令的颜色突然没了）。
+  function discardMark(mark) {
+    clearDecorations(mark);
+    mark.marker.dispose();
   }
 
   function clearDecorations(mark) {
@@ -253,7 +265,7 @@ export function createCommandMarks(terminal) {
   function dispose() {
     clearTimeout(inspectTimer);
     listeners.forEach((listener) => listener.dispose());
-    [...marks].forEach((mark) => mark.marker.dispose());
+    [...marks].forEach(discardMark);
   }
 
   return { handleInput, jump, setTheme, dispose };

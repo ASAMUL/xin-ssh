@@ -29,10 +29,12 @@
   border-radius: 999px;
 }
 
-/* 命令行右侧的时间 / 耗时标签（commandMarks.js 用 xterm 装饰挂上来的 DOM）。
+/* 命令行右侧的时间 / 耗时标签（commandMarks.js 套在 xterm 装饰元素里的一层）。
    颜色、字体由脚本按调色板内联设置；这里只管排版，并且不接指针——
    它压在终端画面上，不能挡住选区和点击聚焦。 */
 .terminal-xterm :deep(.terminal-command-label) {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: flex-end;
