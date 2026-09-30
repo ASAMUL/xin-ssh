@@ -248,6 +248,7 @@ function processName(command = "") {
         <section class="monitor-activity">
           <UTabs
             v-model="activeTab"
+            v-liquid-stretch="activeTab"
             class="monitor-tabs"
             variant="pill"
             size="xs"

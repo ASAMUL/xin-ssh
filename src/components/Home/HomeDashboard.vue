@@ -539,6 +539,7 @@ function showError(error) {
           <UTabs
             v-model="activeNav"
             v-liquid-glass
+            v-liquid-stretch="activeNav"
             class="home-filter liquid-glass"
             variant="pill"
             :items="navItems"

@@ -1,11 +1,17 @@
 /* ————————————————————————————————————————————————————————————
    墨樱 · 液态玻璃材质
 
-   Liquid Glass 不是「更白更糊的磨砂玻璃」，观感来自三件事：
-   1. 通透：底色白度很低、模糊很轻，背后的颜色能透上来（饱和度还要拉高一点）；
-   2. 厚度：斜向的高光描边（左上最亮、右下回光）+ 顶部内侧高光 + 底部一抹樱色焦散；
-   3. 折射：边缘一圈背景被透镜弯折——由 v-liquid-glass 指令用 SVG 位移图做，
-      只有 Chromium（WebView2）支持，其他内核保留这里的模糊回退。
+   Liquid Glass 不是「更白更糊的磨砂玻璃」，观感来自四件事：
+   1. 通透：底色白度很低、模糊很轻，背后的颜色能透上来；
+   2. 厚度：1px 斜向高光描边（左上最亮、右下回光）+ 沿斜面的一圈柔光高光带（v-liquid-glass 按曲面法线生成），
+      外面一层又软又散的投影把它从底面托起来；
+   3. 折射：边缘一圈背景被透镜弯折，边缘再析出一道极淡的色散——由 v-liquid-glass 指令用 SVG 位移图做，
+      只有 Chromium（WebView2）支持，其他内核保留这里的模糊回退；
+   4. 液态：鼠标当光源，悬停时一团柔光跟着指针走；按下鼓起变亮；分段切换的水滴换位时拉伸回弹（v-liquid-stretch）。
+
+   玻璃本身是**无色**的：颜色只来自它背后的内容，品牌色只落在选中项和文字图标上。
+   早先给每块玻璃底边加过一抹樱色焦散、又叠了上下两道内高光，实机看是一圈粉边加一圈塑料棱，
+   Apple 的材质里没有这些，已经去掉。
 
    只用在浮在内容上的 chrome 控件（分段切换、工具栏胶囊、标签条、浮动按钮）。
    内容层（卡片、终端、编辑器）只用 .liquid-rim 描边高光，不做折射——Apple 也是这么分层的。
@@ -16,33 +22,41 @@
   --lg-fill-hover: rgb(255 255 255 / 0.44);
   --lg-edge-light: rgb(255 255 255 / 0.95);
   --lg-edge-soft: rgb(255 255 255 / 0.4);
-  --lg-edge-ink: rgb(var(--xin-ink-rgb) / 0.07);
-  /* 顶部内侧的一层亮光：玻璃上表面把光收进来，是「有厚度」的另一半 */
-  --lg-inner-glow: rgb(255 255 255 / 0.8);
-  /* 底边的一抹樱色焦散：光穿过玻璃在底部聚出的颜色，墨樱的「樱」落在这里 */
-  --lg-caustic: rgb(var(--xin-accent-rgb) / 0.16);
+  --lg-edge-ink: rgb(var(--xin-ink-rgb) / 0.08);
+  /* 顶部内侧的一层亮光：玻璃上表面把光收进来，压得很淡，否则像一道塑料棱 */
+  --lg-inner-glow: rgb(255 255 255 / 0.55);
+  /* 背光一侧（右下）的内阴影：浅色下白玻璃压在白底上，白色高光带看不出来，
+     得靠这一侧微微发灰把「有厚度的一块」托出来；深色下黑压黑没意义，关掉 */
+  --lg-edge-shade: inset -1px -2px 7px -3px rgb(var(--xin-shadow-rgb) / 0.12);
+  /* 投影又散又浅：Tahoe 被诟病最多的就是按钮底下那团又黑又硬的影子 */
   --lg-shadow:
-    0 1px 1px rgb(var(--xin-shadow-rgb) / 0.05),
-    0 12px 30px -14px rgb(var(--xin-shadow-rgb) / 0.32);
+    0 1px 2px rgb(var(--xin-shadow-rgb) / 0.06),
+    0 8px 28px -8px rgb(var(--xin-shadow-rgb) / 0.16);
 
-  /* 选中态的玻璃水滴：樱色的一颗，比外壳更实、更亮 */
-  --lg-droplet-rose: linear-gradient(180deg, rgb(255 247 250 / 0.95) 0%, rgb(251 218 232 / 0.9) 100%);
+  /* 选中态的玻璃水滴：一颗带淡樱色的亮玻璃（参考图里「连接」「全部」的那种粉胶囊），
+     不发粉光——投影仍是中性的，樱色只在水滴本身和上面的文字 */
+  --lg-droplet-rose: linear-gradient(180deg, rgb(255 250 252 / 0.96) 0%, rgb(252 232 240 / 0.92) 100%);
   --lg-droplet-rose-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.95),
-    inset 0 -1px 0 rgb(var(--xin-accent-rgb) / 0.16),
-    inset 0 -8px 14px -10px rgb(var(--xin-accent-rgb) / 0.3),
-    0 1px 2px rgb(var(--xin-accent-rgb) / 0.14),
-    0 6px 16px -6px rgb(var(--xin-accent-rgb) / 0.42);
-  /* 中性的一颗：会话标签这种不需要品牌色强调的选中态 */
-  --lg-droplet-clear: linear-gradient(180deg, rgb(255 255 255 / 0.92) 0%, rgb(255 255 255 / 0.7) 100%);
+    inset 0 0 0 1px rgb(var(--xin-accent-rgb) / 0.08),
+    0 1px 2px rgb(var(--xin-shadow-rgb) / 0.06),
+    0 4px 12px -4px rgb(var(--xin-shadow-rgb) / 0.12);
+  /* 中性的一颗：会话标签这种不需要品牌色强调的选中态。
+     它待在会横向滚动的标签条里（滚动容器会把溢出的投影切成直角），所以投影收得很紧 */
+  --lg-droplet-clear: linear-gradient(180deg, rgb(255 255 255 / 0.92) 0%, rgb(255 255 255 / 0.74) 100%);
   --lg-droplet-clear-shadow:
     inset 0 1px 0 rgb(255 255 255),
-    inset 0 -1px 0 rgb(var(--xin-ink-rgb) / 0.05),
-    0 1px 2px rgb(var(--xin-shadow-rgb) / 0.08),
-    0 6px 14px -6px rgb(var(--xin-shadow-rgb) / 0.22);
+    inset 0 0 0 1px rgb(var(--xin-ink-rgb) / 0.04),
+    0 1px 3px rgb(var(--xin-shadow-rgb) / 0.1);
 
   /* 水滴在两个位置间滑动时略微冲过头再回弹，这是「液态」手感的来源 */
   --lg-spring: cubic-bezier(0.34, 1.32, 0.52, 1);
+
+  /* 高光带与指针柔光画在同一层（::after），这层的 opacity 就是高光带强度，
+     柔光的实际亮度 = glow-strength × specular-strength */
+  --lg-specular-strength: 0.9;
+  --lg-glow-strength: 0.3;
+  --lg-glow-radius: 90px;
 }
 
 .dark {
@@ -51,21 +65,32 @@
   --lg-edge-light: rgb(255 255 255 / 0.36);
   --lg-edge-soft: rgb(255 255 255 / 0.1);
   --lg-edge-ink: rgb(255 255 255 / 0.06);
-  --lg-inner-glow: rgb(255 255 255 / 0.12);
-  --lg-caustic: rgb(var(--xin-accent-rgb) / 0.28);
+  --lg-inner-glow: rgb(255 255 255 / 0.1);
+  --lg-edge-shade: inset 0 0 0 transparent;
   --lg-shadow:
-    0 1px 1px rgb(0 0 0 / 0.3),
-    0 14px 34px -14px rgb(0 0 0 / 0.7);
+    0 1px 2px rgb(0 0 0 / 0.3),
+    0 10px 30px -10px rgb(0 0 0 / 0.55);
 
-  --lg-droplet-rose: linear-gradient(180deg, rgb(236 122 164 / 0.42) 0%, rgb(236 122 164 / 0.24) 100%);
+  --lg-droplet-rose: linear-gradient(180deg, rgb(236 122 164 / 0.34) 0%, rgb(236 122 164 / 0.22) 100%);
   --lg-droplet-rose-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.3),
-    inset 0 -8px 14px -10px rgb(255 180 210 / 0.35),
-    0 6px 18px -6px rgb(236 122 164 / 0.45);
-  --lg-droplet-clear: linear-gradient(180deg, rgb(255 255 255 / 0.16) 0%, rgb(255 255 255 / 0.08) 100%);
+    inset 0 1px 0 rgb(255 255 255 / 0.24),
+    inset 0 0 0 1px rgb(255 255 255 / 0.05),
+    0 4px 14px -6px rgb(0 0 0 / 0.5);
+  --lg-droplet-clear: linear-gradient(180deg, rgb(255 255 255 / 0.16) 0%, rgb(255 255 255 / 0.09) 100%);
   --lg-droplet-clear-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.22),
-    0 6px 16px -6px rgb(0 0 0 / 0.6);
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    0 1px 3px rgb(0 0 0 / 0.4);
+
+  /* 深色下白光很扎眼，高光带压到一半；柔光相应提一点，乘出来和浅色差不多醒目 */
+  --lg-specular-strength: 0.45;
+  --lg-glow-strength: 0.36;
+}
+
+/* 注册成数值属性才能过渡：悬停时柔光淡入淡出，而不是啪一下亮 */
+@property --lg-glow-alpha {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
 }
 
 /* 基础声明放在 :where() 里（零优先级）：组件自己的定位、尺寸随便覆盖，
@@ -74,19 +99,46 @@
   position: relative;
   isolation: isolate;
   background: var(--lg-fill);
+  /* 亮边交给 ::before 那一圈斜向高光，这里不再叠上下两道 1px 内高光——叠在一起就成了塑料棱 */
   box-shadow:
-    inset 0 1px 0 var(--lg-edge-light),
-    inset 0 -1px 0 var(--lg-edge-soft),
     inset 0 0 0 1px var(--lg-edge-ink),
-    inset 0 12px 18px -14px var(--lg-inner-glow),
-    inset 0 -12px 20px -16px var(--lg-caustic),
+    inset 0 10px 16px -14px var(--lg-inner-glow),
+    var(--lg-edge-shade),
     var(--lg-shadow);
-  backdrop-filter: blur(10px) saturate(1.8);
-  -webkit-backdrop-filter: blur(10px) saturate(1.8);
+  backdrop-filter: blur(10px) saturate(1.5);
+  -webkit-backdrop-filter: blur(10px) saturate(1.5);
   transition:
     background 180ms ease,
     box-shadow 180ms ease,
-    transform 260ms var(--lg-spring);
+    transform 260ms var(--lg-spring),
+    --lg-glow-alpha 280ms ease;
+}
+
+/* 高光带 + 指针柔光。高光带是 v-liquid-glass 按尺寸生成的图（沿斜面、朝光源的一侧最亮）；
+   柔光圆心跟着鼠标（trackLiquidGlassPointer 写 --lg-pointer-x/y），悬停才亮。
+   z-index -1 让它落在玻璃自己的底色之上、文字图标之下——.liquid-glass 自带 isolation，-1 出不了这块玻璃。
+   没挂指令的玻璃没有 --lg-specular，这层就只剩柔光。 */
+.liquid-glass::after,
+.liquid-menu::after,
+.liquid-sheet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle var(--lg-glow-radius) at var(--lg-pointer-x, 50%) var(--lg-pointer-y, 50%),
+      rgb(255 255 255 / var(--lg-glow-alpha)),
+      transparent 72%
+    ),
+    var(--lg-specular, none) 0 0 / 100% 100% no-repeat;
+  opacity: var(--lg-specular-strength);
+  pointer-events: none;
+}
+
+.liquid-glass:hover:not(:disabled) {
+  --lg-glow-alpha: var(--lg-glow-strength);
 }
 
 /* 斜向高光描边：左上最亮、中段隐去、右下回一点光——玻璃的「厚度」主要靠这一圈 */
@@ -116,13 +168,24 @@
   pointer-events: none;
 }
 
-/* 可点的玻璃：悬停更亮，按下像水滴一样被压扁一点 */
+/* 可点的玻璃：悬停更亮；按下时像 iOS 26 那样鼓起来、从里面亮起来，而不是被压扁 */
 :where(button.liquid-glass, .liquid-glass[role="button"]):hover:not(:disabled) {
   background: var(--lg-fill-hover);
 }
 
 :where(button.liquid-glass, .liquid-glass[role="button"]):active:not(:disabled) {
-  transform: scale(0.96);
+  transform: scale(1.04);
+}
+
+/* 柔光单独一条、带优先级：按下时鼠标也在悬停，得压过上面 .liquid-glass:hover 那条才亮得起来 */
+.liquid-glass:is(button, [role="button"]):active:not(:disabled) {
+  --lg-glow-alpha: calc(var(--lg-glow-strength) * 1.8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button.liquid-glass, .liquid-glass[role="button"]):active:not(:disabled) {
+    transform: none;
+  }
 }
 
 /* 玻璃会盖住 Nuxt UI 的 ring，这里补回键盘焦点环 */
@@ -138,13 +201,14 @@
 
 /* —— 墨玻璃：最重要的动作。墨色本身半透，折射照样可见 —— */
 :where(.liquid-glass--ink) {
-  --lg-fill: linear-gradient(180deg, rgb(62 56 70 / 0.88) 0%, rgb(28 25 33 / 0.92) 100%);
-  --lg-fill-hover: linear-gradient(180deg, rgb(76 69 85 / 0.9) 0%, rgb(36 32 42 / 0.94) 100%);
+  --lg-fill: linear-gradient(180deg, rgb(60 60 64 / 0.9) 0%, rgb(29 29 31 / 0.94) 100%);
+  --lg-fill-hover: linear-gradient(180deg, rgb(74 74 80 / 0.92) 0%, rgb(38 38 42 / 0.95) 100%);
   --lg-edge-light: rgb(255 255 255 / 0.42);
   --lg-edge-soft: rgb(255 255 255 / 0.12);
   --lg-edge-ink: rgb(0 0 0 / 0.2);
-  --lg-inner-glow: rgb(255 255 255 / 0.22);
-  --lg-caustic: rgb(244 150 188 / 0.5);
+  --lg-inner-glow: rgb(255 255 255 / 0.18);
+  /* 白色高光压在墨色上反差大，收一半才是「亮面」而不是「白边」 */
+  --lg-specular-strength: 0.5;
   color: var(--xin-on-ink);
 }
 
@@ -156,7 +220,6 @@
 .dark :where(.liquid-glass--ink) {
   --lg-fill: linear-gradient(180deg, rgb(236 106 156 / 0.78) 0%, rgb(190 56 110 / 0.82) 100%);
   --lg-fill-hover: linear-gradient(180deg, rgb(242 124 170 / 0.82) 0%, rgb(201 66 120 / 0.86) 100%);
-  --lg-caustic: rgb(255 214 230 / 0.4);
   color: #ffffff;
 }
 
@@ -172,21 +235,21 @@
 /* ————————————————————————————————————————————————————————————
    弹出层的「常规」玻璃（Apple 的 Regular 材质）
    菜单、弹层、Toast 要读大量文字，比控件胶囊实一些、模糊重一些；
-   高光描边和樱色焦散照旧，所以还是同一种玻璃。
+   高光描边照旧，所以还是同一种玻璃。
    这些元素经 portal 挂在 body 下，只能写全局样式；由 vite.config.js 的
    Nuxt UI 主题配置统一挂上类名，组件里不用逐个加。
    ———————————————————————————————————————————————————————————— */
 :root {
-  --lg-fill-regular: rgb(255 255 255 / 0.68);
+  --lg-fill-regular: rgb(255 255 255 / 0.72);
   /* 对话框也有折射了（边缘一圈要透才看得见弯折），底色比以前通透；
      可读性交给折射滤镜里的那层模糊（见 main.js 的 autoAttachLiquidGlass） */
-  --lg-fill-sheet: rgb(252 249 251 / 0.66);
-  --lg-scrim: rgb(var(--xin-shadow-rgb) / 0.2);
+  --lg-fill-sheet: rgb(250 250 252 / 0.7);
+  --lg-scrim: rgb(var(--xin-shadow-rgb) / 0.18);
 }
 
 .dark {
-  --lg-fill-regular: rgb(40 34 46 / 0.74);
-  --lg-fill-sheet: rgb(30 26 36 / 0.72);
+  --lg-fill-regular: rgb(38 38 42 / 0.76);
+  --lg-fill-sheet: rgb(30 30 32 / 0.76);
   --lg-scrim: rgb(0 0 0 / 0.36);
 }
 
@@ -204,13 +267,11 @@
 .liquid-tooltip {
   isolation: isolate;
   box-shadow:
-    inset 0 1px 0 var(--lg-edge-light),
     inset 0 0 0 1px var(--lg-edge-ink),
-    inset 0 -14px 24px -20px var(--lg-caustic),
     0 1px 2px rgb(var(--xin-shadow-rgb) / 0.06),
-    0 24px 60px -18px rgb(var(--xin-shadow-rgb) / 0.34);
-  backdrop-filter: blur(26px) saturate(1.9);
-  -webkit-backdrop-filter: blur(26px) saturate(1.9);
+    0 20px 50px -16px rgb(var(--xin-shadow-rgb) / 0.26);
+  backdrop-filter: blur(26px) saturate(1.5);
+  -webkit-backdrop-filter: blur(26px) saturate(1.5);
 }
 
 .liquid-menu {
@@ -287,12 +348,12 @@ html[data-glass="tinted"] {
   --lg-fill: rgb(255 255 255 / 0.6);
   --lg-fill-hover: rgb(255 255 255 / 0.72);
   --lg-fill-regular: rgb(255 255 255 / 0.88);
-  --lg-fill-sheet: rgb(252 249 251 / 0.92);
+  --lg-fill-sheet: rgb(250 250 252 / 0.92);
 }
 
 html.dark[data-glass="tinted"] {
-  --lg-fill: rgb(40 34 46 / 0.66);
-  --lg-fill-hover: rgb(52 45 60 / 0.72);
-  --lg-fill-regular: rgb(34 29 40 / 0.9);
-  --lg-fill-sheet: rgb(26 22 31 / 0.94);
+  --lg-fill: rgb(40 40 44 / 0.66);
+  --lg-fill-hover: rgb(52 52 58 / 0.72);
+  --lg-fill-regular: rgb(34 34 38 / 0.9);
+  --lg-fill-sheet: rgb(26 26 28 / 0.94);
 }

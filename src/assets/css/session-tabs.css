@@ -53,13 +53,17 @@
   }
 }
 
+/* 标签条要横向滚动，滚动容器会把选中水滴溢出的投影切成一块直角的灰（右边和底边各一道硬边）。
+   四周各撑出 4px 再用负外边距收回去，投影就有地方落；左右 4px 正好是它和加号之间的间距，不会压到加号 */
 .tabs-strip {
   position: relative;
   min-width: 0;
-  height: 100%;
+  height: calc(100% + 8px);
   display: flex;
   align-items: center;
   gap: 6px;
+  margin: -4px;
+  padding: 4px;
   overflow-x: auto;
   scrollbar-width: none;
 }

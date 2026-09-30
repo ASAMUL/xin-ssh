@@ -67,7 +67,7 @@ async function startWindowDrag(event) {
 <template>
   <header class="window-chrome" @mousedown="startWindowDrag">
     <!-- 顶栏的玻璃是垫在底下的一层兄弟元素，不直接挂在 header 上：带 backdrop-filter 的祖先会成为
-         「backdrop root」，里面的「连接 | 工作区」胶囊就只能看到这层玻璃、看不到窗口底的樱色光，
+         「backdrop root」，里面的「连接 | 工作区」胶囊就只能看到这层玻璃、看不到窗口底透上来的壁纸，
          自己的折射也就没了。兄弟元素不构成 backdrop root。 -->
     <div v-liquid-glass="{ scale: 24, blur: 3 }" class="window-chrome-glass liquid-glass" aria-hidden="true"></div>
 
@@ -85,6 +85,7 @@ async function startWindowDrag(event) {
       v-if="!appStore.isLoading"
       v-model="activeView"
       v-liquid-glass="{ scale: 20 }"
+      v-liquid-stretch="activeView"
       class="window-view-switch liquid-glass"
       variant="pill"
       size="md"

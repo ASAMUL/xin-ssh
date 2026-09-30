@@ -62,12 +62,36 @@ function roundedRectEdge(px, py, halfWidth, halfHeight, radius) {
   return { depth, nx: nx * (Math.sign(px) || 1), ny: ny * (Math.sign(py) || 1) };
 }
 
-export function createDisplacementMap({ width, height, radius, bezel }) {
+// 高光的光源：主光从左上偏上方打下来，右下是穿过玻璃的回光，只有主光的一小半
+const KEY_LIGHT = (() => {
+  const length = Math.hypot(-0.42, -0.9);
+  return { x: -0.42 / length, y: -0.9 / length };
+})();
+const BACK_LIGHT_WEIGHT = 0.45;
+// 高光带往里衰减的快慢（相对斜面宽度）：越小越贴边、越像一道细亮线，越大越像一整圈柔光
+const SPECULAR_SPREAD = 0.3;
+const SPECULAR_SHARPNESS = 1.6;
+
+function mapCanvas(width, height) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
-  const image = context.createImageData(width, height);
+  return { canvas, context, image: context.createImageData(width, height) };
+}
+
+function toDataUrl({ canvas, context, image }) {
+  context.putImageData(image, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+// 一次遍历同时产出两张图，都从同一条圆角矩形 SDF 和法线来：
+// - 位移图：折射用，交给 SVG feDisplacementMap（只有 Chromium 需要）；
+// - 高光图：沿斜面的一圈柔光——法线朝向光源的地方最亮，离外沿越远越暗。
+//   这是「一块有厚度的玻璃」和「一个描了 1px 亮边的胶囊」的区别，做成普通背景图，所有内核都能用。
+export function createGlassMaps({ width, height, radius, bezel, displacement = true }) {
+  const displacementMap = displacement ? mapCanvas(width, height) : null;
+  const specularMap = mapCanvas(width, height);
   const profile = getRefractionProfile();
   const halfWidth = width / 2;
   const halfHeight = height / 2;
@@ -75,24 +99,43 @@ export function createDisplacementMap({ width, height, radius, bezel }) {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const { depth, nx, ny } = roundedRectEdge(x + 0.5 - halfWidth, y + 0.5 - halfHeight, halfWidth, halfHeight, radius);
-      let dx = 0;
-      let dy = 0;
-      if (depth > 0 && depth < bezel) {
-        const magnitude = profile[Math.min(PROFILE_SAMPLES - 1, Math.floor((depth / bezel) * PROFILE_SAMPLES))];
-        // 往内侧取样：边缘像素显示的是更靠里的背景，看起来就是凸透镜把边缘放大了
-        dx = -nx * magnitude;
-        dy = -ny * magnitude;
-      }
       const offset = (y * width + x) * 4;
-      image.data[offset] = 128 + dx * 127;
-      image.data[offset + 1] = 128 + dy * 127;
-      image.data[offset + 2] = 128;
-      image.data[offset + 3] = 255;
+      const onBezel = depth > 0 && depth < bezel;
+
+      if (displacementMap) {
+        let dx = 0;
+        let dy = 0;
+        if (onBezel) {
+          const magnitude = profile[Math.min(PROFILE_SAMPLES - 1, Math.floor((depth / bezel) * PROFILE_SAMPLES))];
+          // 往内侧取样：边缘像素显示的是更靠里的背景，看起来就是凸透镜把边缘放大了
+          dx = -nx * magnitude;
+          dy = -ny * magnitude;
+        }
+        const data = displacementMap.image.data;
+        data[offset] = 128 + dx * 127;
+        data[offset + 1] = 128 + dy * 127;
+        data[offset + 2] = 128;
+        data[offset + 3] = 255;
+      }
+
+      if (onBezel) {
+        const facing = nx * KEY_LIGHT.x + ny * KEY_LIGHT.y;
+        const light = Math.max(0, facing) ** SPECULAR_SHARPNESS
+          + BACK_LIGHT_WEIGHT * Math.max(0, -facing) ** SPECULAR_SHARPNESS;
+        const intensity = Math.min(1, light * Math.exp(-depth / (bezel * SPECULAR_SPREAD)));
+        const data = specularMap.image.data;
+        data[offset] = 255;
+        data[offset + 1] = 255;
+        data[offset + 2] = 255;
+        data[offset + 3] = Math.round(intensity * 255);
+      }
     }
   }
 
-  context.putImageData(image, 0, 0);
-  return canvas.toDataURL("image/png");
+  return {
+    displacementUrl: displacementMap ? toDataUrl(displacementMap) : null,
+    specularUrl: toDataUrl(specularMap),
+  };
 }
 
 // 滤镜宿主不能 display:none——那样 Chromium 会当滤镜不存在
@@ -113,8 +156,34 @@ function svgElement(name, attributes) {
   return element;
 }
 
+const CHANNEL_ONLY = {
+  R: "1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0 1",
+  G: "0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 0 1",
+  B: "0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 0 1",
+};
+
+// 色散：真实玻璃对蓝光折得比红光狠，边缘会析出一道极淡的彩边。R / G / B 各按不同强度弯一次再拼回去。
+// 三个通道先各自压成不透明（colormatrix 在非预乘空间里算，颜色不会被 alpha 压暗）再相加，
+// 最后用中间那次的 alpha 裁回去——窗口是透明的（Tauri 里底下是 Mica），直接相加会把半透明的地方加成不透明的暗块。
+function dispersedDisplacement({ scale, dispersion }) {
+  const pass = (channel, factor) => [
+    svgElement("feDisplacementMap", {
+      in: "blurred", in2: "map", scale: scale * factor, xChannelSelector: "R", yChannelSelector: "G", result: `shift${channel}`,
+    }),
+    svgElement("feColorMatrix", { in: `shift${channel}`, type: "matrix", values: CHANNEL_ONLY[channel], result: `only${channel}` }),
+  ];
+  return [
+    ...pass("R", 1 - dispersion),
+    ...pass("G", 1),
+    ...pass("B", 1 + dispersion),
+    svgElement("feComposite", { in: "onlyR", in2: "onlyG", operator: "arithmetic", k2: 1, k3: 1, result: "rg" }),
+    svgElement("feComposite", { in: "rg", in2: "onlyB", operator: "arithmetic", k2: 1, k3: 1, result: "rgb" }),
+    svgElement("feComposite", { in: "rgb", in2: "shiftG", operator: "in", result: "refracted" }),
+  ];
+}
+
 // 先轻模糊再折射：模糊放在折射前，边缘的透镜弯折才保持清晰；饱和度拉高是 Apple 材质「颜色透上来」的那股鲜
-export function upsertLiquidGlassFilter(id, { width, height, mapUrl, scale, blur, saturation }) {
+export function upsertLiquidGlassFilter(id, { width, height, mapUrl, scale, blur, saturation, dispersion = 0 }) {
   const host = ensureFilterHost();
   host.querySelector(`#${id}`)?.remove();
 
@@ -133,9 +202,11 @@ export function upsertLiquidGlassFilter(id, { width, height, mapUrl, scale, blur
     svgElement("feImage", {
       href: mapUrl, x: 0, y: 0, width, height, preserveAspectRatio: "none", result: "map",
     }),
-    svgElement("feDisplacementMap", {
-      in: "blurred", in2: "map", scale, xChannelSelector: "R", yChannelSelector: "G", result: "refracted",
-    }),
+    ...(dispersion > 0
+      ? dispersedDisplacement({ scale, dispersion })
+      : [svgElement("feDisplacementMap", {
+        in: "blurred", in2: "map", scale, xChannelSelector: "R", yChannelSelector: "G", result: "refracted",
+      })]),
     svgElement("feColorMatrix", { in: "refracted", type: "saturate", values: saturation }),
   );
   host.append(filter);
