@@ -10,6 +10,7 @@ import "@xterm/xterm/css/xterm.css";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import TerminalSearchPanel from "./TerminalSearchPanel.vue";
 import { buildXtermTheme } from "../../config/terminalThemes";
+import { createCommandMarks } from "../../utils/commandMarks";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useUiStore } from "../../stores/uiStore";
 
@@ -40,6 +41,7 @@ let webglAddon = null;
 let webglContextListener = null;
 let webglUnavailable = false;
 let resizeObserver = null;
+let commandMarks = null;
 let detachSink = null;
 let layoutFrame = null;
 let disposed = false;
@@ -68,10 +70,13 @@ onMounted(() => {
   terminal.unicode.activeVersion = "11";
   terminal.loadAddon(new WebLinksAddon(openTerminalLink));
   terminal.open(terminalMount.value);
+  commandMarks = createCommandMarks(terminal);
+  commandMarks.setTheme(props.theme);
   terminal.attachCustomKeyEventHandler(handleTerminalKey);
   listeners.push(
     terminal.onData((data) => {
       if (canSendData.value) {
+        commandMarks.handleInput(data);
         sessionStore.sendSessionTerminalInput(props.sessionId, data).catch((error) => uiStore.setError(error));
       }
     }),
@@ -95,6 +100,7 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect();
   listeners.forEach((listener) => listener.dispose());
   releaseWebgl();
+  commandMarks?.dispose();
   terminal?.dispose();
 });
 
@@ -134,6 +140,7 @@ function scheduleLayout() {
 function updateAppearance() {
   if (!terminal || !props.active || disposed) return;
   terminal.options.theme = buildXtermTheme(props.theme, props.material);
+  commandMarks.setTheme(props.theme);
   terminal.options.fontFamily = props.fontFamily;
   terminal.options.fontSize = props.fontSize;
   scheduleLayout();
@@ -180,6 +187,12 @@ function handleTerminalKey(event) {
   if (!props.active) return false;
   if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) return true;
   const key = event.key.toLowerCase();
+  // Ctrl+↑ / Ctrl+↓ 在执行过的命令之间跳；vim 这类全屏程序里不拦，原样交给它
+  if ((key === "arrowup" || key === "arrowdown") && !event.shiftKey
+    && commandMarks.jump(key === "arrowup" ? -1 : 1)) {
+    event.preventDefault();
+    return false;
+  }
   if (key === "f" && event.shiftKey) {
     event.preventDefault();
     openSearch();

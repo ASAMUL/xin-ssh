@@ -28,3 +28,16 @@
 .terminal-xterm :deep(.xterm-scrollable-element > .scrollbar > .slider) {
   border-radius: 999px;
 }
+
+/* 命令行右侧的时间 / 耗时标签（commandMarks.js 用 xterm 装饰挂上来的 DOM）。
+   颜色、字体由脚本按调色板内联设置；这里只管排版，并且不接指针——
+   它压在终端画面上，不能挡住选区和点击聚焦。 */
+.terminal-xterm :deep(.terminal-command-label) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}

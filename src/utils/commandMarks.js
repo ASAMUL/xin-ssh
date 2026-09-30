@@ -1,0 +1,294 @@
+// 命令标记：不碰服务器、不注入任何脚本，只靠客户端自己看得见的两件事——
+// 屏幕上出现了一个认得的提示符，以及用户按下了回车。
+// 在这两个时刻给那一行打 xterm 标记，就能做到：
+//   · 提示符退后、命令突出：user@host 和分隔符调暗，路径用蓝色，root 用品红提醒；
+//   · 命令那一行右侧淡淡地标出回车时间，跑了 3 秒以上再带上耗时；
+//   · Ctrl+↑ / Ctrl+↓ 在执行过的命令之间跳转。
+// 思路同 Windows Terminal 的 autoMarkPrompts（回车即打标记，不需要 shell 集成）。
+import { parseShellPrompt, readTerminalRow } from "./shellPrompt";
+
+// Powerlevel10k 默认也是 3 秒：短于这个的命令，耗时只是噪音
+const DURATION_THRESHOLD_MS = 3000;
+// 输出停下来一小会儿再看光标所在行：流式输出途中碰巧有一行长得像提示符，不能当真
+const INSPECT_DELAY_MS = 60;
+// 右侧标签和命令文字之间至少留这么多格，挤不下就不显示
+const LABEL_GAP_CELLS = 3;
+
+export function createCommandMarks(terminal) {
+  const marks = [];
+  let palette = null;
+  // 回车后在等下一个提示符出现、好算耗时的那条
+  let running = null;
+  // 回车后等回显落定、再量右侧空位的那条
+  let pendingLabel = null;
+  // 提示符出现以后用户有没有输入过：回车那一刻回显可能还没回来，不能靠读屏幕判断命令是否为空
+  let hasInput = false;
+  let inspectTimer = null;
+
+  const listeners = [
+    terminal.onWriteParsed(scheduleInspect),
+    // vim / top 这类全屏程序用的是另一块缓冲区，按行号着色会染到它们的画面上，切过去时先全部撤掉
+    terminal.buffer.onBufferChange(repaint),
+    terminal.onResize(repaint),
+  ];
+
+  function buffer() {
+    return terminal.buffer.active;
+  }
+
+  function isNormalBuffer() {
+    return buffer().type === "normal";
+  }
+
+  function cursorLine() {
+    return buffer().baseY + buffer().cursorY;
+  }
+
+  function findMark(line) {
+    return marks.find((mark) => mark.marker.line === line);
+  }
+
+  function addMark(line, prompt, signature) {
+    const marker = terminal.registerMarker(line - cursorLine());
+    if (!marker) return null;
+
+    const mark = { marker, prompt, signature, enteredAt: null, duration: null, decorations: [], label: null };
+    // 滚出回滚区或被清屏删掉的行，标记会自己作废
+    marker.onDispose(() => {
+      clearDecorations(mark);
+      const index = marks.indexOf(mark);
+      if (index >= 0) marks.splice(index, 1);
+      if (running === mark) running = null;
+      if (pendingLabel === mark) pendingLabel = null;
+    });
+    marks.push(mark);
+    marks.sort((a, b) => a.marker.line - b.marker.line);
+    paintPrompt(mark);
+    return mark;
+  }
+
+  function handleInput(data) {
+    // 敲回车是单独一个 \r；粘贴一条带换行的命令时是「命令 + \r」一整块。
+    // 多行粘贴会连着执行好几条，分不清哪行对哪条，干脆不记。
+    const submits = data.indexOf("\r") === data.length - 1;
+    if (data.length > 1) hasInput = true;
+    if (!submits) {
+      hasInput = true;
+      return;
+    }
+    // 在提示符上直接敲回车只是换一行，不算一条命令
+    if (!hasInput || !isNormalBuffer()) return;
+
+    let line = cursorLine();
+    // 长命令折行时，提示符在这组折行的第一行
+    while (line > 0 && buffer().getLine(line)?.isWrapped) line -= 1;
+
+    let mark = findMark(line);
+    if (!mark) {
+      const row = readTerminalRow(buffer(), line);
+      if (!row?.text.trim()) return;
+      // 没认出来的提示符（自定义的、REPL 的）也记时间，只是不上色
+      mark = addMark(line, parseShellPrompt(row), row.text.trimEnd());
+    }
+    if (!mark) return;
+
+    hasInput = false;
+    mark.enteredAt = Date.now();
+    mark.duration = null;
+    running = mark;
+    pendingLabel = mark;
+  }
+
+  function scheduleInspect() {
+    clearTimeout(inspectTimer);
+    inspectTimer = setTimeout(inspect, INSPECT_DELAY_MS);
+  }
+
+  function inspect() {
+    if (!isNormalBuffer()) return;
+
+    dropOverwrittenMarks();
+    const line = cursorLine();
+    if (pendingLabel && line > pendingLabel.marker.line) {
+      const mark = pendingLabel;
+      pendingLabel = null;
+      // 回显落定后的整行才是这条命令的「指纹」，清屏后同一行被改写就能认出来
+      mark.signature = readTerminalRow(buffer(), mark.marker.line)?.text.trimEnd() ?? mark.signature;
+      paintLabel(mark);
+    }
+    detectPrompt(line);
+  }
+
+  // 光标停在一个认得的提示符末尾、后面什么都没有：这是一个新的、等待输入的提示符
+  function detectPrompt(line) {
+    const row = readTerminalRow(buffer(), line);
+    if (!row || row.isWrapped) return;
+    const prompt = parseShellPrompt(row);
+    if (!prompt || row.text.slice(prompt.end).trim() || buffer().cursorX < prompt.cells.x + prompt.cells.width) return;
+
+    const existing = findMark(line);
+    if (existing && existing.prompt && existing.enteredAt === null) return;
+    // 同一行上已经执行过的旧标记：屏幕被清过、提示符又画回了这一行
+    existing?.marker.dispose();
+
+    const mark = addMark(line, prompt, row.text.slice(0, prompt.end));
+    hasInput = false;
+    if (running && running !== mark) {
+      running.duration = Date.now() - running.enteredAt;
+      if (running.duration >= DURATION_THRESHOLD_MS) paintLabel(running);
+      running = null;
+    }
+  }
+
+  // clear / Ctrl+L 是原地擦屏，行还在、标记也还在，新内容写上来会被旧颜色染到。
+  // 只有屏幕区的行可能被原地改写（回滚区只会被整行删掉），所以只查这一段。
+  function dropOverwrittenMarks() {
+    const top = buffer().baseY;
+    for (const mark of [...marks]) {
+      if (mark.marker.line < top) continue;
+      const text = readTerminalRow(buffer(), mark.marker.line)?.text ?? "";
+      if (!text.startsWith(mark.signature)) mark.marker.dispose();
+    }
+  }
+
+  function paintPrompt(mark) {
+    const { prompt } = mark;
+    if (!prompt || !palette || !isNormalBuffer()) return;
+
+    // 后注册的前景色覆盖先注册的：先把整段调暗，再单独点亮路径和 root
+    const layers = [
+      { ...prompt.cells, color: palette.dim },
+      prompt.path && { ...prompt.path, color: palette.path },
+      prompt.isRoot && prompt.user && { ...prompt.user, color: palette.root },
+    ].filter(Boolean);
+    for (const { x, width, color } of layers) {
+      const decoration = terminal.registerDecoration({
+        marker: mark.marker,
+        x,
+        width,
+        foregroundColor: color,
+      });
+      if (decoration) mark.decorations.push(decoration);
+    }
+  }
+
+  function paintLabel(mark) {
+    mark.label?.dispose();
+    mark.label = null;
+    if (!mark.enteredAt || !palette || !isNormalBuffer()) return;
+
+    const time = formatClock(mark.enteredAt);
+    const duration = mark.duration >= DURATION_THRESHOLD_MS ? formatDuration(mark.duration) : "";
+    const text = duration ? `${duration}  ${time}` : time;
+    const row = readTerminalRow(buffer(), mark.marker.line);
+    const used = row ? row.columns[row.text.trimEnd().length] : terminal.cols;
+    if (terminal.cols - used < text.length + LABEL_GAP_CELLS) return;
+
+    const decoration = terminal.registerDecoration({
+      marker: mark.marker,
+      anchor: "right",
+      x: 1,
+      width: text.length,
+    });
+    if (!decoration) return;
+
+    decoration.onRender((element) => {
+      element.classList.add("terminal-command-label");
+      element.style.color = palette.label;
+      element.style.fontFamily = terminal.options.fontFamily;
+      // 比正文小一号：它是旁注，不该和命令抢视线
+      element.style.fontSize = `${Math.round(terminal.options.fontSize * 0.86)}px`;
+      element.replaceChildren(
+        ...(duration ? [labelPart(duration, "duration", palette.duration)] : []),
+        labelPart(time, "time"),
+      );
+    });
+    mark.label = decoration;
+  }
+
+  function clearDecorations(mark) {
+    mark.decorations.forEach((decoration) => decoration.dispose());
+    mark.decorations = [];
+    mark.label?.dispose();
+    mark.label = null;
+  }
+
+  function repaint() {
+    for (const mark of marks) {
+      clearDecorations(mark);
+      paintPrompt(mark);
+      paintLabel(mark);
+    }
+  }
+
+  // 只在执行过的命令之间跳，把目标命令滚到第一行；往下跳过了最后一条就回到底部
+  function jump(direction) {
+    if (!isNormalBuffer()) return false;
+
+    const top = buffer().viewportY;
+    const lines = marks.filter((mark) => mark.enteredAt).map((mark) => mark.marker.line);
+    const target = direction < 0
+      ? lines.filter((line) => line < top).at(-1)
+      : lines.find((line) => line > top);
+    if (target === undefined) {
+      if (direction > 0) terminal.scrollToBottom();
+    } else {
+      terminal.scrollToLine(target);
+    }
+    return true;
+  }
+
+  function setTheme(theme) {
+    const { foreground, background, blue, magenta } = theme.xterm;
+    palette = {
+      dim: mixHex(foreground, background, 0.55),
+      path: blue,
+      root: magenta,
+      label: mixHex(foreground, background, 0.42),
+      duration: mixHex(foreground, background, 0.72),
+    };
+    repaint();
+  }
+
+  function dispose() {
+    clearTimeout(inspectTimer);
+    listeners.forEach((listener) => listener.dispose());
+    [...marks].forEach((mark) => mark.marker.dispose());
+  }
+
+  return { handleInput, jump, setTheme, dispose };
+}
+
+function labelPart(text, kind, color) {
+  const span = document.createElement("span");
+  span.className = `terminal-command-${kind}`;
+  span.textContent = text;
+  if (color) span.style.color = color;
+  return span;
+}
+
+function formatClock(timestamp) {
+  const date = new Date(timestamp);
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+function formatDuration(ms) {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+// xterm 的装饰颜色只认 #RRGGBB，调暗只能在这里先混好，不能交给 CSS 的 color-mix
+function mixHex(foreground, background, weight) {
+  const channels = (hex) => [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+  const front = channels(foreground);
+  const back = channels(background);
+  return `#${front
+    .map((value, index) => Math.round(value * weight + back[index] * (1 - weight)))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
