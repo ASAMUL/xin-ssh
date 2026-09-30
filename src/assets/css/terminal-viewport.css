@@ -12,11 +12,6 @@
   z-index: 1;
 }
 
-/* 磷光主题继续使用 DOM 渲染，避免 WebGL 让文字辉光消失。 */
-.terminal-xterm :deep(.xterm-rows) {
-  text-shadow: var(--term-text-glow, none);
-}
-
 /* FitAddon 会扣除 xterm 自身的 padding，外层留白会导致 PTY 行列数偏大。 */
 .terminal-xterm :deep(.xterm) {
   width: 100%;

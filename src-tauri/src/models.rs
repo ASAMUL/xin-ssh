@@ -53,8 +53,15 @@ pub struct WorkspaceSettings {
     pub terminal_font_family: String,
     #[serde(default = "default_monitor_refresh_seconds")]
     pub monitor_refresh_seconds: u64,
+    // 终端调色板家族（xin / catppuccin / …）；老存档里已下线的主题 id 由前端折算
     #[serde(default = "default_terminal_theme")]
     pub terminal_theme: String,
+    // 终端明暗：auto（跟随应用）| light | dark
+    #[serde(default = "default_terminal_appearance")]
+    pub terminal_appearance: String,
+    // 终端材质：solid（实底）| clear（通透，透出应用壁纸）
+    #[serde(default = "default_terminal_material")]
+    pub terminal_material: String,
     #[serde(default = "default_terminal_font_size")]
     pub terminal_font_size: u16,
     // 工作区面板布局：显隐开关 + splitpanes 百分比，serde default 兼容旧 settings.json
@@ -81,7 +88,7 @@ pub struct WorkspaceSettings {
     // SSH keepalive 间隔（秒），0 = 禁用；终端与隧道连接共用
     #[serde(default = "default_ssh_keepalive_seconds")]
     pub ssh_keepalive_seconds: u64,
-    // 应用明暗模式：system | light | dark（终端配色是另一套，见 terminal_theme）
+    // 应用明暗模式：system | light | dark（终端默认跟着它走，见 terminal_appearance）
     #[serde(default = "default_appearance_mode")]
     pub appearance_mode: String,
     // 液态玻璃强度：clear（通透，透出桌面壁纸）| tinted（着色，更实、对比更高）
@@ -106,6 +113,8 @@ impl Default for WorkspaceSettings {
             terminal_font_family: default_terminal_font_family(),
             monitor_refresh_seconds: default_monitor_refresh_seconds(),
             terminal_theme: default_terminal_theme(),
+            terminal_appearance: default_terminal_appearance(),
+            terminal_material: default_terminal_material(),
             terminal_font_size: default_terminal_font_size(),
             show_monitor_sidebar: true,
             show_file_explorer: true,
@@ -183,7 +192,15 @@ pub fn default_terminal_font_family() -> String {
 }
 
 pub fn default_terminal_theme() -> String {
-    "aurora".to_string()
+    "xin".to_string()
+}
+
+pub fn default_terminal_appearance() -> String {
+    "auto".to_string()
+}
+
+pub fn default_terminal_material() -> String {
+    "solid".to_string()
 }
 
 pub fn default_terminal_font_size() -> u16 {

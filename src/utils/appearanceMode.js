@@ -12,11 +12,16 @@
 // 用户手动选深色而系统是浅色时，窗口边缘的背板仍是亮的，和内容对不上。
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { readonly, ref } from "vue";
 
 export const APPEARANCE_MODES = ["system", "light", "dark"];
 
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 let currentMode = "system";
+// 终端「跟随应用明暗」要在系统切换时立刻换版，所以实际明暗得是响应式的，
+// 不能只靠 <html> 上的类名
+const resolved = ref(resolveMode(currentMode));
+export const resolvedAppearance = readonly(resolved);
 
 export function normalizeAppearanceMode(mode) {
   return APPEARANCE_MODES.includes(mode) ? mode : "system";
@@ -27,17 +32,18 @@ function resolveMode(mode) {
   return darkQuery.matches ? "dark" : "light";
 }
 
-function paint(resolved) {
+function paint(mode) {
   const root = document.documentElement;
-  root.classList.toggle("dark", resolved === "dark");
-  root.classList.toggle("light", resolved === "light");
-  root.style.colorScheme = resolved;
+  root.classList.toggle("dark", mode === "dark");
+  root.classList.toggle("light", mode === "light");
+  root.style.colorScheme = mode;
+  resolved.value = mode;
 
   if (!window.__TAURI_INTERNALS__) return;
 
   // 跟随系统时传 null，把决定权交回给系统，用户改系统设置时窗口会自己跟上
   getCurrentWindow()
-    .setTheme(currentMode === "system" ? null : resolved)
+    .setTheme(currentMode === "system" ? null : mode)
     // 权限缺失或平台不支持时不该拖垮界面：CSS 那部分已经生效了
     .catch(() => {});
 }
@@ -46,10 +52,6 @@ export function applyAppearanceMode(mode) {
   currentMode = normalizeAppearanceMode(mode);
   paint(resolveMode(currentMode));
   return currentMode;
-}
-
-export function resolvedAppearance() {
-  return resolveMode(currentMode);
 }
 
 // 只在「跟随系统」档下响应系统切换；用户显式选了浅/深就不该被系统覆盖

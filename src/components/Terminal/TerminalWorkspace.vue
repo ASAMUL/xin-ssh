@@ -12,15 +12,16 @@ import { useUiStore } from "../../stores/uiStore";
 import { useCredentialStore } from "../../stores/credentialStore";
 import { localizeError } from "../../utils/appError";
 import { usesSavedCredentials } from "../../utils/authentication";
+import { resolvedAppearance } from "../../utils/appearanceMode";
 import {
   TERMINAL_FONTS,
   TERMINAL_FONT_SIZES,
   TERMINAL_THEMES,
   TERMINAL_THEME_GROUPS,
+  buildTerminalChrome,
   getTerminalTheme,
-  getThemePreviewBackground,
-  getThemeTypography,
   resolveTerminalFontStack,
+  resolveThemeVariant,
 } from "../../config/terminalThemes";
 import {
   TERMINAL_BACKGROUND_FITS,
@@ -61,9 +62,9 @@ const isAppearanceOpen = ref(false);
 const isSnippetsOpen = ref(false);
 const hoveredThemeId = ref(null);
 const activeTheme = computed(() => getTerminalTheme(settingsStore.terminalTheme));
-// hovering a card previews the theme live; leaving the panel reverts it
+// 悬停卡片即时预览，移出面板恢复；预览的是「按当前明暗设置会显示的那一版」
 const displayTheme = computed(() =>
-  hoveredThemeId.value ? getTerminalTheme(hoveredThemeId.value) : activeTheme.value,
+  themeVariant(hoveredThemeId.value ? getTerminalTheme(hoveredThemeId.value) : activeTheme.value),
 );
 const terminalFontStack = computed(() =>
   resolveTerminalFontStack(settingsStore.terminalFontFamily),
@@ -71,25 +72,30 @@ const terminalFontStack = computed(() =>
 const themeGroups = computed(() =>
   TERMINAL_THEME_GROUPS.map((group) => ({
     id: group,
-    themes: TERMINAL_THEMES.filter((theme) => theme.group === group),
+    themes: TERMINAL_THEMES
+      .filter((theme) => theme.group === group)
+      .map((theme) => ({ id: theme.id, variant: themeVariant(theme) })),
   })),
 );
-const themeStyleVars = computed(() => {
-  const ui = displayTheme.value.ui;
-  return {
-    "--term-panel-bg": ui.panelBg,
-    "--term-panel-border": ui.panelBorder,
-    "--term-screen-bg": ui.screenBg,
-    "--term-screen-overlay": ui.screenOverlay ?? "none",
-    "--term-text-glow": getThemeTypography(displayTheme.value).glow ?? "none",
-    "--term-glow": ui.glow,
-    "--term-accent": displayTheme.value.accent,
-    "--term-text": ui.text,
-    "--term-text-muted": ui.textMuted,
-    "--term-soft": ui.soft,
-    // 液态玻璃的高光：浅色主题上要亮白，深色主题上收着，否则一圈白边像贴纸
-    "--term-highlight": displayTheme.value.mode === "light" ? "rgb(255 255 255 / 0.92)" : "rgb(255 255 255 / 0.24)",
-  };
+const themeStyleVars = computed(() =>
+  buildTerminalChrome(displayTheme.value, settingsStore.terminalMaterial),
+);
+const terminalAppearanceItems = computed(() => [
+  { value: "auto", label: t("terminal.appearanceAuto"), icon: "i-lucide-sun-moon" },
+  { value: "light", label: t("terminal.appearanceLight"), icon: "i-lucide-sun" },
+  { value: "dark", label: t("terminal.appearanceDark"), icon: "i-lucide-moon" },
+]);
+const terminalMaterialItems = computed(() => [
+  { value: "solid", label: t("terminal.materialSolid"), icon: "i-lucide-square" },
+  { value: "clear", label: t("terminal.materialClear"), icon: "i-lucide-droplet" },
+]);
+const terminalAppearance = computed({
+  get: () => settingsStore.terminalAppearance,
+  set: (terminalAppearance) => applyAppearance({ terminalAppearance }),
+});
+const terminalMaterial = computed({
+  get: () => settingsStore.terminalMaterial,
+  set: (terminalMaterial) => applyAppearance({ terminalMaterial }),
 });
 
 // —— 终端背景图 ——
@@ -494,9 +500,12 @@ function persistFilePaneSize(event) {
   settingsStore.applySettingsPatch({ filePaneSize: panes[panes.length - 1].size });
 }
 
-function themePreviewColors(theme) {
-  const { red, yellow, green, cyan, blue, magenta } = theme.xterm;
-  return [red, yellow, green, cyan, blue, magenta];
+function themeVariant(theme) {
+  return resolveThemeVariant(theme, settingsStore.terminalAppearance, resolvedAppearance.value);
+}
+
+function variantName(variant) {
+  return variant.nameKey ? t(variant.nameKey) : variant.name;
 }
 
 function clearCredentialInputs() {
@@ -543,7 +552,11 @@ async function savePendingCredential() {
       :size="showFilePane ? 100 - settingsStore.filePaneSize : 100"
       min-size="26"
     >
-      <section class="terminal-panel-top liquid-rim" :style="themeStyleVars">
+      <section
+        class="terminal-panel-top liquid-rim"
+        :data-material="settingsStore.terminalMaterial"
+        :style="themeStyleVars"
+      >
       <!-- 工具栏不占行，三组玻璃胶囊浮在终端画面右上角：布局（左栏 / 下方文件 / 沉浸）· 工具（片段 / 主题）· 会话（搜索 / 清空 / 重连）。
            终端输出从胶囊底下滚过，边缘的折射才看得见；代价是右上角一小块文字会被压住（用户认可）。
            连接目标（user@host:port）挪到了底部状态栏——放在左上角会正好压住每行开头。
@@ -589,16 +602,10 @@ async function savePendingCredential() {
           :revision="session.terminalRevision"
           :active="session.id === activeSession?.id"
           :theme="displayTheme"
+          :material="settingsStore.terminalMaterial"
           :font-family="terminalFontStack"
           :font-size="settingsStore.terminalFontSize"
         />
-
-        <!-- 扫描线 / 暗角这类「显像管」纹理必须压在字之上才有味道，故单独一层 -->
-        <div
-          v-if="displayTheme.ui.screenOverlay"
-          class="terminal-screen-overlay"
-          aria-hidden="true"
-        ></div>
 
         <form v-if="needsCredentials" class="terminal-auth-panel" @click.stop @submit.prevent="startTerminal">
           <div class="auth-panel-copy">
@@ -706,6 +713,28 @@ async function savePendingCredential() {
           </header>
 
           <div class="appearance-body">
+            <!-- 明暗 × 材质对所有调色板都生效，放在最上面：先定「怎么显示」，再挑「用哪套色」 -->
+            <section class="appearance-section">
+              <h4>{{ t("terminal.appearanceMode") }}</h4>
+              <UTabs
+                v-model="terminalAppearance"
+                class="appearance-segment"
+                variant="pill"
+                size="xs"
+                :items="terminalAppearanceItems"
+                :content="false"
+              />
+              <h4>{{ t("terminal.material") }}</h4>
+              <UTabs
+                v-model="terminalMaterial"
+                class="appearance-segment"
+                variant="pill"
+                size="xs"
+                :items="terminalMaterialItems"
+                :content="false"
+              />
+            </section>
+
             <section
               v-for="group in themeGroups"
               :key="group.id"
@@ -713,52 +742,46 @@ async function savePendingCredential() {
             >
               <h4>{{ t(`terminal.themeGroup.${group.id}`) }}</h4>
 
-              <div class="theme-grid">
+              <div class="theme-grid" :style="{ fontFamily: terminalFontStack }">
                 <button
                   v-for="theme in group.themes"
                   :key="theme.id"
                   type="button"
                   class="theme-card"
                   :class="{ active: theme.id === activeTheme.id }"
-                  :style="{ '--card-accent': theme.accent }"
+                  :aria-pressed="theme.id === activeTheme.id"
                   @mouseenter="hoveredThemeId = theme.id"
                   @focus="hoveredThemeId = theme.id"
                   @click="selectTheme(theme.id)"
                 >
+                  <!-- 三行迷你终端，每个颜色都落在它在真实输出里的语义槽位上：
+                       ls 里蓝=目录 绿=可执行 青=符号链接，git 状态里绿=新增 红=删除 黄=改动 -->
                   <span
                     class="theme-swatch"
-                    :style="{ background: getThemePreviewBackground(theme) }"
+                    :style="{ background: theme.variant.xterm.background, color: theme.variant.xterm.foreground }"
                   >
-                    <span
-                      v-if="theme.ui.screenOverlay"
-                      class="swatch-overlay"
-                      :style="{ background: theme.ui.screenOverlay }"
-                    ></span>
                     <span class="swatch-line">
-                      <i :style="{ color: theme.xterm.green }">➜</i>
-                      <em :style="{ color: theme.xterm.blue }">~</em>
-                      <em :style="{ color: theme.xterm.foreground }">ls</em>
-                      <b :style="{ background: theme.xterm.cursor }"></b>
+                      <i :style="{ color: theme.variant.xterm.green }">➜</i>
+                      <em :style="{ color: theme.variant.xterm.blue }">~</em>
+                      <em>ls</em>
+                      <b :style="{ background: theme.variant.xterm.cursor }"></b>
                     </span>
-                    <!-- ls 把语义压在固定槽位上：蓝=目录 绿=可执行 青=符号链接。
-                         预览卡照着摆，配色好不好用一眼就知道，比 6 个抽象色点实在 -->
-                    <span class="swatch-line ls">
-                      <em :style="{ color: theme.xterm.blue }">docs/</em>
-                      <em :style="{ color: theme.xterm.green }">run.sh</em>
-                      <em :style="{ color: theme.xterm.cyan }">link@</em>
+                    <span class="swatch-line small">
+                      <em :style="{ color: theme.variant.xterm.blue }">docs/</em>
+                      <em :style="{ color: theme.variant.xterm.green }">run.sh</em>
+                      <em :style="{ color: theme.variant.xterm.cyan }">link@</em>
                     </span>
-                    <span class="swatch-dots">
-                      <i
-                        v-for="(color, index) in themePreviewColors(theme)"
-                        :key="index"
-                        :style="{ background: color }"
-                      ></i>
+                    <span class="swatch-line small">
+                      <em :style="{ color: theme.variant.xterm.magenta }">main</em>
+                      <em :style="{ color: theme.variant.xterm.green }">+12</em>
+                      <em :style="{ color: theme.variant.xterm.red }">−3</em>
+                      <em :style="{ color: theme.variant.xterm.yellow }">~2</em>
+                    </span>
+                    <span v-if="theme.id === activeTheme.id" class="theme-card-check">
+                      <UIcon name="i-lucide-check" />
                     </span>
                   </span>
-                  <span class="theme-card-name">
-                    <span>{{ theme.name }}</span>
-                    <UIcon v-if="theme.id === activeTheme.id" name="i-lucide-check" />
-                  </span>
+                  <span class="theme-card-name">{{ variantName(theme.variant) }}</span>
                 </button>
               </div>
             </section>

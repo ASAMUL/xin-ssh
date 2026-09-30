@@ -9,7 +9,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import TerminalSearchPanel from "./TerminalSearchPanel.vue";
-import { buildXtermTheme, getThemeTypography } from "../../config/terminalThemes";
+import { buildXtermTheme } from "../../config/terminalThemes";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useUiStore } from "../../stores/uiStore";
 
@@ -17,7 +17,9 @@ const props = defineProps({
   sessionId: { type: String, required: true },
   revision: { type: Number, required: true },
   active: { type: Boolean, default: false },
+  // 已按明暗解析好的那一版调色板（resolveThemeVariant 的结果）
   theme: { type: Object, required: true },
+  material: { type: String, required: true },
   fontFamily: { type: String, required: true },
   fontSize: { type: Number, required: true },
 });
@@ -45,21 +47,18 @@ const listeners = [];
 
 // 实例只在会话关闭、清屏或重连时销毁；隐藏期间仍解析输出，保留光标和 alternate screen。
 onMounted(() => {
-  const typography = getThemeTypography(props.theme);
   terminal = new Terminal({
     allowProposedApi: true,
     allowTransparency: true,
     cursorBlink: true,
-    cursorStyle: typography.cursorStyle,
     fontFamily: props.fontFamily,
     fontSize: props.fontSize,
-    fontWeight: typography.weight,
     lineHeight: 1.18,
     scrollback: 8000,
     cols: session.value?.terminalColumns ?? 120,
     rows: session.value?.terminalRows ?? 32,
     disableStdin: !canSendData.value,
-    theme: buildXtermTheme(props.theme),
+    theme: buildXtermTheme(props.theme, props.material),
   });
   fitAddon = new FitAddon();
   searchAddon.value = new SearchAddon();
@@ -118,7 +117,7 @@ watch(() => props.active, (active) => {
 watch(() => sessionStore.activeSessionId, (activeId) => {
   if (activeId && activeId !== props.sessionId) releaseWebgl();
 }, { flush: "post" });
-watch(() => [props.theme, props.fontFamily, props.fontSize], updateAppearance);
+watch(() => [props.theme, props.material, props.fontFamily, props.fontSize], updateAppearance);
 
 // 隐藏节点的尺寸为零，不能拿来覆盖 PTY 大小；字体完成加载后再量一次可见区域。
 function scheduleLayout() {
@@ -134,21 +133,16 @@ function scheduleLayout() {
 
 function updateAppearance() {
   if (!terminal || !props.active || disposed) return;
-  const typography = getThemeTypography(props.theme);
-  terminal.options.theme = buildXtermTheme(props.theme);
-  terminal.options.fontWeight = typography.weight;
-  terminal.options.cursorStyle = typography.cursorStyle;
+  terminal.options.theme = buildXtermTheme(props.theme, props.material);
   terminal.options.fontFamily = props.fontFamily;
   terminal.options.fontSize = props.fontSize;
   scheduleLayout();
   document.fonts?.ready.then(scheduleLayout);
 }
 
-// 同一时刻只有一个终端占用 GPU 上下文（当前可见的那个，或切到首页前最后可见的那个）；
-// 磷光主题依赖 DOM text-shadow，保留原有渲染效果。
+// 同一时刻只有一个终端占用 GPU 上下文（当前可见的那个，或切到首页前最后可见的那个）。
 function updateRenderer() {
-  const glow = getThemeTypography(props.theme).glow;
-  if (!props.active || (glow && glow !== "none")) {
+  if (!props.active) {
     releaseWebgl();
     return;
   }

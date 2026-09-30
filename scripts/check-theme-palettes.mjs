@@ -1,9 +1,10 @@
 // 主题调色板体检：ls / vim 之类的程序把语义压在固定的 ANSI 槽位上
 //   blue=目录  green=可执行  cyan=符号链接  red=归档  magenta=图片  yellow=管道/设备
 // 所以这几个槽位之间必须**肉眼可分**，否则主题再好看，`ls` 出来也是一坨。
-// 这里算两件事：
+// 这里算三件事：
 //   1. 槽位两两之间的感知色差 ΔE（CIE76，粗筛用），撞色即报
 //   2. 每个颜色对背景的 WCAG 对比度，太低判为看不清
+//   3. brightBlack（自动补全提示、注释）对背景的对比度——要暗，但得读得出
 //
 // 用法：node scripts/check-theme-palettes.mjs
 
@@ -19,13 +20,12 @@ const CRITICAL_SLOTS = ["red", "green", "yellow", "blue", "cyan"];
 // 注：CIE76 对高饱和色的色相差会低估，所以只当「抓离群值」用，别当精确度量。
 const MIN_DELTA_E_CRITICAL = 26;
 const MIN_DELTA_E = 12;
-const MIN_CONTRAST = 3;
+// 自家的 Xin 按正文标准（WCAG AA 4.5:1）要求；经典组按宽档只做提示
+const MIN_CONTRAST = { xin: 4.5, classic: 3 };
+const MIN_DIM_CONTRAST = 3;
 // 经典组是上游原版配色（Vesper / Poimandres 的 green/cyan 本来就贴得很近），
 // 「原汁原味」正是这一组存在的理由，撞色也不该由我们去改——只提示不算失败。
 const PALETTE_EXEMPT_GROUPS = ["classic"];
-// 透明背景的主题（玻璃 / 场景 / 黑客）实际落在自己的场景底色上，
-// 这里用一个代表色近似：深色主题按近黑算，浅色按近白算。
-const ASSUMED_BG = { dark: "#0a0b12", light: "#f7f9fc" };
 
 function parseHex(value) {
   const hex = value.replace("#", "");
@@ -66,9 +66,15 @@ function deltaE(left, right) {
 
 let failures = 0;
 
-for (const theme of TERMINAL_THEMES) {
-  const background = ASSUMED_BG[theme.mode];
+const variants = TERMINAL_THEMES.flatMap((theme) =>
+  Object.values(theme.variants).map((variant) => ({ ...variant, group: theme.group })),
+);
+
+for (const theme of variants) {
+  // 通透档的面板底色是同一个颜色降透明度，按实底算即可
+  const background = theme.xterm.background;
   const exempt = PALETTE_EXEMPT_GROUPS.includes(theme.group);
+  const minContrast = MIN_CONTRAST[theme.group];
   const notes = [];
 
   for (let i = 0; i < SEMANTIC_SLOTS.length; i += 1) {
@@ -87,19 +93,24 @@ for (const theme of TERMINAL_THEMES) {
 
   for (const slot of [...SEMANTIC_SLOTS, "foreground"]) {
     const ratio = contrastRatio(theme.xterm[slot], background);
-    if (ratio < MIN_CONTRAST) {
-      notes.push(`低对比 ${slot} ${ratio.toFixed(2)}:1 (${theme.xterm[slot]})`);
+    if (ratio < minContrast) {
+      notes.push(`低对比 ${slot} ${ratio.toFixed(2)}:1 < ${minContrast} (${theme.xterm[slot]})`);
     }
+  }
+
+  const dimRatio = contrastRatio(theme.xterm.brightBlack, background);
+  if (dimRatio < MIN_DIM_CONTRAST) {
+    notes.push(`提示色太暗 brightBlack ${dimRatio.toFixed(2)}:1 (${theme.xterm.brightBlack})`);
   }
 
   if (notes.length) {
     if (!exempt) failures += notes.length;
     console.log(
-      `${exempt ? "…" : "✗"} ${theme.name} (${theme.id})${exempt ? " —— 上游原版配色，仅提示" : ""}`,
+      `${exempt ? "…" : "✗"} ${theme.name ?? theme.id} (${theme.id})${exempt ? " —— 上游原版配色，仅提示" : ""}`,
     );
     notes.forEach((note) => console.log(`    ${note}`));
   } else {
-    console.log(`✓ ${theme.name}`);
+    console.log(`✓ ${theme.name ?? theme.id}`);
   }
 }
 

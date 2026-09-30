@@ -6,7 +6,13 @@ import { applyGlassStyle, normalizeGlassStyle } from "../utils/glassStyle";
 import { i18n } from "../i18n";
 import { createSerialQueue } from "../utils/serialQueue";
 import { useUiStore } from "./uiStore";
-import { DEFAULT_TERMINAL_THEME_ID, TERMINAL_FONTS, TERMINAL_FONT_SIZES } from "../config/terminalThemes";
+import {
+  TERMINAL_FONTS,
+  TERMINAL_FONT_SIZES,
+  normalizeTerminalAppearance,
+  normalizeTerminalMaterial,
+  normalizeTerminalThemeId,
+} from "../config/terminalThemes";
 
 const MONITOR_REFRESH_SECONDS_OPTIONS = [2, 5, 10, 30];
 const DEFAULT_MONITOR_REFRESH_SECONDS = 5;
@@ -30,7 +36,10 @@ export const useSettingsStore = defineStore("settings", {
       normalizeMonitorRefreshSeconds(state.settings?.monitorRefreshSeconds),
     sshKeepaliveSeconds: (state) =>
       normalizeSshKeepaliveSeconds(state.settings?.sshKeepaliveSeconds),
-    terminalTheme: (state) => state.settings?.terminalTheme ?? DEFAULT_TERMINAL_THEME_ID,
+    // 老存档里可能还是已下线的主题 id，读的时候折算成现在的家族
+    terminalTheme: (state) => normalizeTerminalThemeId(state.settings?.terminalTheme),
+    terminalAppearance: (state) => normalizeTerminalAppearance(state.settings?.terminalAppearance),
+    terminalMaterial: (state) => normalizeTerminalMaterial(state.settings?.terminalMaterial),
     terminalFontFamily: (state) =>
       normalizeTerminalFontFamily(state.settings?.terminalFontFamily),
     terminalFontSize: (state) => normalizeTerminalFontSize(state.settings?.terminalFontSize),
