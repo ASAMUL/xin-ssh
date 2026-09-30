@@ -34,11 +34,12 @@
      `rgb(var(--xin-*-rgb) / <alpha>)`：alpha 留在使用处（各处需要的浓度本来就不同，
      强行收进固定阶梯会改变现有观感），只把**基色**抽出来。
      深色模式于是变成「翻这几个基色 + 文本阶梯」，而不是逐条改几百个色值。
-     墨樱主题下 ink / shadow / neutral 都带一点紫调：纯冷灰配樱色会显脏。 */
+     ink / shadow / neutral 取 Apple 系统灰那种近中性、略偏冷的灰：曾经给它们带过紫调，
+     结果和桌面壁纸、玻璃叠加之后整屏发脏紫。樱色只留给强调，灰就老老实实做灰。 */
   --xin-fill-rgb: 255 255 255;
-  --xin-ink-rgb: 30 24 36;
-  --xin-shadow-rgb: 46 28 44;
-  --xin-neutral-rgb: 146 136 150;
+  --xin-ink-rgb: 28 28 32;
+  --xin-shadow-rgb: 16 16 24;
+  --xin-neutral-rgb: 142 142 147;
   --xin-accent-rgb: 201 58 114;
   --xin-success-rgb: 52 178 110;
   --xin-warning-rgb: 222 160 52;
@@ -47,13 +48,13 @@
   /* —— 文本灰阶：深 → 浅 ——
      文字/图标只走这 7 级。深色模式整条阶梯换一组值即可；
      新 UI 别再写死灰色，否则暗色下必然漏翻一处。 */
-  --xin-text: #1b1720;
-  --xin-text-strong: #221d28;
-  --xin-text-body: #3b3540;
-  --xin-text-secondary: #4f4854;
-  --xin-text-muted: #6e6672;
-  --xin-text-soft: #8f8793;
-  --xin-text-faint: #a79fab;
+  --xin-text: #1d1d1f;
+  --xin-text-strong: #111113;
+  --xin-text-body: #3a3a3c;
+  --xin-text-secondary: #48484c;
+  --xin-text-muted: #6e6e73;
+  --xin-text-soft: #8e8e93;
+  --xin-text-faint: #aeaeb2;
 
   /* —— 品牌与状态实色 —— */
   --xin-accent: #c93a72;
@@ -68,42 +69,34 @@
   --xin-danger-deep: #b3222e;
   --xin-danger-text: #8f1d27;
   --xin-warning-text: #85600f;
-  --xin-status-idle: #a39aa6;
+  --xin-status-idle: #a1a1a6;
   --xin-favorite: #eea12c;
 
   /* —— 墨面：主按钮、当前会话卡这类「压得住」的实底 ——
      墨樱的层次靠「浅纸面 + 少量墨块」拉开，墨块上的文字与图标走 on-ink 两档。 */
-  --xin-ink-surface: #1f1c24;
-  --xin-ink-surface-raised: #37323e;
-  --xin-on-ink: #fbf7fa;
-  --xin-on-ink-muted: rgb(251 247 250 / 0.62);
+  --xin-ink-surface: #1d1d1f;
+  --xin-ink-surface-raised: #3a3a3e;
+  --xin-on-ink: #f5f5f7;
+  --xin-on-ink-muted: rgb(245 245 247 / 0.62);
   --xin-on-ink-accent: #f4a8c5;
 
   /* —— 常用叠加的命名快捷方式（高频组合，避免每处重写 alpha）—— */
-  --xin-border-rgb: 140 124 140;
+  --xin-border-rgb: 128 128 136;
   --xin-accent-soft: rgb(var(--xin-accent-rgb) / 0.12);
   --xin-border: rgb(var(--xin-border-rgb) / 0.22);
   --xin-border-soft: rgb(var(--xin-border-rgb) / 0.16);
   --xin-border-strong: rgb(var(--xin-border-rgb) / 0.34);
 
-  /* —— 环境光 ——
-     液态玻璃要有东西可折射：窗口底铺四团光晕——樱粉 / 腮红 / 藕荷，外加顶部正中一团樱色，
-     正好垫在「连接 | 工作区」切换后面，让它边缘的透镜弯折看得出来。
-     浓度仍然压着——墨樱要的是「纸面透一点粉」，不是粉色背景。 */
-  --xin-ambient-a: rgb(240 150 184 / 0.24);
-  --xin-ambient-b: rgb(255 196 218 / 0.3);
-  --xin-ambient-c: rgb(196 176 226 / 0.2);
-  --xin-ambient-d: rgb(236 122 164 / 0.2);
-
   /* —— 液态玻璃表面 ——
-     深色模式下 fill 基色换成一层**比画布更亮**的墨紫（深色 UI 里"抬高"= 变亮），
-     而不是把白色反成黑：直接反色只会得到一块脏灰，玻璃感全靠高光和边缘交代。 */
-  --xin-glass: rgb(var(--xin-fill-rgb) / 0.55);
-  --xin-glass-strong: rgb(var(--xin-fill-rgb) / 0.76);
-  --xin-glass-muted: rgb(251 248 250 / 0.45);
+     深色模式下 fill 基色换成一层**比画布更亮**的深灰（深色 UI 里"抬高"= 变亮），
+     而不是把白色反成黑：直接反色只会得到一块脏灰，玻璃感全靠高光和边缘交代。
+     饱和度只提一点：窗口底下是桌面壁纸（Mica），提太狠壁纸的颜色会从面板里冒出来发艳。 */
+  --xin-glass: rgb(var(--xin-fill-rgb) / 0.6);
+  --xin-glass-strong: rgb(var(--xin-fill-rgb) / 0.78);
+  --xin-glass-muted: rgb(250 250 252 / 0.45);
   --xin-glass-border: rgb(var(--xin-fill-rgb) / 0.62);
-  --xin-glass-edge: rgb(var(--xin-ink-rgb) / 0.09);
-  --xin-glass-blur: blur(28px) saturate(1.55);
+  --xin-glass-edge: rgb(var(--xin-ink-rgb) / 0.08);
+  --xin-glass-blur: blur(30px) saturate(1.3);
   --xin-specular: inset 0 1px 0 rgb(255 255 255 / 0.68);
   --xin-specular-strong: inset 0 1px 0 rgb(255 255 255 / 0.92);
   --xin-surface: var(--xin-glass);
@@ -111,8 +104,8 @@
   --xin-surface-muted: var(--xin-glass-muted);
   /* 带语义的内嵌面：列表头、内联提示条、状态区块。深色模式最容易在这类
      「浅色调底」上翻车（淡粉淡绿直接变成刺眼白块），所以单独立令牌。 */
-  --xin-surface-raised: rgb(252 250 251 / 0.86);
-  --xin-surface-raised-soft: rgb(250 247 249 / 0.55);
+  --xin-surface-raised: rgb(250 250 252 / 0.86);
+  --xin-surface-raised-soft: rgb(248 248 250 / 0.55);
   --xin-surface-accent: rgb(253 238 244 / 0.82);
   --xin-surface-success: rgb(240 252 245 / 0.7);
   --xin-surface-danger: rgb(255 244 245 / 0.82);
@@ -130,15 +123,16 @@
   /* —— 系统图标底座 ——
      devicon 是彩色品牌标，其中苹果 / Tux 身体是纯黑，只有浅底能同时托住所有标；
      深色模式也保持瓷白底座（像 iOS 的 App 图标），不跟着变暗。 */
-  --xin-os-tile: #f6f3f6;
+  --xin-os-tile: #f5f5f7;
   --xin-os-tile-border: rgb(var(--xin-ink-rgb) / 0.06);
-  --xin-os-mono: #1b1720;
+  --xin-os-mono: #1d1d1f;
 
   /* —— 画布底色：窗口与首页的实底 ——
      Tauri 里 .native-glass 会把画布铺成半透明好透出系统 Mica，所以基色
-     也得留成通道形式，否则深色模式下那层窗底会继续发白。 */
-  --xin-canvas-rgb: 245 242 245;
-  --xin-canvas-raised-rgb: 251 249 251;
+     也得留成通道形式，否则深色模式下那层窗底会继续发白。
+     取 Apple 分组背景那种近白冷灰，不带粉：玻璃要折射的是桌面壁纸，不是我们自己涂的颜色。 */
+  --xin-canvas-rgb: 242 242 246;
+  --xin-canvas-raised-rgb: 250 250 252;
   --xin-canvas: rgb(var(--xin-canvas-rgb));
   --xin-canvas-raised: rgb(var(--xin-canvas-raised-rgb));
   /* Tauri 里压在系统 Mica 上的那层画布有多不透明：越低，桌面壁纸透出来越多。
@@ -177,33 +171,33 @@
 
    三条深色玻璃的设计原则（都不是「把浅色反过来」）：
    1. 抬高 = 变亮。浅色下面板靠白色叠加从画布里"浮"出来；深色下同理，
-      fill 基色取一层比画布更亮的墨紫，0.55 alpha 压上去正好是抬起一级。
+      fill 基色取一层比画布更亮的中性深灰，0.55 alpha 压上去正好是抬起一级。
    2. 边缘承担全部结构。深色下投影几乎不可见（黑压黑），所以 ink 基色翻成
-      偏粉的亮白，那些 0.05~0.14 的发丝描边在暗底上反而更要紧。
+      略偏冷的亮白，那些 0.05~0.14 的发丝描边在暗底上反而更要紧。
    3. 高光必须留白。--xin-specular 不跟 fill 走（跟了就变成一条紫线），
       固定用白色、压到 0.08——这一条亮边是"玻璃"和"灰塑料"的分界。
    ———————————————————————————————————————————————————————————— */
 .dark {
   --ui-primary: var(--ui-color-primary-400);
 
-  --xin-fill-rgb: 56 48 62;
-  --xin-ink-rgb: 236 222 236;
+  --xin-fill-rgb: 58 58 64;
+  --xin-ink-rgb: 235 235 245;
   --xin-shadow-rgb: 0 0 0;
-  --xin-neutral-rgb: 180 166 184;
+  --xin-neutral-rgb: 152 152 159;
   --xin-accent-rgb: 236 122 164;
   --xin-success-rgb: 72 204 138;
   --xin-warning-rgb: 234 188 96;
   --xin-danger-rgb: 255 112 118;
-  --xin-border-rgb: 200 180 204;
+  --xin-border-rgb: 190 190 200;
 
   /* 阶梯的**对比语义**不变，只是明度整条反过来：text 最高对比，faint 最低 */
-  --xin-text: #f4eef4;
+  --xin-text: #f5f5f7;
   --xin-text-strong: #ffffff;
-  --xin-text-body: #d9d0db;
-  --xin-text-secondary: #bdb3c0;
-  --xin-text-muted: #9d93a1;
-  --xin-text-soft: #7f7584;
-  --xin-text-faint: #685f6d;
+  --xin-text-body: #d1d1d6;
+  --xin-text-secondary: #b4b4ba;
+  --xin-text-muted: #8e8e93;
+  --xin-text-soft: #76767c;
+  --xin-text-faint: #636366;
 
   /* 「更强调」在浅色下是更深，在深色下是更亮 */
   --xin-accent: #ec7aa4;
@@ -218,21 +212,16 @@
   --xin-danger-deep: #ffa5a9;
   --xin-danger-text: #ffb4b8;
   --xin-warning-text: #ebc98e;
-  --xin-status-idle: #6f6674;
+  --xin-status-idle: #636366;
   --xin-favorite: #f2b54a;
 
   /* 深色画布本身就是墨，墨面得再抬一级，否则会话卡和画布糊成一块 */
-  --xin-ink-surface: #2a2530;
-  --xin-ink-surface-raised: #3a3441;
+  --xin-ink-surface: #2c2c2e;
+  --xin-ink-surface-raised: #3a3a3e;
 
-  --xin-ambient-a: rgb(236 72 140 / 0.18);
-  --xin-ambient-b: rgb(170 90 200 / 0.14);
-  --xin-ambient-c: rgb(244 114 170 / 0.12);
-  --xin-ambient-d: rgb(236 72 140 / 0.2);
-
-  --xin-glass-muted: rgb(30 26 36 / 0.5);
-  /* 玻璃的亮边：浅色下是白 0.62，深色下若跟着 fill 走会变成紫灰，必须单独给 */
-  --xin-glass-border: rgb(240 214 232 / 0.12);
+  --xin-glass-muted: rgb(28 28 30 / 0.5);
+  /* 玻璃的亮边：浅色下是白 0.62，深色下若跟着 fill 走会变成一条灰线，必须单独给 */
+  --xin-glass-border: rgb(255 255 255 / 0.1);
   --xin-glass-edge: rgb(var(--xin-ink-rgb) / 0.14);
   --xin-specular: inset 0 1px 0 rgb(255 255 255 / 0.08);
   --xin-specular-strong: inset 0 1px 0 rgb(255 255 255 / 0.12);
@@ -244,14 +233,14 @@
   --xin-card-border: rgb(var(--xin-ink-rgb) / 0.09);
   --xin-card-shadow: 0 10px 28px -14px rgb(var(--xin-shadow-rgb) / 0.6);
 
-  --xin-os-tile: #ebe5ee;
+  --xin-os-tile: #e5e5ea;
   --xin-os-tile-border: rgb(255 255 255 / 0.1);
 
-  --xin-canvas-rgb: 16 14 20;
-  --xin-canvas-raised-rgb: 24 21 29;
+  --xin-canvas-rgb: 18 18 20;
+  --xin-canvas-raised-rgb: 28 28 30;
 
-  --xin-surface-raised: rgb(48 42 54 / 0.6);
-  --xin-surface-raised-soft: rgb(48 42 54 / 0.38);
+  --xin-surface-raised: rgb(44 44 48 / 0.6);
+  --xin-surface-raised-soft: rgb(44 44 48 / 0.38);
   --xin-surface-accent: rgb(82 34 58 / 0.6);
   --xin-surface-success: rgb(22 52 38 / 0.6);
   --xin-surface-danger: rgb(70 26 32 / 0.62);
@@ -321,13 +310,10 @@ button {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* soft ambient color field so glass panels have something to refract */
-  background:
-    radial-gradient(520px 150px at 50% -40px, var(--xin-ambient-d), transparent 72%),
-    radial-gradient(1100px 720px at 6% -12%, var(--xin-ambient-a), transparent 62%),
-    radial-gradient(920px 640px at 102% -4%, var(--xin-ambient-b), transparent 58%),
-    radial-gradient(1100px 860px at 50% 118%, var(--xin-ambient-c), transparent 62%),
-    linear-gradient(180deg, var(--xin-canvas-raised) 0%, var(--xin-canvas) 100%);
+  /* 窗口底只是一层干净的近白（深色为近黑），不再铺装饰性光晕：
+     之前垫的樱粉 / 藕荷光团和壁纸、玻璃叠在一起发脏发怪；Apple 的玻璃也从不靠画出来的彩色背景撑，
+     它折射的是真实内容——在 Tauri 里就是透上来的桌面壁纸。 */
+  background: linear-gradient(180deg, var(--xin-canvas-raised) 0%, var(--xin-canvas) 100%);
 }
 
 /* Inside Tauri the window itself is transparent with a native Mica/Acrylic
@@ -340,10 +326,6 @@ button {
 
 .native-glass .desktop-window {
   background:
-    radial-gradient(520px 150px at 50% -40px, var(--xin-ambient-d), transparent 72%),
-    radial-gradient(1100px 720px at 6% -12%, var(--xin-ambient-a), transparent 62%),
-    radial-gradient(920px 640px at 102% -4%, var(--xin-ambient-b), transparent 58%),
-    radial-gradient(1100px 860px at 50% 118%, var(--xin-ambient-c), transparent 62%),
     linear-gradient(
       180deg,
       rgb(var(--xin-canvas-raised-rgb) / var(--xin-window-veil-top)) 0%,

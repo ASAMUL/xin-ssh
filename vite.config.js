@@ -37,10 +37,11 @@ export default defineConfig(async () => ({
   ui({
     ui: {
       colors: {
-        // 墨樱主题：sakura 色阶定义在 main.css 的 @theme；mauve 是带紫调的中性灰，和墨色同源
+        // 墨樱主题：sakura 色阶定义在 main.css 的 @theme。中性灰用 zinc（接近 Apple 的 systemGray，略偏冷），
+        // 不用带紫调的 mauve——Liquid Glass 的颜色应该来自玻璃背后的内容，灰阶自己带色会和桌面壁纸混成脏紫
         primary: "sakura",
         success: "green",
-        neutral: "mauve",
+        neutral: "zinc",
       },
       // 所有浮在内容上的弹出层统一换成液态玻璃材质（类定义在 assets/css/liquid-glass.css，
       // 未分层规则会压过这些 slot 默认的 bg-default / ring / shadow 工具类）

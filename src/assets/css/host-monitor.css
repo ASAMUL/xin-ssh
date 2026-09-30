@@ -65,9 +65,7 @@
   padding: 12px;
   border: 1px solid var(--xin-card-border);
   border-radius: var(--xin-radius-lg);
-  background:
-    linear-gradient(135deg, rgb(var(--xin-accent-rgb) / 0.08), transparent 70%),
-    var(--xin-card);
+  background: var(--xin-card);
   box-shadow: var(--xin-specular);
 }
 
