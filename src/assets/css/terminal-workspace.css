@@ -11,10 +11,12 @@
   /* .liquid-rim 的高光跟终端主题走：深色主题收着，浅色主题亮白 */
   --lg-edge-light: var(--term-highlight, rgb(255 255 255 / 0.24));
   --lg-edge-soft: rgb(255 255 255 / 0.06);
+  /* 浮动工具栏占掉的顶部高度：外观 / 片段侧板、查找条都从这条线往下放，免得被胶囊压住 */
+  --terminal-chrome-offset: 54px;
   min-height: 0;
   position: relative;
   display: grid;
-  grid-template-rows: 50px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--term-panel-border, rgba(255, 255, 255, 0.12));
   border-radius: var(--xin-radius-lg);
@@ -29,58 +31,21 @@
     box-shadow 220ms ease;
 }
 
-/* 终端头部：左边是连接目标（user@host:port）+ 状态点，右边三颗玻璃胶囊。
-   开 inline-size 容器查询，窄的时候按钮文字收起只留图标，工具栏不换行不挤爆。 */
+/* 浮动工具栏：一条铺满面板宽度的透明层，胶囊靠右。它本身不接指针，胶囊之间和左边的空白
+   照样能选中、滚动底下的终端；铺满宽度是为了保留 inline-size 容器查询——
+   窄的时候按钮文字收起只留图标（绝对定位又收缩包裹的元素做不了尺寸容器，宽度会被算成 0）。
+   右边留 30px：xterm 的滚动条在它 16px 内边距里侧，胶囊得停在滚动条左边。 */
 .terminal-panel-toolbar {
+  position: absolute;
+  inset: 10px 0 auto;
+  z-index: 4;
   min-width: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 12px 0 18px;
+  justify-content: flex-end;
+  padding: 0 30px 0 16px;
   color: var(--term-text, #e6ebff);
-  border-bottom: 1px solid var(--term-divider, rgba(255, 255, 255, 0.08));
-  background: var(--term-toolbar-bg, rgba(255, 255, 255, 0.04));
+  pointer-events: none;
   container-type: inline-size;
-}
-
-.terminal-title-block {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.terminal-endpoint {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 13.5px;
-  font-weight: 640;
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.terminal-live-dot {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: #8b98a8;
-}
-
-.terminal-live-dot.connected {
-  background: var(--xin-success);
-  box-shadow: 0 0 0 5px rgba(53, 184, 113, 0.14), 0 0 16px rgba(53, 184, 113, 0.45);
-}
-
-.terminal-live-dot.connecting {
-  background: var(--xin-warning);
-  box-shadow: 0 0 0 5px rgba(215, 166, 65, 0.12), 0 0 16px rgba(215, 166, 65, 0.4);
-}
-
-.terminal-live-dot.error {
-  background: #ef4444;
 }
 
 .terminal-window-actions {
@@ -88,18 +53,25 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  pointer-events: auto;
 }
 
 /* 工具按钮的玻璃胶囊：材质变量全部改用终端主题色，于是它在 Dracula 上是暗玻璃、
-   在浅色主题上是亮玻璃，底部焦散取主题强调色而不是固定樱色——终端画布是内容层，不跟品牌色走。 */
+   在浅色主题上是亮玻璃——终端画布是内容层，不跟品牌色走。
+   胶囊直接压在终端文字上，底色取面板色的七成：底下的字被压淡、再被滤镜模糊，按钮上的字才读得清 */
 .terminal-action-capsule {
-  --lg-fill: var(--term-soft, rgba(230, 235, 255, 0.08));
+  --lg-fill: color-mix(in srgb, var(--term-panel-bg, rgb(21 23 40)) 72%, transparent);
+  --lg-fill-hover: color-mix(in srgb, var(--term-panel-bg, rgb(21 23 40)) 82%, transparent);
   --lg-edge-light: var(--term-highlight, rgb(255 255 255 / 0.24));
   --lg-edge-soft: rgb(255 255 255 / 0.05);
   --lg-edge-ink: rgb(0 0 0 / 0.14);
   --lg-inner-glow: rgb(255 255 255 / 0.08);
-  --lg-caustic: color-mix(in srgb, var(--term-accent, #8ea8ff) 36%, transparent);
-  --lg-shadow: 0 6px 16px -10px rgb(0 0 0 / 0.5);
+  --lg-shadow:
+    0 1px 2px rgb(0 0 0 / 0.2),
+    0 8px 22px -10px rgb(0 0 0 / 0.55);
+  /* 终端大多是暗底，白色高光带只留一层薄光 */
+  --lg-specular-strength: 0.4;
+  --lg-glow-strength: 0.34;
   display: flex;
   align-items: center;
   gap: 2px;

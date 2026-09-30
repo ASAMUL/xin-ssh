@@ -54,10 +54,6 @@ const backgroundSelections = new Map();
 const isSearchOpen = computed(() => activeTerminal.value?.isSearchOpen ?? false);
 
 const activeSession = computed(() => sessionStore.activeSession);
-const terminalEndpoint = computed(() => {
-  const session = activeSession.value;
-  return session ? `${session.username}@${session.host}:${session.port}` : "";
-});
 // 沉浸时文件区整个不渲染，splitpanes 才会把高度全部让给终端
 const showFilePane = computed(() => settingsStore.showFileExplorer && !uiStore.isWorkspaceImmersive);
 const showMonitorPane = computed(() => settingsStore.showMonitorSidebar && !uiStore.isWorkspaceImmersive);
@@ -83,8 +79,6 @@ const themeStyleVars = computed(() => {
   return {
     "--term-panel-bg": ui.panelBg,
     "--term-panel-border": ui.panelBorder,
-    "--term-toolbar-bg": ui.toolbarBg,
-    "--term-divider": ui.divider,
     "--term-screen-bg": ui.screenBg,
     "--term-screen-overlay": ui.screenOverlay ?? "none",
     "--term-text-glow": getThemeTypography(displayTheme.value).glow ?? "none",
@@ -140,12 +134,6 @@ const hasCredentialInput = computed(() => usesSavedCredentials(activeSession.val
 const authenticationTitle = computed(() => t(hasCredentialInput.value
   ? "terminal.authTitle" : isAgentAuth.value ? "profile.agentAuth" : "profile.interactiveAuth"));
 const needsCredentials = computed(() => activeSession.value?.status === "authRequired");
-const terminalStatusText = computed(() => {
-  const session = activeSession.value;
-  if (!session) return "";
-
-  return t(`monitor.status.${session.status}`);
-});
 const saveCredentialLabel = computed(() =>
   t(isPasswordAuth.value ? "terminal.savePassword" : "terminal.savePassphrase"),
 );
@@ -556,16 +544,19 @@ async function savePendingCredential() {
       min-size="26"
     >
       <section class="terminal-panel-top liquid-rim" :style="themeStyleVars">
+      <!-- 工具栏不占行，三组玻璃胶囊浮在终端画面右上角：布局（左栏 / 下方文件 / 沉浸）· 工具（片段 / 主题）· 会话（搜索 / 清空 / 重连）。
+           终端输出从胶囊底下滚过，边缘的折射才看得见；代价是右上角一小块文字会被压住（用户认可）。
+           连接目标（user@host:port）挪到了底部状态栏——放在左上角会正好压住每行开头。
+           窄窗口下文字收起只留图标（容器查询，见 terminal-workspace.css） -->
       <header class="terminal-panel-toolbar">
-        <div class="terminal-title-block" :title="terminalStatusText">
-          <span class="terminal-live-dot" :class="activeSession?.status"></span>
-          <strong class="terminal-endpoint">{{ terminalEndpoint }}</strong>
-        </div>
-
-        <!-- 三组玻璃胶囊：布局（左栏 / 下方文件 / 沉浸）· 工具（片段 / 主题）· 会话（搜索 / 清空 / 重连）。
-             窄窗口下文字收起只留图标（容器查询，见 terminal-workspace.css） -->
         <div class="terminal-window-actions">
-          <div v-for="group in toolbarGroups" :key="group.id" class="terminal-action-capsule liquid-glass">
+          <!-- 终端输出刷新很频繁，色散要多做两遍位移，这里关掉；模糊加重一点，底下的字才不会和按钮文字打架 -->
+          <div
+            v-for="group in toolbarGroups"
+            :key="group.id"
+            v-liquid-glass="{ scale: 14, blur: 5, dispersion: 0 }"
+            class="terminal-action-capsule liquid-glass"
+          >
             <UButton
               v-for="action in group.actions"
               :key="action.id"

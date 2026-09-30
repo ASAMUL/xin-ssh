@@ -11,6 +11,8 @@
   border-radius: 14px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  /* 状态栏是一整条读数，鼠标划过时跟着走的柔光只会分散注意力 */
+  --lg-glow-strength: 0;
 }
 
 .status-item {
@@ -68,6 +70,22 @@
 
 .status-connection.error i {
   background: var(--xin-danger);
+}
+
+/* 主机地址可能很长（IPv6、长域名），只让它自己省略，别把右侧的终端尺寸挤出去 */
+.status-endpoint {
+  min-width: 0;
+  max-width: 360px;
+  flex: 0 1 auto;
+  color: var(--xin-text);
+  font-weight: 600;
+}
+
+/* 省略号只对块内文字生效，flex 容器自己的文本不行，所以地址单独包一层 */
+.status-endpoint > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-latency.good {

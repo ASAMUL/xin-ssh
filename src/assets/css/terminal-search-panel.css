@@ -2,9 +2,10 @@
    与编辑器查找面板同一套视觉：应用玻璃 chrome 浮在终端画布上，
    控件全部交给 Nuxt UI，这里只管容器与布局。 */
 
+/* 终端右上角是浮动工具栏的胶囊，查找条放到它下沿 */
 .terminal-search-panel {
   position: absolute;
-  top: 12px;
+  top: var(--terminal-chrome-offset, 12px);
   right: 18px;
   z-index: 20;
   display: flex;

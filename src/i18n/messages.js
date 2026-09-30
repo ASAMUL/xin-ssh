@@ -362,6 +362,7 @@ export const messages = {
       latencyHint: "SSH 往返延迟，每 10 秒测一次",
       transfers: "传输",
       terminalSize: "终端尺寸（列 × 行）",
+      endpoint: "连接目标",
     },
     files: {
       fileTab: "文件",
@@ -1194,6 +1195,7 @@ export const messages = {
       latencyHint: "SSH round-trip time, measured every 10 seconds",
       transfers: "Transfers",
       terminalSize: "Terminal size (columns × rows)",
+      endpoint: "Connected host",
     },
     files: {
       fileTab: "Files",

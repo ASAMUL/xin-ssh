@@ -12,6 +12,10 @@ useSessionLatency(sessionStore);
 
 const session = computed(() => sessionStore.activeSession);
 const statusLabel = computed(() => (session.value ? t(`monitor.status.${session.value.status}`) : ""));
+// 连接目标原来在终端头部左边；头部改成浮在画面上的胶囊后挪到这里，免得压住终端每行的开头
+const endpoint = computed(() => (session.value
+  ? `${session.value.username}@${session.value.host}:${session.value.port}`
+  : ""));
 const latencyLabel = computed(() => {
   const latency = session.value?.latencyMs;
   return Number.isFinite(latency) ? `${latency} ms` : "--";
@@ -34,6 +38,9 @@ const terminalSize = computed(() => (session.value
     <span class="status-item status-connection" :class="session?.status" :title="statusLabel">
       <i></i>
       <span>SSH</span>
+    </span>
+    <span v-if="endpoint" class="status-item status-endpoint" :title="t('statusBar.endpoint')">
+      <span>{{ endpoint }}</span>
     </span>
     <span class="status-item">UTF-8</span>
     <span class="status-item" :title="t('statusBar.latencyHint')">

@@ -2,19 +2,20 @@
    与外观抽屉同一形态：从终端面板右缘滑入，终端保持可交互；
    容器用应用玻璃令牌，控件交给 Nuxt UI。 */
 
+/* 与外观侧板一样：从终端浮动胶囊下沿开始，悬浮在面板里 */
 .snippet-panel {
   position: absolute;
-  top: 50px;
-  right: 0;
-  bottom: 0;
+  top: var(--terminal-chrome-offset, 50px);
+  right: 10px;
+  bottom: 10px;
   z-index: 6;
   width: 312px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
   color: var(--xin-text);
-  border-left: 1px solid var(--xin-glass-border);
-  border-radius: 0 0 var(--xin-radius-lg) 0;
+  border: 1px solid var(--xin-glass-border);
+  border-radius: var(--xin-radius-lg);
   background: var(--xin-glass-strong);
   box-shadow: -20px 0 48px rgb(var(--xin-shadow-rgb) / 0.24);
   backdrop-filter: var(--xin-glass-blur);
