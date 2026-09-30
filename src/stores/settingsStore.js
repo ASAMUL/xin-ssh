@@ -40,6 +40,7 @@ export const useSettingsStore = defineStore("settings", {
     terminalTheme: (state) => normalizeTerminalThemeId(state.settings?.terminalTheme),
     terminalAppearance: (state) => normalizeTerminalAppearance(state.settings?.terminalAppearance),
     terminalMaterial: (state) => normalizeTerminalMaterial(state.settings?.terminalMaterial),
+    commandSuggestions: (state) => state.settings?.commandSuggestions ?? true,
     terminalFontFamily: (state) =>
       normalizeTerminalFontFamily(state.settings?.terminalFontFamily),
     terminalFontSize: (state) => normalizeTerminalFontSize(state.settings?.terminalFontSize),
@@ -164,6 +165,9 @@ export const useSettingsStore = defineStore("settings", {
     setAppearanceMode(appearanceMode) {
       const mode = normalizeAppearanceMode(appearanceMode);
       return this.applySettingsPatch({ appearanceMode: mode });
+    },
+    setCommandSuggestions(commandSuggestions) {
+      return this.applySettingsPatch({ commandSuggestions: Boolean(commandSuggestions) });
     },
     setGlassStyle(glassStyle) {
       return this.applySettingsPatch({ glassStyle: normalizeGlassStyle(glassStyle) });

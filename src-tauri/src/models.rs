@@ -62,6 +62,9 @@ pub struct WorkspaceSettings {
     // 终端材质：solid（实底）| clear（通透，透出应用壁纸）
     #[serde(default = "default_terminal_material")]
     pub terminal_material: String,
+    // 命令联想：按本机记下的命令历史给灰字提示，历史只存在本机、不进工作区
+    #[serde(default = "default_true")]
+    pub command_suggestions: bool,
     #[serde(default = "default_terminal_font_size")]
     pub terminal_font_size: u16,
     // 工作区面板布局：显隐开关 + splitpanes 百分比，serde default 兼容旧 settings.json
@@ -115,6 +118,7 @@ impl Default for WorkspaceSettings {
             terminal_theme: default_terminal_theme(),
             terminal_appearance: default_terminal_appearance(),
             terminal_material: default_terminal_material(),
+            command_suggestions: true,
             terminal_font_size: default_terminal_font_size(),
             show_monitor_sidebar: true,
             show_file_explorer: true,

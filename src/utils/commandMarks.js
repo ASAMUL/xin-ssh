@@ -3,8 +3,10 @@
 // 在这两个时刻给那一行打 xterm 标记，就能做到：
 //   · 提示符退后、命令突出：user@host 和分隔符调暗，路径用蓝色，root 用品红提醒；
 //   · 命令那一行右侧淡淡地标出回车时间，跑了 3 秒以上再带上耗时；
-//   · Ctrl+↑ / Ctrl+↓ 在执行过的命令之间跳转。
+//   · Ctrl+↑ / Ctrl+↓ 在执行过的命令之间跳转；
+//   · 把执行过的命令交给 onCommand（命令联想的历史就从这里来）。
 // 思路同 Windows Terminal 的 autoMarkPrompts（回车即打标记，不需要 shell 集成）。
+import { mixHex } from "./hexColor";
 import { parseShellPrompt, readTerminalRow } from "./shellPrompt";
 
 // Powerlevel10k 默认也是 3 秒：短于这个的命令，耗时只是噪音
@@ -14,7 +16,7 @@ const INSPECT_DELAY_MS = 60;
 // 右侧标签和命令文字之间至少留这么多格，挤不下就不显示
 const LABEL_GAP_CELLS = 3;
 
-export function createCommandMarks(terminal) {
+export function createCommandMarks(terminal, { onCommand } = {}) {
   const marks = [];
   let palette = null;
   // 回车后在等下一个提示符出现、好算耗时的那条
@@ -109,12 +111,16 @@ export function createCommandMarks(terminal) {
 
     dropOverwrittenMarks();
     const line = cursorLine();
-    if (pendingLabel && line > pendingLabel.marker.line) {
+    // 回车的回显（换行）回来以后光标才会落到一个「不是折行续行」的新行上；
+    // 长命令折行时光标早就在续行上了，只看行号会在最后几个字符回显之前就读走
+    if (pendingLabel && line > pendingLabel.marker.line && !buffer().getLine(line)?.isWrapped) {
       const mark = pendingLabel;
       pendingLabel = null;
       // 回显落定后的整行才是这条命令的「指纹」，清屏后同一行被改写就能认出来
       mark.signature = readTerminalRow(buffer(), mark.marker.line)?.text.trimEnd() ?? mark.signature;
       paintLabel(mark);
+      const command = mark.prompt && readCommand(mark);
+      if (command) onCommand?.(command);
     }
     detectPrompt(line);
   }
@@ -138,6 +144,18 @@ export function createCommandMarks(terminal) {
       if (running.duration >= DURATION_THRESHOLD_MS) paintLabel(running);
       running = null;
     }
+  }
+
+  // 命令可能折成好几行：把这组折行拼回一整行，再去掉前面的提示符
+  function readCommand(mark) {
+    let text = "";
+    let line = mark.marker.line;
+    do {
+      text += readTerminalRow(buffer(), line)?.text ?? "";
+      line += 1;
+    } while (buffer().getLine(line)?.isWrapped);
+    // 只去行尾：开头的空格有含义（bash 约定空格开头的命令不进历史），留给调用方判断
+    return text.slice(mark.prompt.end + 1).trimEnd();
   }
 
   // clear / Ctrl+L 是原地擦屏，行还在、标记也还在，新内容写上来会被旧颜色染到。
@@ -292,15 +310,4 @@ function formatDuration(ms) {
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-}
-
-// xterm 的装饰颜色只认 #RRGGBB，调暗只能在这里先混好，不能交给 CSS 的 color-mix
-function mixHex(foreground, background, weight) {
-  const channels = (hex) => [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
-  const front = channels(foreground);
-  const back = channels(background);
-  return `#${front
-    .map((value, index) => Math.round(value * weight + back[index] * (1 - weight)))
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("")}`;
 }

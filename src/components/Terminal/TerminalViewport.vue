@@ -10,8 +10,12 @@ import "@xterm/xterm/css/xterm.css";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import TerminalSearchPanel from "./TerminalSearchPanel.vue";
 import { buildXtermTheme } from "../../config/terminalThemes";
+import { loadCommandHistory, recordCommand, suggestCommand } from "../../services/commandHistory";
 import { createCommandMarks } from "../../utils/commandMarks";
+import { createCommandSuggest } from "../../utils/commandSuggest";
 import { useSessionStore } from "../../stores/sessionStore";
+import { useSettingsStore } from "../../stores/settingsStore";
+import { useSnippetStore } from "../../stores/snippetStore";
 import { useUiStore } from "../../stores/uiStore";
 
 const props = defineProps({
@@ -26,6 +30,8 @@ const props = defineProps({
 });
 
 const sessionStore = useSessionStore();
+const settingsStore = useSettingsStore();
+const snippetStore = useSnippetStore();
 const uiStore = useUiStore();
 const session = computed(() => sessionStore.findSession(props.sessionId));
 // 后台终端仍需向原会话回复光标/设备查询；不能因不可见而关闭整个输入通道。
@@ -35,6 +41,10 @@ const terminalMount = ref(null);
 const searchAddon = shallowRef(null);
 const searchPanel = ref(null);
 const isSearchOpen = ref(false);
+// 片段也是联想的候选：新服务器上什么都没敲过时先由它们顶上；多行脚本没法补进一行里，排除
+const snippetCommands = computed(() => snippetStore.activeSnippets
+  .map((snippet) => snippet.command)
+  .filter((command) => command && !command.includes("\n")));
 let terminal = null;
 let fitAddon = null;
 let webglAddon = null;
@@ -42,6 +52,7 @@ let webglContextListener = null;
 let webglUnavailable = false;
 let resizeObserver = null;
 let commandMarks = null;
+let commandSuggest = null;
 let detachSink = null;
 let layoutFrame = null;
 let disposed = false;
@@ -70,13 +81,21 @@ onMounted(() => {
   terminal.unicode.activeVersion = "11";
   terminal.loadAddon(new WebLinksAddon(openTerminalLink));
   terminal.open(terminalMount.value);
-  commandMarks = createCommandMarks(terminal);
+  commandMarks = createCommandMarks(terminal, { onCommand: rememberCommand });
   commandMarks.setTheme(props.theme);
+  commandSuggest = createCommandSuggest(terminal, {
+    suggest: (input) => suggestCommand(session.value?.profileId ?? null, input, snippetCommands.value),
+  });
+  commandSuggest.setTheme(props.theme);
+  commandSuggest.setEnabled(settingsStore.commandSuggestions);
+  loadCommandHistory();
+  if (settingsStore.commandSuggestions) ensureSnippetsLoaded();
   terminal.attachCustomKeyEventHandler(handleTerminalKey);
   listeners.push(
     terminal.onData((data) => {
       if (canSendData.value) {
         commandMarks.handleInput(data);
+        commandSuggest.handleInput(data);
         sessionStore.sendSessionTerminalInput(props.sessionId, data).catch((error) => uiStore.setError(error));
       }
     }),
@@ -101,9 +120,14 @@ onBeforeUnmount(() => {
   listeners.forEach((listener) => listener.dispose());
   releaseWebgl();
   commandMarks?.dispose();
+  commandSuggest?.dispose();
   terminal?.dispose();
 });
 
+watch(() => settingsStore.commandSuggestions, (enabled) => {
+  commandSuggest?.setEnabled(enabled);
+  if (enabled) ensureSnippetsLoaded();
+});
 watch(canSendData, (enabled) => {
   if (!terminal) return;
   terminal.options.disableStdin = !enabled;
@@ -141,6 +165,7 @@ function updateAppearance() {
   if (!terminal || !props.active || disposed) return;
   terminal.options.theme = buildXtermTheme(props.theme, props.material);
   commandMarks.setTheme(props.theme);
+  commandSuggest.setTheme(props.theme);
   terminal.options.fontFamily = props.fontFamily;
   terminal.options.fontSize = props.fontSize;
   scheduleLayout();
@@ -185,6 +210,7 @@ function focus() {
 
 function handleTerminalKey(event) {
   if (!props.active) return false;
+  if (event.type === "keydown" && acceptSuggestion(event)) return false;
   if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) return true;
   const key = event.key.toLowerCase();
   // Ctrl+↑ / Ctrl+↓ 在执行过的命令之间跳；vim 这类全屏程序里不拦，原样交给它
@@ -205,6 +231,26 @@ function handleTerminalKey(event) {
   }
   // 保留浏览器的原生 paste 事件，交给 xterm 处理 bracketed paste。
   return key !== "v";
+}
+
+// → / End 采纳联想：补上的那截走 terminal.input，和用户亲手键入走同一条路发给服务器
+function acceptSuggestion(event) {
+  const plain = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+  if (!plain || (event.key !== "ArrowRight" && event.key !== "End")) return false;
+  const suffix = commandSuggest.accept();
+  if (!suffix) return false;
+  event.preventDefault();
+  terminal.input(suffix);
+  return true;
+}
+
+// 关掉联想时也不记历史：用户关掉它，多半就是不希望本机留下命令记录
+function rememberCommand(command) {
+  if (settingsStore.commandSuggestions) recordCommand(session.value?.profileId ?? null, command);
+}
+
+function ensureSnippetsLoaded() {
+  if (!snippetStore.loaded) snippetStore.loadSnippets();
 }
 
 async function copySelection() {

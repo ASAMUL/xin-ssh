@@ -43,3 +43,14 @@
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* 命令联想的灰字（commandSuggest.js 套在 xterm 装饰元素里的一层）。每个字符一个格子，
+   列数由脚本按输入区宽度设置；同样不接指针，免得挡住点击和选区。 */
+.terminal-xterm :deep(.terminal-command-ghost) {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  align-items: center;
+  white-space: pre;
+  pointer-events: none;
+}

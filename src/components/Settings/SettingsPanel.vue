@@ -1,14 +1,20 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useToast } from "@nuxt/ui/composables";
+import { clearCommandHistory } from "../../services/commandHistory";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore, SSH_KEEPALIVE_SECONDS_OPTIONS } from "../../stores/settingsStore";
+import { useUiStore } from "../../stores/uiStore";
 import WallpaperSetting from "./WallpaperSetting.vue";
 
 const emit = defineEmits(["close"]);
 const { t } = useI18n();
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
+const uiStore = useUiStore();
+const toast = useToast();
+const isClearingHistory = ref(false);
 
 const locale = computed({
   get: () => settingsStore.locale,
@@ -41,6 +47,23 @@ const glassStyleItems = computed(() => [
   { value: "clear", label: t("settings.glassClear"), icon: "i-lucide-droplet" },
   { value: "tinted", label: t("settings.glassTinted"), icon: "i-lucide-contrast" },
 ]);
+
+const commandSuggestions = computed({
+  get: () => settingsStore.commandSuggestions,
+  set: (value) => settingsStore.setCommandSuggestions(value),
+});
+
+async function clearHistory() {
+  isClearingHistory.value = true;
+  try {
+    await clearCommandHistory();
+    toast.add({ title: t("settings.commandHistoryCleared"), color: "success", icon: "i-lucide-check" });
+  } catch (error) {
+    uiStore.setError(error);
+  } finally {
+    isClearingHistory.value = false;
+  }
+}
 
 const sshKeepaliveSeconds = computed({
   get: () => settingsStore.sshKeepaliveSeconds,
@@ -123,6 +146,25 @@ const keepaliveItems = computed(() =>
             class="settings-locale"
             :items="keepaliveItems"
           />
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <strong>{{ t("settings.commandSuggestions") }}</strong>
+            <small>{{ t("settings.commandSuggestionsHint") }}</small>
+          </div>
+          <div class="settings-actions">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              icon="i-lucide-eraser"
+              :label="t('settings.clearCommandHistory')"
+              :loading="isClearingHistory"
+              @click="clearHistory"
+            />
+            <USwitch v-model="commandSuggestions" :aria-label="t('settings.commandSuggestions')" />
+          </div>
         </div>
 
         <div class="settings-row">
