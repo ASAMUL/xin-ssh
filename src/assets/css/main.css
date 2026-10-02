@@ -6,6 +6,7 @@
 @import "./form-list.css";
 @import "./quick-connect.css";
 @import "./liquid-glass.css";
+@import "./scrollbars.css";
 
 /* —— 墨樱 / Ink & Rose 品牌色阶 ——
    Tailwind 自带的 rose/pink 偏红偏艳，压在墨色上发廉价；这组是降了饱和、

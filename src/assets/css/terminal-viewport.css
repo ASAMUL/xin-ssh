@@ -25,8 +25,22 @@
   overflow-y: hidden;
 }
 
+/* xterm 6 的滚动条是自绘的 14px 滑块（宽度取自 overviewRuler，不能单独调），比应用里其他滚动条粗一圈。
+   和 scrollbars.css 一样用透明边框收细：能点中的还是 14px，看得见的只剩中间 4px，指上去变 6px。
+   颜色仍由终端主题的 scrollbarSlider* 决定（terminalThemes.js），显隐由 xterm 自己控制。 */
 .terminal-xterm :deep(.xterm-scrollable-element > .scrollbar > .slider) {
+  box-sizing: border-box;
+  border: 5px solid transparent;
   border-radius: 999px;
+  background-clip: padding-box;
+}
+
+/* xterm 给悬停 / 拖动态注入的是 background 简写，会把 background-clip 重置回 border-box、滑块一下胀满 14px，
+   这里带着更高的优先级再钉一次 */
+.terminal-xterm :deep(.xterm-scrollable-element > .scrollbar > .slider:hover),
+.terminal-xterm :deep(.xterm-scrollable-element > .scrollbar > .slider.active) {
+  border-width: 4px;
+  background-clip: padding-box;
 }
 
 /* 命令行右侧的时间 / 耗时标签（commandMarks.js 套在 xterm 装饰元素里的一层）。

@@ -414,7 +414,6 @@ function formatTaskTime(timestamp) {
   align-content: start;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 
 .transfer-empty {

@@ -249,20 +249,6 @@
   padding: calc(var(--file-toolbar-height) + 6px) 5px 12px;
   scroll-padding-top: var(--file-toolbar-height);
   background: rgb(var(--xin-fill-rgb) / 0.3);
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.34) transparent;
-}
-
-.file-tree::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.file-tree::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: rgb(var(--xin-neutral-rgb) / 0.34);
-  background-clip: padding-box;
 }
 
 .tree-row {
@@ -364,20 +350,6 @@
   padding-top: var(--file-toolbar-height);
   scroll-padding-top: calc(var(--file-toolbar-height) + 32px);
   background: rgb(var(--xin-fill-rgb) / 0.4);
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.34) transparent;
-}
-
-.file-table-wrap::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
-}
-
-.file-table-wrap::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: rgb(var(--xin-neutral-rgb) / 0.34);
-  background-clip: padding-box;
 }
 
 .file-row {

@@ -81,19 +81,6 @@
   gap: 16px;
   overflow: auto;
   padding: 0 var(--home-gutter) 32px;
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.34) transparent;
-}
-
-.home-scroll::-webkit-scrollbar {
-  width: 8px;
-}
-
-.home-scroll::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: rgb(var(--xin-neutral-rgb) / 0.32);
-  background-clip: padding-box;
 }
 
 /* —— 工具栏：一排各自独立的玻璃胶囊，胶囊之间是空的，内容从缝里透出来 —— */

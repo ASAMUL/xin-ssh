@@ -51,8 +51,6 @@
   gap: 18px;
   overflow-y: auto;
   padding: 8px 18px 16px;
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.3) transparent;
 }
 
 /* —— 主机卡：系统图标 + 发行版 + 规格 + 运行时长 —— */

@@ -1,0 +1,59 @@
+/* ————————————————————————————————————————————————————————————
+   全局滚动条：macOS 那种细滚动条
+   - 平时不显示，指针移进可滚动的区域（或焦点在里面）才浮出一根细滑块，按住拖动时最实；
+   - 没有上下箭头、轨道透明，滑块是一根两端圆的细条；
+   - 颜色走中性灰（--xin-neutral-rgb 随明暗翻面），想换色的区域只改下面两个令牌，形状不动。
+
+   以前每个面板各写一套（宽 8 / 9 / 10px、不同透明度），没写的地方又是 Windows 带箭头的粗滚动条，
+   同一个窗口里能看到三四种滚动条。统一收在这一个文件里，组件里别再写滚动条样式。
+
+   只用 ::-webkit-scrollbar：Tauri 的 WebView2（Chromium）和 macOS / Linux 的 WebKit 都认它。
+   千万别再给元素加 scrollbar-width / scrollbar-color——Chromium 121 起，元素只要设了这两个标准属性，
+   ::-webkit-scrollbar 的样式就对它整个失效，又会变回系统滚动条。
+   （要彻底藏起滚动条的地方用 scrollbar-width: none 没问题，比如会话标签条。）
+
+   终端是 xterm 6 自绘的滑块，不吃这些伪元素，单独在 terminal-viewport.css 里对齐成一样细。
+   ———————————————————————————————————————————————————————————— */
+
+:root {
+  --xin-scrollbar-thumb: rgb(var(--xin-neutral-rgb) / 0.42);
+  --xin-scrollbar-thumb-hover: rgb(var(--xin-neutral-rgb) / 0.66);
+}
+
+/* 10px 是能点中的宽度；滑块四周 3px 透明边框不画背景（background-clip），看得见的只有中间 4px */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: transparent;
+  background-clip: padding-box;
+}
+
+/* 指针在区域里（:hover 会冒泡到所有祖先，指针停在列表某一行上也算）或键盘焦点在里面时浮出来 */
+:hover::-webkit-scrollbar-thumb,
+:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--xin-scrollbar-thumb);
+}
+
+/* 指到滑块上、按住拖动时变粗变实，告诉人「抓住了」 */
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
+  background-color: var(--xin-scrollbar-thumb-hover);
+}

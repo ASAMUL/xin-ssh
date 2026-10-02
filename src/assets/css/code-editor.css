@@ -173,17 +173,8 @@
   background: rgba(59, 130, 246, 0.45);
 }
 
-.code-editor-host :deep(.cm-scroller::-webkit-scrollbar) {
-  width: 10px;
-  height: 10px;
-}
-
-.code-editor-host :deep(.cm-scroller::-webkit-scrollbar-thumb) {
-  border: 3px solid var(--xin-editor-bg);
-  border-radius: 999px;
-  background: var(--xin-editor-scrollbar);
-}
-
-.code-editor-host :deep(.cm-scroller::-webkit-scrollbar-thumb:hover) {
-  background: var(--xin-editor-scrollbar-hover);
+/* 编辑器画布跟着编辑器主题走（深色主题下应用可能是浅色），滚动条只换颜色，形状沿用全局的 scrollbars.css */
+.code-editor-host :deep(.cm-scroller) {
+  --xin-scrollbar-thumb: var(--xin-editor-scrollbar);
+  --xin-scrollbar-thumb-hover: var(--xin-editor-scrollbar-hover);
 }

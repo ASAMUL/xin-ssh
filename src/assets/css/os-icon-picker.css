@@ -48,8 +48,6 @@
   gap: 12px;
   overflow-y: auto;
   padding: 10px;
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.35) transparent;
 }
 
 .os-icon-auto {

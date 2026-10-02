@@ -86,8 +86,6 @@
   gap: 20px;
   overflow-y: auto;
   padding: 22px 26px 26px;
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.35) transparent;
 }
 
 .settings-pane-title {
