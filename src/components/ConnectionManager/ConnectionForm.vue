@@ -66,12 +66,19 @@ const saveCredentialDescription = computed(() =>
     ? t("profile.credentialSavedHint")
     : t("profile.saveCredentialDescription"),
 );
+// 四个选项排成一行的分段控件，只放文字：带图标的话「交互认证 / 2FA」挤不下一格
 const authMethodItems = computed(() => [
-  { value: "password", label: t("profile.passwordAuth"), icon: "i-lucide-key-round" },
-  { value: "privateKey", label: t("profile.privateKeyAuth"), icon: "i-lucide-file-key-2" },
-  { value: "agent", label: t("profile.agentAuth"), icon: "i-lucide-key-square" },
-  { value: "keyboardInteractive", label: t("profile.interactiveAuth"), icon: "i-lucide-shield-check" },
+  { value: "password", label: t("profile.passwordAuth") },
+  { value: "privateKey", label: t("profile.privateKeyAuth") },
+  { value: "agent", label: t("profile.agentAuth") },
+  { value: "keyboardInteractive", label: t("profile.interactiveAuth") },
 ]);
+// 认证卡片下面那行说明；agent 的说明和报错由 AgentSettings 自己写在它的卡片下面
+const authFooter = computed(() => {
+  if (usesSavedCredentials(form.authMethod)) return saveCredentialDescription.value;
+  if (form.authMethod === "keyboardInteractive") return t("profile.interactiveHint");
+  return "";
+});
 
 const form = reactive({
   name: "",
@@ -131,6 +138,12 @@ function groupDisplayName(group) {
   return group.id === "group-default" ? t("sidebar.ungrouped") : group.name;
 }
 
+// 底栏只放得下「已连通 · 32 ms」，服务器指纹放进悬停提示，要核对时再看
+const testStatusText = computed(() =>
+  connectionTestResult.value
+    ? t("profile.testConnectedShort", { latency: connectionTestResult.value.latencyMs })
+    : "",
+);
 const testResultMessage = computed(() => {
   if (!connectionTestResult.value) return "";
 
@@ -378,20 +391,27 @@ async function createInlineGroup() {
       </header>
 
       <div class="form-body">
-        <div class="form-grid identity-grid">
-          <UFormField :label="t('osIcon.label')">
+        <div class="identity-card">
+          <div class="identity-avatar">
             <OsIconPicker v-model="form.osIcon" :detected-os="editingProfile?.detectedOs ?? null" />
-          </UFormField>
-          <UFormField :label="t('profile.name')">
-            <UInput v-model="form.name" size="lg" class="w-full" />
-          </UFormField>
-          <UFormField :label="t('profile.group')">
-            <div class="inline-field">
-              <USelect v-model="form.groupId" size="lg" class="w-full" :items="groupSelectItems" />
+          </div>
+          <div class="form-list identity-rows">
+            <label class="form-row">
+              <span class="form-row-label">{{ t("profile.name") }}</span>
+              <UInput
+                v-model="form.name"
+                variant="none"
+                class="w-full"
+                :placeholder="t('profile.namePlaceholder')"
+              />
+            </label>
+            <div class="form-row">
+              <span class="form-row-label">{{ t("profile.group") }}</span>
+              <USelect v-model="form.groupId" variant="none" class="w-full" :items="groupSelectItems" />
               <UButton
-                color="primary"
-                variant="soft"
-                size="lg"
+                color="neutral"
+                variant="ghost"
+                size="sm"
                 square
                 icon="i-lucide-folder-plus"
                 :aria-label="t('sidebar.addGroup')"
@@ -399,141 +419,153 @@ async function createInlineGroup() {
                 @click="openInlineGroupCreator"
               />
             </div>
-          </UFormField>
-        </div>
-
-        <div v-if="isGroupCreatorOpen" class="form-group-creator">
-          <UIcon name="i-lucide-folder-plus" />
-          <UInput
-            v-model="newGroupName"
-            size="sm"
-            class="w-full"
-            :placeholder="t('sidebar.groupName')"
-            autofocus
-            @keydown.enter.prevent="createInlineGroup"
-          />
-          <UButton
-            color="primary"
-            variant="soft"
-            size="sm"
-            square
-            icon="i-lucide-check"
-            :loading="isSavingGroup"
-            :disabled="!newGroupName.trim()"
-            :aria-label="t('sidebar.addGroup')"
-            @click="createInlineGroup"
-          />
-          <UButton
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            square
-            icon="i-lucide-x"
-            :aria-label="t('profile.cancel')"
-            @click="closeInlineGroupCreator"
-          />
-        </div>
-
-        <div class="form-grid host-grid">
-          <UFormField :label="t('profile.host')">
-            <UInput v-model="form.host" size="lg" class="w-full" />
-          </UFormField>
-          <UFormField :label="t('profile.port')">
-            <UInputNumber
-              v-model="form.port"
-              size="lg"
-              class="w-full"
-              :min="1"
-              :max="65535"
-              :format-options="{ useGrouping: false }"
-            />
-          </UFormField>
-          <UFormField :label="t('profile.username')">
-            <UInput v-model="form.username" size="lg" class="w-full" />
-          </UFormField>
-        </div>
-
-        <div class="segmented-control connection-auth-methods">
-          <UButton
-            v-for="method in authMethodItems"
-            :key="method.value"
-            color="neutral"
-            variant="ghost"
-            :class="{ active: form.authMethod === method.value }"
-            :aria-pressed="form.authMethod === method.value"
-            :icon="method.icon"
-            :label="method.label"
-            @click="form.authMethod = method.value"
-          />
-        </div>
-
-        <UFormField v-if="form.authMethod === 'password'" :label="t('profile.password')">
-          <UInput
-            v-model="secretPassword"
-            type="password"
-            size="lg"
-            class="w-full"
-            autocomplete="new-password"
-            :placeholder="hasSavedCredential ? t('profile.savedPasswordPlaceholder') : ''"
-          />
-        </UFormField>
-
-        <div v-else-if="form.authMethod === 'privateKey'" class="key-fields">
-          <UFormField :label="t('profile.privateKeyPath')">
-            <div class="inline-field">
-              <UInput v-model="form.privateKeyPath" size="lg" class="w-full" />
-              <UButton
-                color="primary"
-                variant="soft"
-                size="lg"
-                :label="t('profile.choosePrivateKey')"
-                @click="choosePrivateKey"
+            <div v-if="isGroupCreatorOpen" class="form-row">
+              <span class="form-row-label">{{ t("sidebar.addGroup") }}</span>
+              <UInput
+                v-model="newGroupName"
+                variant="none"
+                class="w-full"
+                :placeholder="t('sidebar.groupName')"
+                autofocus
+                @keydown.enter.prevent="createInlineGroup"
               />
+              <div class="group-creator-actions">
+                <UButton
+                  color="primary"
+                  variant="soft"
+                  size="sm"
+                  square
+                  icon="i-lucide-check"
+                  :loading="isSavingGroup"
+                  :disabled="!newGroupName.trim()"
+                  :aria-label="t('sidebar.addGroup')"
+                  @click="createInlineGroup"
+                />
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  square
+                  icon="i-lucide-x"
+                  :aria-label="t('profile.cancel')"
+                  @click="closeInlineGroupCreator"
+                />
+              </div>
             </div>
-          </UFormField>
-          <UFormField :label="t('profile.passphrase')">
-            <UInput
-              v-model="passphrase"
-              type="password"
-              size="lg"
-              class="w-full"
-              autocomplete="new-password"
-              :placeholder="hasSavedCredential ? t('profile.savedPassphrasePlaceholder') : ''"
+          </div>
+        </div>
+
+        <section class="form-section">
+          <h3 class="form-section-title">{{ t("profile.sectionTarget") }}</h3>
+          <div class="form-list">
+            <label class="form-row">
+              <span class="form-row-label">{{ t("profile.host") }}</span>
+              <UInput
+                v-model="form.host"
+                variant="none"
+                class="w-full"
+                spellcheck="false"
+                :placeholder="t('profile.hostPlaceholder')"
+              />
+            </label>
+            <label class="form-row">
+              <span class="form-row-label">{{ t("profile.port") }}</span>
+              <UInputNumber
+                v-model="form.port"
+                variant="none"
+                class="w-full"
+                :min="1"
+                :max="65535"
+                :increment="false"
+                :decrement="false"
+                :format-options="{ useGrouping: false }"
+              />
+            </label>
+            <label class="form-row">
+              <span class="form-row-label">{{ t("profile.username") }}</span>
+              <UInput v-model="form.username" variant="none" class="w-full" spellcheck="false" placeholder="root" />
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h3 class="form-section-title">{{ t("profile.sectionAuth") }}</h3>
+          <div class="auth-methods" role="group" :aria-label="t('profile.authMethod')">
+            <UButton
+              v-for="method in authMethodItems"
+              :key="method.value"
+              color="neutral"
+              variant="ghost"
+              :class="{ active: form.authMethod === method.value }"
+              :aria-pressed="form.authMethod === method.value"
+              :label="method.label"
+              @click="form.authMethod = method.value"
             />
-          </UFormField>
-        </div>
+          </div>
 
-        <AgentSettings v-else-if="form.authMethod === 'agent'" v-model="form.agent" />
+          <div v-if="usesSavedCredentials(form.authMethod)" class="form-list">
+            <label v-if="form.authMethod === 'password'" class="form-row">
+              <span class="form-row-label">{{ t("profile.password") }}</span>
+              <UInput
+                v-model="secretPassword"
+                type="password"
+                variant="none"
+                class="w-full"
+                autocomplete="new-password"
+                :placeholder="hasSavedCredential ? t('profile.savedPasswordPlaceholder') : ''"
+              />
+            </label>
+            <template v-else>
+              <label class="form-row">
+                <span class="form-row-label">{{ t("profile.privateKeyPath") }}</span>
+                <UInput
+                  v-model="form.privateKeyPath"
+                  variant="none"
+                  class="w-full"
+                  spellcheck="false"
+                  :placeholder="t('profile.privateKeyPlaceholder')"
+                />
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                  :label="t('profile.choosePrivateKey')"
+                  @click="choosePrivateKey"
+                />
+              </label>
+              <label class="form-row">
+                <span class="form-row-label">{{ t("profile.passphraseShort") }}</span>
+                <UInput
+                  v-model="passphrase"
+                  type="password"
+                  variant="none"
+                  class="w-full"
+                  autocomplete="new-password"
+                  :placeholder="hasSavedCredential ? t('profile.savedPassphrasePlaceholder') : t('profile.passphrasePlaceholder')"
+                />
+              </label>
+            </template>
+            <label class="form-row form-row-toggle">
+              <span class="form-row-label">{{ saveCredentialLabel }}</span>
+              <USwitch v-model="shouldSaveCredential" />
+            </label>
+          </div>
 
-        <UCheckbox
-          v-if="usesSavedCredentials(form.authMethod)"
-          v-model="shouldSaveCredential"
-          class="credential-save-option"
-          :label="saveCredentialLabel"
-          :description="saveCredentialDescription"
-        />
+          <AgentSettings v-else-if="form.authMethod === 'agent'" v-model="form.agent" />
 
-        <UFormField :label="t('profile.defaultRemotePath')">
-          <UInput v-model="form.defaultRemotePath" size="lg" class="w-full" />
-        </UFormField>
+          <p v-if="authFooter" class="form-section-footer">{{ authFooter }}</p>
+        </section>
 
-        <div class="connection-test-panel" :class="{ success: connectionTestResult }">
-          <UButton
-            color="neutral"
-            variant="outline"
-            size="lg"
-            class="test-action"
-            icon="i-lucide-plug-zap"
-            :loading="isTestingConnection"
-            :disabled="!canSave"
-            :label="isTestingConnection ? t('profile.testing') : t('profile.test')"
-            @click="testCurrentConnection"
-          />
-          <p v-if="connectionTestResult" class="connection-test-result">
-            <strong>{{ t("profile.testConnected") }}</strong>
-            <span>{{ testResultMessage }}</span>
-          </p>
-        </div>
+        <section class="form-section">
+          <h3 class="form-section-title">{{ t("profile.sectionFiles") }}</h3>
+          <div class="form-list">
+            <label class="form-row">
+              <span class="form-row-label">{{ t("profile.defaultRemotePath") }}</span>
+              <UInput v-model="form.defaultRemotePath" variant="none" class="w-full" spellcheck="false" />
+            </label>
+          </div>
+          <p class="form-section-footer">{{ t("profile.defaultRemotePathHint") }}</p>
+        </section>
 
         <p v-if="error" class="form-error">{{ error }}</p>
         <p v-else-if="saveProgressMessage" class="form-progress">{{ saveProgressMessage }}</p>
@@ -542,8 +574,22 @@ async function createInlineGroup() {
       <footer>
         <UButton
           color="neutral"
+          variant="ghost"
+          size="lg"
+          icon="i-lucide-plug-zap"
+          :loading="isTestingConnection"
+          :disabled="!canSave"
+          :label="isTestingConnection ? t('profile.testing') : t('profile.test')"
+          @click="testCurrentConnection"
+        />
+        <span v-if="connectionTestResult" class="connection-test-status" :title="testResultMessage">
+          {{ testStatusText }}
+        </span>
+        <UButton
+          color="neutral"
           variant="outline"
           size="lg"
+          class="footer-cancel"
           :label="t('profile.cancel')"
           @click="emit('close')"
         />
@@ -561,3 +607,5 @@ async function createInlineGroup() {
     </form>
   </div>
 </template>
+
+<style scoped src="../../assets/css/connection-form.css"></style>

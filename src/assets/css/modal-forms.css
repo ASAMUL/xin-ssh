@@ -27,9 +27,9 @@
 
 .connection-form,
 .settings-panel {
-  /* .liquid-sheet 不带定位（UModal 靠 fixed 居中，不能被覆盖），高光描边的 ::before 要这里托住 */
+  /* .liquid-sheet 不带定位（UModal 靠 fixed 居中，不能被覆盖），高光层 ::after 要这里托住 */
   position: relative;
-  width: min(620px, 100%);
+  width: min(560px, 100%);
   /* flex item 默认 min-width:auto，内容一宽就会把上面这个 width 顶破。
      少了这行，弹窗会被最宽的一行内容撑开，还会连带冒出横向滚动条。 */
   min-width: 0;
@@ -37,10 +37,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.settings-panel {
-  width: min(560px, 100%);
 }
 
 .connection-form > header,
@@ -102,16 +98,6 @@
   gap: 13px;
 }
 
-/* 身份行：图标 | 名称 | 分组。图标放最前，像给联系人配头像——先认出是哪台机器 */
-.form-grid.identity-grid {
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr) minmax(0, 1fr);
-}
-
-/* 主机地址宽、端口窄、用户名居中收尾，一行读完连接目标 */
-.form-grid.host-grid {
-  grid-template-columns: minmax(0, 1.9fr) 128px minmax(0, 1.1fr);
-}
-
 .form-error,
 .form-progress {
   margin: 0;
@@ -121,126 +107,6 @@
 
 .form-error {
   color: var(--xin-danger-strong);
-}
-
-.segmented-control {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 5px;
-  padding: 4px;
-  border-radius: var(--xin-radius);
-  background: rgb(var(--xin-ink-rgb) / 0.06);
-  box-shadow: inset 0 1px 2px rgb(var(--xin-ink-rgb) / 0.05);
-}
-
-.segmented-control button {
-  height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--xin-text-secondary);
-  border: 0;
-  border-radius: calc(var(--xin-radius) - 3px);
-  background: transparent;
-  transition:
-    background 140ms ease,
-    color 140ms ease,
-    box-shadow 140ms ease;
-}
-
-/* 选中项和顶栏、首页筛选同一颗樱色玻璃水滴 */
-.segmented-control button.active {
-  color: var(--xin-accent-strong);
-  background: var(--lg-droplet-rose);
-  box-shadow: var(--lg-droplet-rose-shadow);
-}
-
-.connection-auth-methods {
-  grid-auto-flow: row;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.key-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.inline-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-}
-
-.form-group-creator {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  color: var(--xin-text-muted);
-  border: 1px solid rgb(var(--xin-accent-rgb) / 0.16);
-  border-radius: var(--xin-radius);
-  background: var(--xin-surface-raised);
-  font-size: 16px;
-}
-
-.credential-save-option {
-  padding: 10px 12px;
-  border: 1px solid rgb(var(--xin-neutral-rgb) / 0.18);
-  border-radius: var(--xin-radius);
-  background: var(--xin-surface-raised-soft);
-}
-
-.credential-save-option label {
-  color: var(--xin-text-body);
-  font-size: 12px;
-  font-weight: 780;
-}
-
-.credential-save-option p {
-  color: var(--xin-text-muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.connection-test-panel {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 10px;
-  border: 1px solid rgb(var(--xin-neutral-rgb) / 0.2);
-  border-radius: var(--xin-radius);
-  background: var(--xin-surface-raised-soft);
-}
-
-.connection-test-panel.success {
-  border-color: rgba(34, 197, 94, 0.24);
-  background: var(--xin-surface-success);
-}
-
-.test-action {
-  white-space: nowrap;
-}
-
-.connection-test-result {
-  min-width: 0;
-  margin: 0;
-  color: #166534;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.connection-test-result strong,
-.connection-test-result span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .settings-body {

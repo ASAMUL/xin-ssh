@@ -1,0 +1,111 @@
+/* 新建 / 编辑连接（ConnectionForm.vue 专用，scoped 引入）。
+   弹窗外壳（遮罩、头尾、滚动区）在 modal-forms.css，分组卡片和行在 form-list.css；
+   这里只管这张表单自己的几处：身份卡、认证方式分段控件、底栏的测试结果。 */
+
+/* 组和组之间比组内留得开，一眼看出分了几块 */
+.form-body {
+  gap: 20px;
+  padding: 20px 24px;
+}
+
+.form-body > .form-error,
+.form-body > .form-progress {
+  padding-inline: 14px;
+}
+
+/* —— 身份卡：系统图标像联系人头像一样放在左边，名称、分组叠在右边 ——
+   先认出是哪台机器，再看它连到哪。外层是卡片，右边那张 .form-list 不再自带底色和描边。 */
+.identity-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid var(--xin-card-border);
+  border-radius: var(--xin-radius);
+  background: var(--xin-card);
+}
+
+.identity-avatar {
+  padding: 14px 2px 14px 14px;
+}
+
+.identity-rows {
+  --form-row-inset: 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.group-creator-actions {
+  display: flex;
+  gap: 2px;
+}
+
+/* —— 认证方式：一行四等分的分段控件（iOS 的 segmented control）——
+   以前排成 2×2，选中的那格像一颗大按钮、另外三个像散落的文字，读不出是同一组。
+   选中项和顶栏、首页筛选同一颗樱色玻璃水滴。 */
+.auth-methods {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgb(var(--xin-ink-rgb) / 0.06);
+}
+
+.auth-methods > button {
+  min-width: 0;
+  height: 30px;
+  justify-content: center;
+  padding-inline: 6px;
+  color: var(--xin-text-secondary);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 560;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.auth-methods > button:hover:not(.active) {
+  color: var(--xin-text);
+  background: rgb(var(--xin-ink-rgb) / 0.05);
+}
+
+.auth-methods > button.active {
+  color: var(--xin-accent-strong);
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
+}
+
+/* —— 底栏：测试连接是提交前的动作，和取消 / 保存放在同一行 ——
+   结果只留一句「已连通 · 32 ms」，服务器指纹在悬停提示里；失败的原因照旧写在表单底部。 */
+.connection-form > footer {
+  justify-content: flex-start;
+}
+
+.footer-cancel {
+  margin-left: auto;
+}
+
+.connection-test-status {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: var(--xin-success-strong);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.connection-test-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--xin-success);
+  box-shadow: 0 0 0 3px rgb(var(--xin-success-rgb) / 0.16);
+}

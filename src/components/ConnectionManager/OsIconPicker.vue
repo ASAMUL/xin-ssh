@@ -43,15 +43,14 @@ function select(id) {
       class="os-icon-trigger"
       :class="{ open }"
       color="neutral"
-      variant="outline"
-      size="lg"
-      block
+      variant="ghost"
       :aria-label="t('osIcon.choose')"
-      :title="t('osIcon.choose')"
+      :title="triggerLabel"
     >
-      <OsIconTile :icon="previewIcon" :size="26" />
-      <span class="os-icon-trigger-label">{{ triggerLabel }}</span>
-      <UIcon name="i-lucide-chevrons-up-down" class="os-icon-trigger-chevron" />
+      <OsIconTile :icon="previewIcon" :size="52" />
+      <span class="os-icon-trigger-badge">
+        <UIcon name="i-lucide-chevron-down" />
+      </span>
     </UButton>
 
     <template #content>

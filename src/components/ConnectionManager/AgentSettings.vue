@@ -74,20 +74,24 @@ async function refreshIdentities() {
 </script>
 
 <template>
-  <div class="key-fields">
-    <UFormField :label="t('profile.agentProvider')">
-      <USelect v-model="provider" :items="providerItems" size="lg" class="w-full" />
-    </UFormField>
-    <UFormField v-if="provider === 'system'" :label="t('profile.agentSocket')">
-      <UInput v-model="socketPath" :placeholder="socketPlaceholder" size="lg" class="w-full" />
-    </UFormField>
-    <UFormField :label="t('profile.agentIdentity')">
-      <div class="inline-field">
-        <USelect v-model="keyFingerprint" :items="identityItems" size="lg" class="w-full min-w-0" />
+  <!-- 拼进连接表单「认证」那一组：一张分组卡片 + 卡片下的说明 / 报错（结构见 form-list.css） -->
+  <div class="form-section">
+    <div class="form-list">
+      <div class="form-row">
+        <span class="form-row-label">{{ t('profile.agentProvider') }}</span>
+        <USelect v-model="provider" :items="providerItems" variant="none" class="w-full" />
+      </div>
+      <label v-if="provider === 'system'" class="form-row">
+        <span class="form-row-label">{{ t('profile.agentSocket') }}</span>
+        <UInput v-model="socketPath" :placeholder="socketPlaceholder" variant="none" class="w-full" spellcheck="false" />
+      </label>
+      <div class="form-row">
+        <span class="form-row-label">{{ t('profile.agentIdentity') }}</span>
+        <USelect v-model="keyFingerprint" :items="identityItems" variant="none" class="w-full min-w-0" />
         <UButton
           color="neutral"
-          variant="outline"
-          size="lg"
+          variant="ghost"
+          size="sm"
           square
           icon="i-lucide-refresh-cw"
           :loading="isLoading"
@@ -96,8 +100,9 @@ async function refreshIdentities() {
           @click="refreshIdentities"
         />
       </div>
-    </UFormField>
-    <p v-if="error" class="form-error">{{ error }}</p>
-    <p v-else-if="hasLoaded && !identities.length" class="form-error">{{ t('profile.agentNoKeys') }}</p>
+    </div>
+    <p v-if="error" class="form-section-footer error">{{ error }}</p>
+    <p v-else-if="hasLoaded && !identities.length" class="form-section-footer error">{{ t('profile.agentNoKeys') }}</p>
+    <p v-else-if="provider === 'system'" class="form-section-footer">{{ t('profile.agentSocketHint') }}</p>
   </div>
 </template>

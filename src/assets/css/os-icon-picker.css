@@ -1,28 +1,41 @@
-/* —— 触发器：和同一行的 UInput（lg）等高，读起来像一个选择框 —— */
+/* —— 触发器：连接表单身份卡左边的「头像」——
+   以前是一整格带文字的下拉，占掉一行三分之一还比旁边的输入框高一截；系统图标很少改，
+   缩成一块图标就够了，当前状态（自动 / 已识别为 xx）放在悬停提示里。
+   右下角的小圆标告诉人「这里点得开」。 */
 .os-icon-trigger {
-  justify-content: flex-start;
-  gap: 9px;
-  padding-inline: 7px 10px;
-  font-weight: 600;
+  position: relative;
+  padding: 0;
+  border-radius: 15px;
+}
+
+.os-icon-trigger:hover {
+  background: transparent;
 }
 
 .os-icon-trigger.open {
-  box-shadow: 0 0 0 3px rgb(var(--xin-accent-rgb) / 0.14);
+  box-shadow: 0 0 0 3px rgb(var(--xin-accent-rgb) / 0.18);
 }
 
-.os-icon-trigger-label {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: var(--xin-text);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.os-icon-trigger-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--xin-text-secondary);
+  border: 1px solid var(--xin-card-border);
+  border-radius: 999px;
+  background: var(--xin-canvas-raised);
+  box-shadow: 0 1px 3px rgb(var(--xin-shadow-rgb) / 0.12);
+  font-size: 11px;
+  transition: color 140ms ease;
 }
 
-.os-icon-trigger-chevron {
-  flex: 0 0 auto;
-  color: var(--xin-text-soft);
+.os-icon-trigger:hover .os-icon-trigger-badge,
+.os-icon-trigger.open .os-icon-trigger-badge {
+  color: var(--xin-accent-strong);
 }
 
 /* —— 弹层内容 ——

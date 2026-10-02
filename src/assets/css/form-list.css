@@ -1,0 +1,109 @@
+/* ————————————————————————————————————————————————————————————
+   iOS 分组列表（inset grouped list）
+   几行一组装进一张圆角卡片，标签在左、输入在右，组内用内缩的细线分隔——
+   macOS 系统设置、iOS 设置都是这个结构。每个输入框不再各带一个框，整张表单只剩几块卡片，
+   读起来先看到「分了几组」，再看到每组里填什么。
+   写成全局样式（main.css 引入）：AgentSettings 这类子组件也要把行拼进同一张卡片。
+
+   结构：
+     .form-section          一组：标题 + 卡片 + 组下说明
+       .form-section-title
+       .form-list           卡片
+         .form-row          一行：.form-row-label | 输入 | 行尾按钮（可选）
+       .form-section-footer
+   ———————————————————————————————————————————————————————————— */
+
+/* 行的左内边距：标题、说明文字、分隔线的起点都对齐到它 */
+.form-section,
+.form-list {
+  --form-row-inset: 14px;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-section-title {
+  margin: 0;
+  padding-inline: var(--form-row-inset);
+  color: var(--xin-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 组下的说明文字：iOS 把「这个开关是干什么的」写在卡片外面，行里只留短标签 */
+.form-section-footer {
+  margin: 0;
+  padding-inline: var(--form-row-inset);
+  color: var(--xin-text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.form-section-footer.error {
+  color: var(--xin-danger-strong);
+}
+
+/* 卡片是一张三列网格：标签 | 输入 | 行尾按钮。行用 subgrid 继承列宽，
+   同一张卡片里所有输入框的左边缘对齐，不管哪个标签更长 */
+.form-list {
+  display: grid;
+  grid-template-columns: minmax(84px, max-content) minmax(0, 1fr) auto;
+  column-gap: 6px;
+  overflow: hidden;
+  border: 1px solid var(--xin-card-border);
+  border-radius: var(--xin-radius);
+  background: var(--xin-card);
+}
+
+.form-row {
+  position: relative;
+  min-height: 44px;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  padding: 0 8px 0 var(--form-row-inset);
+}
+
+/* 分隔线从标签起头、不顶到卡片左边：iOS 的内缩分隔线，组内几行读起来还是一体的 */
+.form-row + .form-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: var(--form-row-inset);
+  height: 1px;
+  background: var(--xin-border-soft);
+  pointer-events: none;
+}
+
+.form-row-label {
+  grid-column: 1;
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 560;
+  white-space: nowrap;
+  transition: color 140ms ease;
+}
+
+/* 输入框没有自己的框了，正在填哪一行就让那一行的标签亮起来 */
+.form-row:focus-within > .form-row-label {
+  color: var(--xin-accent-strong);
+}
+
+/* 只有「标签 + 输入」两格时，输入一直铺到行尾 */
+.form-row > :nth-child(2):last-child {
+  grid-column: 2 / -1;
+}
+
+/* 开关行：标签可以比标签列长，开关贴右边，不走三列网格 */
+.form-row.form-row-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: var(--form-row-inset);
+}
