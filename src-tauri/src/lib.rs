@@ -48,6 +48,7 @@ pub fn run() {
             workspace::export_profiles,
             credentials::read_credential,
             sftp::ops::read_remote_file_text,
+            sftp::ops::resolve_remote_home,
             background::read_terminal_background,
             credentials::remove_credential,
             sftp::ops::rename_remote_path,

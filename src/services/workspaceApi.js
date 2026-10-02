@@ -176,6 +176,10 @@ export function streamRemoteDirectory(request) {
   return invoke("stream_remote_directory", { request });
 }
 
+export function resolveRemoteHome(sessionId) {
+  return invoke("resolve_remote_home", { sessionId });
+}
+
 export function readRemoteFileText(request) {
   return invoke("read_remote_file_text", { request });
 }

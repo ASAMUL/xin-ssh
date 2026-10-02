@@ -11,8 +11,10 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import TerminalSearchPanel from "./TerminalSearchPanel.vue";
 import { buildXtermTheme } from "../../config/terminalThemes";
 import { loadCommandHistory, recordCommand, suggestCommand } from "../../services/commandHistory";
+import { resolveRemoteHome } from "../../services/workspaceApi";
 import { createCommandMarks } from "../../utils/commandMarks";
 import { createCommandSuggest } from "../../utils/commandSuggest";
+import { createTerminalCwd } from "../../utils/terminalCwd";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useSnippetStore } from "../../stores/snippetStore";
@@ -53,6 +55,7 @@ let webglUnavailable = false;
 let resizeObserver = null;
 let commandMarks = null;
 let commandSuggest = null;
+let terminalCwd = null;
 let detachSink = null;
 let layoutFrame = null;
 let disposed = false;
@@ -81,7 +84,16 @@ onMounted(() => {
   terminal.unicode.activeVersion = "11";
   terminal.loadAddon(new WebLinksAddon(openTerminalLink));
   terminal.open(terminalMount.value);
-  commandMarks = createCommandMarks(terminal, { onCommand: rememberCommand });
+  // 终端目录跟着这个终端实例走：重连会换一个新终端，旧的目录记录随之作废
+  terminalCwd = createTerminalCwd(terminal, {
+    loginUser: session.value?.username ?? null,
+    resolveLoginHome: () => resolveRemoteHome(props.sessionId),
+    onChange: (cwd, { navigate }) => sessionStore.updateTerminalCwd(props.sessionId, props.revision, cwd, { navigate }),
+  });
+  commandMarks = createCommandMarks(terminal, {
+    onCommand: handleCommand,
+    onPrompt: (prompt) => terminalCwd.handlePrompt(prompt),
+  });
   commandMarks.setTheme(props.theme);
   commandSuggest = createCommandSuggest(terminal, {
     suggest: (input) => suggestCommand(session.value?.profileId ?? null, input, snippetCommands.value),
@@ -121,6 +133,7 @@ onBeforeUnmount(() => {
   releaseWebgl();
   commandMarks?.dispose();
   commandSuggest?.dispose();
+  terminalCwd?.dispose();
   terminal?.dispose();
 });
 
@@ -245,7 +258,8 @@ function acceptSuggestion(event) {
 }
 
 // 关掉联想时也不记历史：用户关掉它，多半就是不希望本机留下命令记录
-function rememberCommand(command) {
+function handleCommand(command) {
+  terminalCwd.handleCommand(command);
   if (settingsStore.commandSuggestions) recordCommand(session.value?.profileId ?? null, command);
 }
 

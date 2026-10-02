@@ -65,6 +65,9 @@ pub struct WorkspaceSettings {
     // 命令联想：按本机记下的命令历史给灰字提示，历史只存在本机、不进工作区
     #[serde(default = "default_true")]
     pub command_suggestions: bool,
+    // 文件面板跟随终端目录：只读终端已经显示出来的提示符 / OSC 7，不往服务器发命令
+    #[serde(default = "default_true")]
+    pub follow_terminal_cwd: bool,
     #[serde(default = "default_terminal_font_size")]
     pub terminal_font_size: u16,
     // 工作区面板布局：显隐开关 + splitpanes 百分比，serde default 兼容旧 settings.json
@@ -123,6 +126,7 @@ impl Default for WorkspaceSettings {
             terminal_appearance: default_terminal_appearance(),
             terminal_material: default_terminal_material(),
             command_suggestions: true,
+            follow_terminal_cwd: true,
             terminal_font_size: default_terminal_font_size(),
             show_monitor_sidebar: true,
             show_file_explorer: true,

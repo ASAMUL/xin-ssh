@@ -173,6 +173,8 @@ export const useSessionStore = defineStore("sessions", {
         lastDisconnectReason: null,
         createdAt: Date.now(),
         terminalRevision: 0,
+        // 终端当前目录（terminalCwd.js 推断）：{ path, status }，文件面板的「跟随终端」按钮读它
+        terminalCwd: null,
         terminalColumns: INITIAL_TERMINAL_COLUMNS,
         terminalRows: INITIAL_TERMINAL_ROWS,
         systemInfo: null,
@@ -480,6 +482,16 @@ export const useSessionStore = defineStore("sessions", {
         rows,
       }).catch(() => {});
     },
+    // 终端换了目录：记下来；开着「跟随终端」且确实是从一个目录换到另一个时，文件面板跟过去
+    updateTerminalCwd(sessionId, revision, cwd, { navigate = false } = {}) {
+      const session = this.findSession(sessionId);
+      if (!session || session.terminalRevision !== revision) return;
+
+      session.terminalCwd = cwd;
+      if (navigate && cwd.path && useSettingsStore().followTerminalCwd) {
+        useFileExplorerStore().followTerminal(session, cwd.path);
+      }
+    },
     updateSessionRemotePath(sessionId, remotePath) {
       const session = this.findSession(sessionId);
       if (!session || !remotePath) return;
@@ -746,6 +758,8 @@ function resetTerminalBuffer(session) {
   clearTerminalBuffer(session.id);
   terminalSinks.delete(session.id);
   session.terminalRevision += 1;
+  // 新终端从头认提示符，旧终端推断出的目录不再算数
+  session.terminalCwd = null;
 }
 
 // 主机密钥变更：后端用 hostKey.changed + params.expected/actual 上报，

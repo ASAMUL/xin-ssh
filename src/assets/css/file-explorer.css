@@ -106,6 +106,12 @@
   box-shadow: var(--lg-droplet-rose-shadow);
 }
 
+/* 跟随终端开着、但这会儿跟不上（终端连到别的机器、提示符认不出来）：图标还是「链接」，只是灰下去，
+   和「关掉了」的断开图标区分开；原因写在悬停提示里 */
+.file-tool.stalled {
+  color: var(--xin-text-faint);
+}
+
 /* 面包屑：一颗长胶囊，段落可点，当前目录加粗 */
 .path-bar {
   min-width: 120px;

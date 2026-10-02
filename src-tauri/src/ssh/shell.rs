@@ -17,6 +17,7 @@ use crate::sftp::session::CachedSftp;
 use crate::sftp::ops::{
     create_directory_on_session, create_file_on_session,
     chmod_path_on_session, copy_path_on_session, list_directory_on_session, read_file_text_on_session, rename_path_on_session,
+    resolve_home_on_session,
     stream_directory_on_session, write_file_text_on_session,
 };
 use crate::sftp::transfer::{
@@ -302,6 +303,11 @@ async fn run_terminal_shell(
                     TerminalControl::ListDirectory { path, responder } => {
                         cached_sftp.spawn(responder, false, |sftp| async move {
                             list_directory_on_session(&sftp, &path).await
+                        });
+                    }
+                    TerminalControl::ResolveHome { responder } => {
+                        cached_sftp.spawn(responder, false, |sftp| async move {
+                            resolve_home_on_session(&sftp).await
                         });
                     }
                     TerminalControl::ReadFileText { path, responder } => {

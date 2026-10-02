@@ -1,17 +1,28 @@
-// 认出一行里的 shell 提示符，并给出 user / path 各占哪几格，供终端给提示符上色。
+// 认出一行里的 shell 提示符，并给出 user / path 各占哪几格，供终端给提示符上色；
+// 同时带出用户名、主机名和路径文字，文件面板据此跟随终端目录（terminalCwd.js）。
 //
 // 只认几个主流发行版的默认形状：认错了会把普通输出染上色，宁可漏认也不要误认。
 // 自定义过提示符（oh-my-zsh、starship…）的用户本来就有自己的配色，不需要我们插手。
 // 可选的 (venv) / (base) 前缀是 Python 虚拟环境和 conda 加上去的。
 const ENV_PREFIX = String.raw`(?<env>\([^()\s]+\)\s+)?`;
 
+// pathStyle：full = 提示符里是完整路径（\w）；basename = 只有当前目录名（\W），读不出在哪一层
 const PROMPT_PATTERNS = [
   // Debian / Ubuntu / SUSE：user@host:path$
-  new RegExp(String.raw`^${ENV_PREFIX}(?<user>[\w.-]+)@[\w.-]+:(?<path>.*?)(?<symbol>[#$>]) `, "d"),
+  {
+    pathStyle: "full",
+    pattern: new RegExp(String.raw`^${ENV_PREFIX}(?<user>[\w.-]+)@(?<host>[\w.-]+):(?<path>.*?)(?<symbol>[#$>]) `, "d"),
+  },
   // RHEL / CentOS / Rocky / Fedora / Arch：[user@host dir]$
-  new RegExp(String.raw`^${ENV_PREFIX}\[(?<user>[\w.-]+)@[\w.-]+ (?<path>[^\]]+)\](?<symbol>[#$]) `, "d"),
+  {
+    pathStyle: "basename",
+    pattern: new RegExp(String.raw`^${ENV_PREFIX}\[(?<user>[\w.-]+)@(?<host>[\w.-]+) (?<path>[^\]]+)\](?<symbol>[#$]) `, "d"),
+  },
   // Alpine / BusyBox：host:path#
-  new RegExp(String.raw`^${ENV_PREFIX}[\w.-]+:(?<path>[~/]\S*)(?<symbol>[#$]) `, "d"),
+  {
+    pathStyle: "full",
+    pattern: new RegExp(String.raw`^${ENV_PREFIX}(?<host>[\w.-]+):(?<path>[~/]\S*)(?<symbol>[#$]) `, "d"),
+  },
 ];
 
 // 读出 buffer 里一整行的文字，并记下每个字符落在第几格。
@@ -37,7 +48,7 @@ export function readTerminalRow(buffer, y) {
 
 // 返回 null 表示这一行不是认得的提示符；否则各区间都已换算成格子（x, width）。
 export function parseShellPrompt(row) {
-  for (const pattern of PROMPT_PATTERNS) {
+  for (const { pattern, pathStyle } of PROMPT_PATTERNS) {
     const match = pattern.exec(row.text);
     if (!match) continue;
 
@@ -54,6 +65,11 @@ export function parseShellPrompt(row) {
       user: user ? toCells(user) : null,
       path: path[1] > path[0] ? toCells(path) : null,
       isRoot: match.groups.user === "root",
+      // Alpine 的提示符不带用户名
+      userName: match.groups.user ?? null,
+      hostName: match.groups.host,
+      pathText: match.groups.path,
+      pathStyle,
     };
   }
   return null;

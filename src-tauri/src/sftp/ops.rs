@@ -101,6 +101,21 @@ pub async fn list_remote_directory(
     .map_err(|_| timeout_error("listDirectory", 20))?
 }
 
+// 只读查询：SFTP 子系统从登录用户的家目录起步，把「.」规范化就是家目录，不在服务器上执行任何命令
+#[tauri::command]
+pub async fn resolve_remote_home(
+    registry: State<'_, TerminalRegistry>,
+    session_id: String,
+) -> Result<String, AppError> {
+    if session_id.trim().is_empty() {
+        return Err(required("sessionId"));
+    }
+
+    timeout(Duration::from_secs(12), registry.resolve_home(&session_id))
+        .await
+        .map_err(|_| timeout_error("resolveHome", 12))?
+}
+
 #[tauri::command]
 pub async fn read_remote_file_text(
     registry: State<'_, TerminalRegistry>,
@@ -565,6 +580,14 @@ async fn write_editor_bytes(file: &mut russh_sftp::client::fs::File, path: &str,
     file.sync_all()
         .await
         .map_err(|error| sftp_error(error, path))
+}
+
+pub(crate) async fn resolve_home_on_session(sftp: &SftpSession) -> Result<String, AppError> {
+    let home = sftp
+        .canonicalize(".")
+        .await
+        .map_err(|error| sftp_error(error, "."))?;
+    Ok(normalize_remote_path(&home))
 }
 
 // 目录树用的一次性列目录：走会话内缓存 SFTP 子通道，与流式面板列表互不影响

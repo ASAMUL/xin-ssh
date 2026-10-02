@@ -110,6 +110,15 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
         state.selectedPaths = [...state.selectedPaths, entryPath];
       }
     },
+    // 跟随终端：已经在那个目录（或正在去那个目录）就不重复列
+    followTerminal(session, path) {
+      const state = this.ensureSessionState(session);
+      if (!state || session.status !== "connected") return;
+      const target = normalizeRemotePath(path);
+      if (target === (state.isLoading ? state.requestedPath : state.currentPath)) return;
+
+      return this.loadDirectory(session, target);
+    },
     // 流式结果同时绑定请求与连接尝试，重连后旧批次不得写回或触发自动重连。
     async loadDirectory(session, path, options = {}) {
       if (!session) return;

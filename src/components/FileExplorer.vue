@@ -103,6 +103,16 @@ const canNavigate = computed(() => isConnected.value && !fileState.value.isLoadi
 const canTransfer = computed(() => Boolean(props.activeSession) && isConnected.value);
 const canRefresh = computed(() => Boolean(props.activeSession) && !isConnecting.value && !fileState.value.isLoading);
 const canGoBack = computed(() => fileState.value.historyIndex > 0);
+// 跟随终端目录：开关是全局偏好，跟不跟得上看这个会话的终端（terminalCwd.js 推断，存在会话上）
+const followTerminal = computed(() => settingsStore.followTerminalCwd);
+const terminalCwd = computed(() => props.activeSession?.terminalCwd ?? null);
+const canFollowTerminal = computed(() => terminalCwd.value?.status === "following");
+const followTerminalTitle = computed(() => {
+  if (!followTerminal.value) return t("files.followTerminalOff");
+  if (terminalCwd.value?.status === "elsewhere") return t("files.followTerminalElsewhere");
+  if (!canFollowTerminal.value) return t("files.followTerminalUnknown");
+  return t("files.followTerminalOn", { path: terminalCwd.value.path });
+});
 const canGoForward = computed(() => fileState.value.historyIndex < fileState.value.history.length - 1);
 const query = computed({
   get: () => fileState.value.query,
@@ -638,6 +648,15 @@ function goForward() {
   if (!props.activeSession || !canNavigate.value || !canGoForward.value) return;
 
   fileExplorerStore.goForward(props.activeSession);
+}
+
+// 刚打开就先对齐一次：点它的时候，多半就是想看终端现在在哪
+function toggleFollowTerminal() {
+  const next = !followTerminal.value;
+  settingsStore.setFollowTerminalCwd(next);
+  if (next && canFollowTerminal.value && props.activeSession) {
+    fileExplorerStore.followTerminal(props.activeSession, terminalCwd.value.path);
+  }
 }
 
 function goToParent() {
@@ -1426,6 +1445,20 @@ function sortAriaLabel(key) {
           :title="t('files.parent')"
           :disabled="!canNavigate || currentPath === '/'"
           @click="goToParent"
+        />
+        <span class="file-nav-divider" aria-hidden="true"></span>
+        <UButton
+          class="file-tool"
+          :class="{ active: followTerminal && canFollowTerminal, stalled: followTerminal && !canFollowTerminal }"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          square
+          :icon="followTerminal ? 'i-lucide-link' : 'i-lucide-unlink'"
+          :aria-pressed="followTerminal"
+          :aria-label="t('files.followTerminal')"
+          :title="followTerminalTitle"
+          @click="toggleFollowTerminal"
         />
       </div>
 

@@ -61,6 +61,9 @@ pub(crate) enum TerminalControl {
         path: String,
         responder: oneshot::Sender<Result<Vec<RemoteFileEntry>, AppError>>,
     },
+    ResolveHome {
+        responder: oneshot::Sender<Result<String, AppError>>,
+    },
     ReadFileText {
         path: String,
         responder: oneshot::Sender<Result<RemoteFileContent, AppError>>,
@@ -292,6 +295,20 @@ impl TerminalRegistry {
         receiver
             .await
             .map_err(|_| request_canceled("listDirectory"))?
+    }
+
+    // 登录用户的家目录：终端提示符里的 ~ 要换算成绝对路径，文件面板才能跟过去
+    pub(crate) async fn resolve_home(&self, session_id: &str) -> Result<String, AppError> {
+        let sender = self.sender_for(session_id)?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::ResolveHome { responder })
+            .map_err(|_| not_accepting("file"))?;
+
+        receiver
+            .await
+            .map_err(|_| request_canceled("resolveHome"))?
     }
 
     pub(crate) async fn read_file_text(

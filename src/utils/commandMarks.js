@@ -4,7 +4,8 @@
 //   · 提示符退后、命令突出：user@host 和分隔符调暗，路径用蓝色，root 用品红提醒；
 //   · 命令那一行右侧淡淡地标出回车时间，跑了 3 秒以上再带上耗时；
 //   · Ctrl+↑ / Ctrl+↓ 在执行过的命令之间跳转；
-//   · 把执行过的命令交给 onCommand（命令联想的历史就从这里来）。
+//   · 把执行过的命令交给 onCommand（命令联想的历史就从这里来）；
+//   · 每出现一个新的、等待输入的提示符就交给 onPrompt（文件面板跟随终端目录从这里来）。
 // 思路同 Windows Terminal 的 autoMarkPrompts（回车即打标记，不需要 shell 集成）。
 import { mixHex } from "./hexColor";
 import { parseShellPrompt, readTerminalRow } from "./shellPrompt";
@@ -16,7 +17,7 @@ const INSPECT_DELAY_MS = 60;
 // 右侧标签和命令文字之间至少留这么多格，挤不下就不显示
 const LABEL_GAP_CELLS = 3;
 
-export function createCommandMarks(terminal, { onCommand } = {}) {
+export function createCommandMarks(terminal, { onCommand, onPrompt } = {}) {
   const marks = [];
   let palette = null;
   // 回车后在等下一个提示符出现、好算耗时的那条
@@ -144,6 +145,7 @@ export function createCommandMarks(terminal, { onCommand } = {}) {
       if (running.duration >= DURATION_THRESHOLD_MS) paintLabel(running);
       running = null;
     }
+    onPrompt?.(prompt);
   }
 
   // 命令可能折成好几行：把这组折行拼回一整行，再去掉前面的提示符
