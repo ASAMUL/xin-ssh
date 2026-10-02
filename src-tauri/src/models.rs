@@ -313,6 +313,9 @@ pub struct ConnectionProfile {
     // 连接成功后从远端 /etc/os-release 识别出的图标 id，由 set_profile_detected_os 单独写入
     #[serde(default)]
     pub detected_os: Option<String>,
+    // 生产机：标签 / 终端带红色标记，危险命令和多行粘贴执行前确认（全在客户端拦，不碰服务器）
+    #[serde(default)]
+    pub production: bool,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,

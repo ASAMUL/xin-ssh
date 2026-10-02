@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSnippetStore } from "../../stores/snippetStore";
 import { useUiStore } from "../../stores/uiStore";
+import { useTerminalGuard } from "../../composables/useTerminalGuard";
 import { localizeError } from "../../utils/appError";
 
 const emit = defineEmits(["close"]);
@@ -12,6 +13,7 @@ const { t } = useI18n();
 const sessionStore = useSessionStore();
 const snippetStore = useSnippetStore();
 const uiStore = useUiStore();
+const terminalGuard = useTerminalGuard();
 
 // list ⇄ edit 两个视图在同一侧板内切换，不叠加弹窗
 const mode = ref("list");
@@ -45,15 +47,24 @@ const filteredSnippets = computed(() => {
 
 const isEmpty = computed(() => snippetStore.activeSnippets.length === 0);
 
-// 单击 = 填入命令不回车（防误执行）；「运行」按钮 = 追加回车直接执行
-function insertSnippet(snippet) {
+// 单击 = 填入命令不回车（防误执行）；「运行」按钮 = 追加回车直接执行。
+// 片段是直接发给服务器的，不经过终端的回车 / 粘贴拦截，生产机保护在这里补上：
+// 多行片段填进去就会逐行执行，按粘贴确认；运行单行片段按危险命令确认
+async function insertSnippet(snippet) {
   if (!canSend.value) return;
+  const session = sessionStore.activeSession;
+  if (!(await terminalGuard.confirmPaste(session, snippet.command))) return;
 
   sessionStore.sendActiveTerminalInput(snippet.command).catch((error) => uiStore.setError(error));
 }
 
-function runSnippet(snippet) {
+async function runSnippet(snippet) {
   if (!canSend.value) return;
+  const session = sessionStore.activeSession;
+  const confirmed = snippet.command.includes("\n")
+    ? await terminalGuard.confirmPaste(session, snippet.command)
+    : await terminalGuard.confirmCommand(session, snippet.command);
+  if (!confirmed) return;
 
   sessionStore
     .sendActiveTerminalInput(`${snippet.command}\n`)

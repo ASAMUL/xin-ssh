@@ -160,7 +160,11 @@ watch(
           v-for="session in sessions"
           :key="session.id"
           class="session-tab"
-          :class="{ active: session.id === activeSessionId, closing: session.isClosing }"
+          :class="{
+            active: session.id === activeSessionId,
+            closing: session.isClosing,
+            production: profileStore.isProductionProfile(session.profileId),
+          }"
           :data-active="session.id === activeSessionId || null"
           :data-sort-id="session.id"
           :aria-busy="session.isClosing"
@@ -183,6 +187,9 @@ watch(
                 <OsIconTile class="tab-os-icon" :icon="osIcons[session.id]" :size="20" />
                 <span class="tab-status" :class="session.status"></span>
                 <span class="tab-title">{{ session.name }}</span>
+                <span v-if="profileStore.isProductionProfile(session.profileId)" class="production-badge">
+                  {{ t("profile.productionBadge") }}
+                </span>
               </button>
               <UButton
                 color="neutral" variant="ghost" size="xs" square icon="i-lucide-x"

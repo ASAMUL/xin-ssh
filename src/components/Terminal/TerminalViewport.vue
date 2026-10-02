@@ -12,9 +12,11 @@ import TerminalSearchPanel from "./TerminalSearchPanel.vue";
 import { buildXtermTheme } from "../../config/terminalThemes";
 import { loadCommandHistory, recordCommand, suggestCommand } from "../../services/commandHistory";
 import { resolveRemoteHome } from "../../services/workspaceApi";
+import { useTerminalGuard } from "../../composables/useTerminalGuard";
 import { createCommandMarks } from "../../utils/commandMarks";
 import { createCommandSuggest } from "../../utils/commandSuggest";
 import { createTerminalCwd } from "../../utils/terminalCwd";
+import { parseShellPrompt, readTerminalRow } from "../../utils/shellPrompt";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useSnippetStore } from "../../stores/snippetStore";
@@ -35,6 +37,7 @@ const sessionStore = useSessionStore();
 const settingsStore = useSettingsStore();
 const snippetStore = useSnippetStore();
 const uiStore = useUiStore();
+const terminalGuard = useTerminalGuard();
 const session = computed(() => sessionStore.findSession(props.sessionId));
 // 后台终端仍需向原会话回复光标/设备查询；不能因不可见而关闭整个输入通道。
 const canSendData = computed(() => session.value?.status === "connected"
@@ -103,6 +106,8 @@ onMounted(() => {
   loadCommandHistory();
   if (settingsStore.commandSuggestions) ensureSnippetsLoaded();
   terminal.attachCustomKeyEventHandler(handleTerminalKey);
+  // 捕获阶段：赶在 xterm 自己的粘贴处理之前，生产机上多行粘贴先确认
+  terminalMount.value.addEventListener("paste", guardPaste, true);
   listeners.push(
     terminal.onData((data) => {
       if (canSendData.value) {
@@ -127,6 +132,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   disposed = true;
   cancelAnimationFrame(layoutFrame);
+  terminalMount.value?.removeEventListener("paste", guardPaste, true);
   detachSink?.();
   resizeObserver?.disconnect();
   listeners.forEach((listener) => listener.dispose());
@@ -224,6 +230,7 @@ function focus() {
 function handleTerminalKey(event) {
   if (!props.active) return false;
   if (event.type === "keydown" && acceptSuggestion(event)) return false;
+  if (event.type === "keydown" && guardEnter(event)) return false;
   if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) return true;
   const key = event.key.toLowerCase();
   // Ctrl+↑ / Ctrl+↓ 在执行过的命令之间跳；vim 这类全屏程序里不拦，原样交给它
@@ -255,6 +262,60 @@ function acceptSuggestion(event) {
   event.preventDefault();
   terminal.input(suffix);
   return true;
+}
+
+// 生产机上回车之前先读出这一行要执行的命令，命中危险规则就先不发回车，弹确认；
+// 点了确认再补发回车，取消就什么都不发，命令留在原处可以改。
+// vim / top 这类全屏程序里不拦（那里的回车不是在执行命令），输入法选字时的回车也不拦。
+function guardEnter(event) {
+  const plain = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+  if (!plain || event.key !== "Enter" || event.isComposing) return false;
+  if (!terminalGuard.isProduction(session.value) || terminal.buffer.active.type !== "normal") return false;
+
+  const command = readCurrentCommand();
+  if (!command) return false;
+  event.preventDefault();
+  terminalGuard.confirmCommand(session.value, command).then((confirmed) => {
+    if (disposed) return;
+    if (confirmed && canSendData.value) terminal.input("\r");
+    focus();
+  });
+  return true;
+}
+
+// 光标所在的这一行（长命令折行时拼回整条）；认得出提示符就去掉提示符，认不出就看整行——
+// 这样在 mysql 客户端里敲 drop database 也拦得住
+function readCurrentCommand() {
+  const buffer = terminal.buffer.active;
+  const cursorLine = buffer.baseY + buffer.cursorY;
+  let start = cursorLine;
+  while (start > 0 && buffer.getLine(start)?.isWrapped) start -= 1;
+
+  let text = "";
+  let line = start;
+  do {
+    text += readTerminalRow(buffer, line)?.text ?? "";
+    line += 1;
+  } while (buffer.getLine(line)?.isWrapped);
+
+  const first = readTerminalRow(buffer, start);
+  const prompt = first && parseShellPrompt(first);
+  return (prompt ? text.slice(prompt.end + 1) : text).trim();
+}
+
+function guardPaste(event) {
+  if (!terminalGuard.isProduction(session.value)) return;
+  const text = event.clipboardData?.getData("text/plain") ?? "";
+  if (!text.includes("\n") && !text.includes("\r")) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  terminalGuard.confirmPaste(session.value, text).then((confirmed) => {
+    if (disposed) return;
+    // terminal.paste 会按 shell 是否开了括号粘贴模式包好再发，和直接粘贴走同一条路
+    if (confirmed && canSendData.value) terminal.paste(text);
+    focus();
+  });
 }
 
 // 关掉联想时也不记历史：用户关掉它，多半就是不希望本机留下命令记录

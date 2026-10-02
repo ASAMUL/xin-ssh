@@ -57,6 +57,7 @@ function statusLabel(status) {
               <button type="button" class="row-name" @click="emit('open', profile)">
                 <OsIconTile :icon="resolveProfileOsIcon(profile)" :size="28" />
                 <span>{{ profile.name }}</span>
+                <span v-if="profile.production" class="production-badge">{{ t("profile.productionBadge") }}</span>
               </button>
             </td>
             <td class="cell-muted">{{ profile.host }}</td>

@@ -55,6 +55,7 @@ const backgroundSelections = new Map();
 const isSearchOpen = computed(() => activeTerminal.value?.isSearchOpen ?? false);
 
 const activeSession = computed(() => sessionStore.activeSession);
+const isProductionSession = computed(() => profileStore.isProductionProfile(activeSession.value?.profileId));
 // 沉浸时文件区整个不渲染，splitpanes 才会把高度全部让给终端
 const showFilePane = computed(() => settingsStore.showFileExplorer && !uiStore.isWorkspaceImmersive);
 const showMonitorPane = computed(() => settingsStore.showMonitorSidebar && !uiStore.isWorkspaceImmersive);
@@ -554,6 +555,7 @@ async function savePendingCredential() {
     >
       <section
         class="terminal-panel-top liquid-rim"
+        :class="{ production: isProductionSession }"
         :data-material="settingsStore.terminalMaterial"
         :style="themeStyleVars"
       >

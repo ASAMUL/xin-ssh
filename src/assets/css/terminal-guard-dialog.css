@@ -1,0 +1,31 @@
+/* 生产机保护的确认框（TerminalGuardDialog.vue 专用，scoped 引入）。
+   命令 / 粘贴内容用等宽字体完整显示：要确认的是「到底会执行什么」，截断就失去了确认的意义；
+   太长的就在框里滚动。命中危险规则的那一段用危险色底标出来。 */
+.guard-code {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  color: var(--xin-text);
+  border: 1px solid var(--xin-border-soft);
+  border-radius: var(--xin-radius-sm);
+  background: rgb(var(--xin-ink-rgb) / 0.04);
+  font-family: "Cascadia Code", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.guard-code mark {
+  padding: 1px 2px;
+  color: var(--xin-danger-text);
+  border-radius: 4px;
+  background: rgb(var(--xin-danger-rgb) / 0.16);
+}
+
+.guard-more {
+  margin: 6px 2px 0;
+  color: var(--xin-text-muted);
+  font-size: 12px;
+}

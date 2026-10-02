@@ -91,6 +91,7 @@ const form = reactive({
   privateKeyPath: "",
   agent: normalizeAgentConfig(),
   defaultRemotePath: "/",
+  production: false,
 });
 
 const canSave = computed(
@@ -125,6 +126,7 @@ function resetForm() {
   form.privateKeyPath = profile?.privateKeyPath ?? "";
   form.agent = normalizeAgentConfig(profile?.agent);
   form.defaultRemotePath = profile?.defaultRemotePath ?? "/";
+  form.production = Boolean(profile?.production);
   secretPassword.value = "";
   passphrase.value = "";
   shouldSaveCredential.value = hasSavedCredential.value;
@@ -206,6 +208,7 @@ async function submitProfile() {
         agent: draft.authMethod === "agent" ? draft.agent : null,
         credentialRef,
         defaultRemotePath: draft.defaultRemotePath || "/",
+        production: Boolean(draft.production),
         ...(!currentProfile ? {
           sortOrder: Math.max(-1, ...profileStore.activeProfiles.map((profile) => profile.sortOrder)) + 1,
           favorite: false,
@@ -391,68 +394,75 @@ async function createInlineGroup() {
       </header>
 
       <div class="form-body">
-        <div class="identity-card">
-          <div class="identity-avatar">
-            <OsIconPicker v-model="form.osIcon" :detected-os="editingProfile?.detectedOs ?? null" />
-          </div>
-          <div class="form-list identity-rows">
-            <label class="form-row">
-              <span class="form-row-label">{{ t("profile.name") }}</span>
-              <UInput
-                v-model="form.name"
-                variant="none"
-                class="w-full"
-                :placeholder="t('profile.namePlaceholder')"
-              />
-            </label>
-            <div class="form-row">
-              <span class="form-row-label">{{ t("profile.group") }}</span>
-              <USelect v-model="form.groupId" variant="none" class="w-full" :items="groupSelectItems" />
-              <UButton
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                square
-                icon="i-lucide-folder-plus"
-                :aria-label="t('sidebar.addGroup')"
-                :title="t('sidebar.addGroup')"
-                @click="openInlineGroupCreator"
-              />
+        <div class="form-section">
+          <div class="identity-card">
+            <div class="identity-avatar">
+              <OsIconPicker v-model="form.osIcon" :detected-os="editingProfile?.detectedOs ?? null" />
             </div>
-            <div v-if="isGroupCreatorOpen" class="form-row">
-              <span class="form-row-label">{{ t("sidebar.addGroup") }}</span>
-              <UInput
-                v-model="newGroupName"
-                variant="none"
-                class="w-full"
-                :placeholder="t('sidebar.groupName')"
-                autofocus
-                @keydown.enter.prevent="createInlineGroup"
-              />
-              <div class="group-creator-actions">
-                <UButton
-                  color="primary"
-                  variant="soft"
-                  size="sm"
-                  square
-                  icon="i-lucide-check"
-                  :loading="isSavingGroup"
-                  :disabled="!newGroupName.trim()"
-                  :aria-label="t('sidebar.addGroup')"
-                  @click="createInlineGroup"
+            <div class="form-list identity-rows">
+              <label class="form-row">
+                <span class="form-row-label">{{ t("profile.name") }}</span>
+                <UInput
+                  v-model="form.name"
+                  variant="none"
+                  class="w-full"
+                  :placeholder="t('profile.namePlaceholder')"
                 />
+              </label>
+              <div class="form-row">
+                <span class="form-row-label">{{ t("profile.group") }}</span>
+                <USelect v-model="form.groupId" variant="none" class="w-full" :items="groupSelectItems" />
                 <UButton
                   color="neutral"
                   variant="ghost"
                   size="sm"
                   square
-                  icon="i-lucide-x"
-                  :aria-label="t('profile.cancel')"
-                  @click="closeInlineGroupCreator"
+                  icon="i-lucide-folder-plus"
+                  :aria-label="t('sidebar.addGroup')"
+                  :title="t('sidebar.addGroup')"
+                  @click="openInlineGroupCreator"
                 />
               </div>
+              <div v-if="isGroupCreatorOpen" class="form-row">
+                <span class="form-row-label">{{ t("sidebar.addGroup") }}</span>
+                <UInput
+                  v-model="newGroupName"
+                  variant="none"
+                  class="w-full"
+                  :placeholder="t('sidebar.groupName')"
+                  autofocus
+                  @keydown.enter.prevent="createInlineGroup"
+                />
+                <div class="group-creator-actions">
+                  <UButton
+                    color="primary"
+                    variant="soft"
+                    size="sm"
+                    square
+                    icon="i-lucide-check"
+                    :loading="isSavingGroup"
+                    :disabled="!newGroupName.trim()"
+                    :aria-label="t('sidebar.addGroup')"
+                    @click="createInlineGroup"
+                  />
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="sm"
+                    square
+                    icon="i-lucide-x"
+                    :aria-label="t('profile.cancel')"
+                    @click="closeInlineGroupCreator"
+                  />
+                </div>
+              </div>
+              <label class="form-row form-row-split">
+                <span class="form-row-label">{{ t("profile.production") }}</span>
+                <USwitch v-model="form.production" color="error" />
+              </label>
             </div>
           </div>
+          <p v-if="form.production" class="form-section-footer production-hint">{{ t("profile.productionHint") }}</p>
         </div>
 
         <section class="form-section">

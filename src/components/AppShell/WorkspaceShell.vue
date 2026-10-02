@@ -5,6 +5,7 @@ import ConnectionForm from "../ConnectionManager/ConnectionForm.vue";
 import RemoteFileEditor from "../FileEditor/RemoteFileEditor.vue";
 import SessionTabs from "../SessionTabs.vue";
 import SettingsPanel from "../Settings/SettingsPanel.vue";
+import TerminalGuardDialog from "../Terminal/TerminalGuardDialog.vue";
 import TerminalWorkspace from "../Terminal/TerminalWorkspace.vue";
 import TunnelPanel from "../Tunnels/TunnelPanel.vue";
 import HomeDashboard from "../Home/HomeDashboard.vue";
@@ -87,6 +88,7 @@ function persistMonitorPaneSize(event) {
     <SettingsPanel v-if="uiStore.isSettingsOpen" @close="uiStore.closeSettings" />
     <TunnelPanel v-if="uiStore.isTunnelPanelOpen" @close="uiStore.closeTunnelPanel" />
     <RemoteFileEditor />
+    <TerminalGuardDialog />
   </section>
 </template>
 

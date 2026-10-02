@@ -1,0 +1,17 @@
+/* 「生产」角标：连接卡片、连接列表、会话标签、状态栏共用一个样子（全局样式，main.css 引入）。
+   危险色的浅底 + 深字，小而清楚——是提醒，不是警报：不闪、不发光，天天看也不扎眼。 */
+.production-badge {
+  height: 16px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 0 5px;
+  color: var(--xin-danger-text);
+  border-radius: 5px;
+  background: rgb(var(--xin-danger-rgb) / 0.14);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}

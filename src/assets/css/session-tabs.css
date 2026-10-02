@@ -42,6 +42,12 @@
   box-shadow: var(--lg-droplet-clear-shadow);
 }
 
+/* 生产机的标签：一圈细红边。选中时水滴照旧，红边也留着——切到它的那一刻最需要知道这是生产机 */
+.session-tab.production,
+.session-tab.production.active {
+  border-color: rgb(var(--xin-danger-rgb) / 0.42);
+}
+
 /* 按下去要有回弹，这是 iOS 手感里最省事也最像的一处 */
 .session-tab:active {
   transform: scale(0.97);

@@ -35,6 +35,11 @@
   background: transparent;
 }
 
+/* 打开生产开关后身份卡下面那行说明，用危险色：这是在改这台机器的「脾气」，要让人看清 */
+.production-hint {
+  color: var(--xin-danger-text);
+}
+
 .group-creator-actions {
   display: flex;
   gap: 2px;

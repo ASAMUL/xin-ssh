@@ -41,6 +41,9 @@ export const useProfileStore = defineStore("profiles", {
     favoriteProfiles() {
       return this.activeProfiles.filter((profile) => profile.favorite);
     },
+    // 生产机标记：会话、标签、终端都按连接 id 现查，改了标记开着的会话立刻跟着变
+    isProductionProfile: (state) => (profileId) =>
+      Boolean(profileId && state.profiles.find((profile) => profile.id === profileId)?.production),
     recentProfiles() {
       return this.activeProfiles
         .filter((profile) => Number(profile.lastConnectedAt) > 0)

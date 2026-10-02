@@ -61,6 +61,7 @@ defineOptions({ inheritAttrs: false });
           <strong>
             <i v-if="hasSession" class="connection-card-status" :title="statusLabel"></i>
             <span>{{ profile.name }}</span>
+            <span v-if="profile.production" class="production-badge">{{ t("profile.productionBadge") }}</span>
           </strong>
           <span class="connection-card-meta">
             <span class="connection-card-address">{{ address }}</span>
