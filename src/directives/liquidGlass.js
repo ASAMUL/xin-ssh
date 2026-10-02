@@ -6,7 +6,7 @@ import {
 } from "../utils/liquidGlass";
 
 // v-liquid-glass 负责「按尺寸生成」的两层：
-// - 高光带：沿斜面的一圈柔光，写进 --lg-specular，由 .liquid-glass::after 画出来（所有内核都有）；
+// - 高光线：贴着外沿、只在朝光的圆角弧段亮的一道细光，写进 --lg-specular，由 .liquid-glass::after 画出来（所有内核都有）；
 // - 折射：位移图 + backdrop-filter（只有 Chromium / WebView2）。
 // 材质本身（通透底色、描边、投影）由 .liquid-glass 类提供——类写在模板里，
 // 指令不去增删 class，组件重渲染改 class 时不会把材质冲掉。
@@ -17,8 +17,9 @@ const DEFAULTS = {
   scale: 18,
   blur: 2.5,
   saturation: 1.5,
-  // 色散强度：R / B 通道比 G 少弯 / 多弯的比例，0 关闭
-  dispersion: 0.07,
+  // 色散强度：R / B 通道比 G 少弯 / 多弯的比例，0 关闭。
+  // 曾给到 0.07，压在樱色水滴、终端彩字上时边缘析出的彩边太明显，会被当成玻璃描了一圈颜色
+  dispersion: 0.03,
 };
 
 // 色散要把位移做三遍，成本随面积涨；整条顶栏、大对话框底下本来也没有高对比的边缘可析出彩边，只给控件尺寸的玻璃开

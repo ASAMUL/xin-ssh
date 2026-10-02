@@ -67,15 +67,12 @@
 .terminal-action-capsule {
   --lg-fill: color-mix(in srgb, var(--term-panel-bg, rgb(21 23 40)) 72%, transparent);
   --lg-fill-hover: color-mix(in srgb, var(--term-panel-bg, rgb(21 23 40)) 82%, transparent);
-  --lg-edge-light: var(--term-highlight, rgb(255 255 255 / 0.24));
-  --lg-edge-soft: rgb(255 255 255 / 0.05);
   --lg-edge-ink: rgb(0 0 0 / 0.14);
-  --lg-inner-glow: rgb(255 255 255 / 0.08);
   --lg-shadow:
     0 1px 2px rgb(0 0 0 / 0.2),
     0 8px 22px -10px rgb(0 0 0 / 0.55);
-  /* 终端大多是暗底，白色高光带只留一层薄光 */
-  --lg-specular-strength: 0.4;
+  /* 终端大多是暗底，白色高光线只留一层薄光 */
+  --lg-specular-strength: 0.36;
   --lg-glow-strength: 0.34;
   display: flex;
   align-items: center;

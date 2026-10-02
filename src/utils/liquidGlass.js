@@ -62,15 +62,15 @@ function roundedRectEdge(px, py, halfWidth, halfHeight, radius) {
   return { depth, nx: nx * (Math.sign(px) || 1), ny: ny * (Math.sign(py) || 1) };
 }
 
-// 高光的光源：主光从左上偏上方打下来，右下是穿过玻璃的回光，只有主光的一小半
-const KEY_LIGHT = (() => {
-  const length = Math.hypot(-0.42, -0.9);
-  return { x: -0.42 / length, y: -0.9 / length };
-})();
-const BACK_LIGHT_WEIGHT = 0.45;
-// 高光带往里衰减的快慢（相对斜面宽度）：越小越贴边、越像一道细亮线，越大越像一整圈柔光
-const SPECULAR_SPREAD = 0.3;
-const SPECULAR_SHARPNESS = 1.6;
+// 高光的光源：主光从正左上 45° 打下来，右下是穿过玻璃的回光。
+// 早先是一整圈宽光带（宽度按斜面比例、回光给到主光的一半），深色下看着像描了一圈银灰色的边框，
+// 浅色下又把整块玻璃刷白——都不像玻璃。真实的 Liquid Glass 只在朝光的圆角弧段亮一道细线，直边上几乎没有。
+const KEY_LIGHT = { x: -Math.SQRT1_2, y: -Math.SQRT1_2 };
+const BACK_LIGHT_WEIGHT = 0.3;
+// 锐度越高，光越集中在法线正对光源的那段圆弧上：45° 光下直边只剩弧顶的三分之一
+const SPECULAR_SHARPNESS = 3;
+// 高光线往里衰减的距离（px，不随斜面变宽）：最外一像素全亮，再往里一像素只剩三成多
+const SPECULAR_FALLOFF_PX = 1.1;
 
 function mapCanvas(width, height) {
   const canvas = document.createElement("canvas");
@@ -87,8 +87,8 @@ function toDataUrl({ canvas, context, image }) {
 
 // 一次遍历同时产出两张图，都从同一条圆角矩形 SDF 和法线来：
 // - 位移图：折射用，交给 SVG feDisplacementMap（只有 Chromium 需要）；
-// - 高光图：沿斜面的一圈柔光——法线朝向光源的地方最亮，离外沿越远越暗。
-//   这是「一块有厚度的玻璃」和「一个描了 1px 亮边的胶囊」的区别，做成普通背景图，所有内核都能用。
+// - 高光图：贴着外沿的一道细光——法线朝向光源的圆角弧段最亮，直边淡出。
+//   1px 亮边是整圈一样亮的，这道光有明暗走向，看着才是「光打在玻璃上」；做成普通背景图，所有内核都能用。
 function createGlassMaps({ width, height, radius, bezel, displacement }) {
   const displacementMap = displacement ? mapCanvas(width, height) : null;
   const specularMap = mapCanvas(width, height);
@@ -122,7 +122,7 @@ function createGlassMaps({ width, height, radius, bezel, displacement }) {
         const facing = nx * KEY_LIGHT.x + ny * KEY_LIGHT.y;
         const light = Math.max(0, facing) ** SPECULAR_SHARPNESS
           + BACK_LIGHT_WEIGHT * Math.max(0, -facing) ** SPECULAR_SHARPNESS;
-        const intensity = Math.min(1, light * Math.exp(-depth / (bezel * SPECULAR_SPREAD)));
+        const intensity = Math.min(1, light * Math.exp(-Math.max(0, depth - 0.5) / SPECULAR_FALLOFF_PX));
         const data = specularMap.image.data;
         data[offset] = 255;
         data[offset + 1] = 255;
