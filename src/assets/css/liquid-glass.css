@@ -17,12 +17,15 @@
 
    只用在浮在内容上的 chrome 控件（分段切换、工具栏胶囊、标签条、浮动按钮）。
    内容层（卡片、终端、编辑器）只用 .liquid-rim 描边高光，不做折射——Apple 也是这么分层的。
+
+   底色写了 var(--xin-glass-tint) 的，跟着设置里的玻璃强度滑块在「通透 → 着色」两端之间插值（见 main.css）。
+   深色两端的底色不是同一种灰，用 color-mix 混，而不是只插 alpha。
    ———————————————————————————————————————————————————————————— */
 
 :root {
   /* 浅色下玻璃只比底下亮一点点：比背景还白就成了一颗白色塑料按钮，边缘那道高光也被白底吞掉 */
-  --lg-fill: rgb(255 255 255 / 0.16);
-  --lg-fill-hover: rgb(255 255 255 / 0.3);
+  --lg-fill: rgb(255 255 255 / calc(0.16 + 0.44 * var(--xin-glass-tint)));
+  --lg-fill-hover: rgb(255 255 255 / calc(0.3 + 0.42 * var(--xin-glass-tint)));
   /* 一圈均匀的发丝轮廓：只交代形状、不负责「亮」。浅色下玻璃的边界主要靠它，而不是白边 */
   --lg-edge-ink: rgb(var(--xin-ink-rgb) / 0.08);
   /* 内容层（.liquid-rim）没有高光贴图，靠一条 135° 渐变描边借光：左上亮、右下回一点光 */
@@ -61,8 +64,8 @@
 }
 
 .dark {
-  --lg-fill: rgb(255 255 255 / 0.05);
-  --lg-fill-hover: rgb(255 255 255 / 0.09);
+  --lg-fill: color-mix(in srgb, rgb(255 255 255 / 0.05), rgb(40 40 44 / 0.66) calc(var(--xin-glass-tint) * 100%));
+  --lg-fill-hover: color-mix(in srgb, rgb(255 255 255 / 0.09), rgb(52 52 58 / 0.72) calc(var(--xin-glass-tint) * 100%));
   --lg-edge-ink: rgb(255 255 255 / 0.07);
   --lg-edge-light: rgb(255 255 255 / 0.2);
   --lg-edge-soft: rgb(255 255 255 / 0.06);
@@ -233,16 +236,16 @@
    Nuxt UI 主题配置统一挂上类名，组件里不用逐个加。
    ———————————————————————————————————————————————————————————— */
 :root {
-  --lg-fill-regular: rgb(255 255 255 / 0.72);
+  --lg-fill-regular: rgb(255 255 255 / calc(0.72 + 0.16 * var(--xin-glass-tint)));
   /* 对话框也有折射了（边缘一圈要透才看得见弯折），底色比以前通透；
      可读性交给折射滤镜里的那层模糊（见 main.js 的 autoAttachLiquidGlass） */
-  --lg-fill-sheet: rgb(250 250 252 / 0.7);
+  --lg-fill-sheet: rgb(250 250 252 / calc(0.7 + 0.22 * var(--xin-glass-tint)));
   --lg-scrim: rgb(var(--xin-shadow-rgb) / 0.18);
 }
 
 .dark {
-  --lg-fill-regular: rgb(38 38 42 / 0.76);
-  --lg-fill-sheet: rgb(30 30 32 / 0.76);
+  --lg-fill-regular: color-mix(in srgb, rgb(38 38 42 / 0.76), rgb(34 34 38 / 0.9) calc(var(--xin-glass-tint) * 100%));
+  --lg-fill-sheet: color-mix(in srgb, rgb(30 30 32 / 0.76), rgb(26 26 28 / 0.94) calc(var(--xin-glass-tint) * 100%));
   --lg-scrim: rgb(0 0 0 / 0.36);
 }
 
@@ -292,35 +295,4 @@
   background: var(--lg-scrim);
   backdrop-filter: blur(3px) saturate(1.1);
   -webkit-backdrop-filter: blur(3px) saturate(1.1);
-}
-
-/* ————————————————————————————————————————————————————————————
-   玻璃强度（设置 → 玻璃效果），由 utils/glassStyle.js 挂到 <html data-glass>
-   通透（clear）：窗口底层很薄，Tauri 里桌面壁纸经 Mica 透上来；控件玻璃保持现在的通透度。
-   着色（tinted）：窗口底层、面板、控件、菜单全部加厚，背景花的时候读字更轻松。
-   选择器写 html[data-glass]（0,1,1）压过 .dark（0,1,0）；深色 + 着色另起一条（0,2,1）。
-   ———————————————————————————————————————————————————————————— */
-html[data-glass="clear"] {
-  --xin-window-veil-top: 0.38;
-  --xin-window-veil-bottom: 0.5;
-  --xin-sheet-alpha: 0.44;
-}
-
-html[data-glass="tinted"] {
-  --xin-window-veil-top: 0.92;
-  --xin-window-veil-bottom: 0.95;
-  --xin-sheet-alpha: 0.8;
-  --xin-glass: rgb(var(--xin-fill-rgb) / 0.74);
-  --xin-glass-strong: rgb(var(--xin-fill-rgb) / 0.88);
-  --lg-fill: rgb(255 255 255 / 0.6);
-  --lg-fill-hover: rgb(255 255 255 / 0.72);
-  --lg-fill-regular: rgb(255 255 255 / 0.88);
-  --lg-fill-sheet: rgb(250 250 252 / 0.92);
-}
-
-html.dark[data-glass="tinted"] {
-  --lg-fill: rgb(40 40 44 / 0.66);
-  --lg-fill-hover: rgb(52 52 58 / 0.72);
-  --lg-fill-regular: rgb(34 34 38 / 0.9);
-  --lg-fill-sheet: rgb(26 26 28 / 0.94);
 }

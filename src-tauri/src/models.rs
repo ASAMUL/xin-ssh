@@ -94,9 +94,13 @@ pub struct WorkspaceSettings {
     // 应用明暗模式：system | light | dark（终端默认跟着它走，见 terminal_appearance）
     #[serde(default = "default_appearance_mode")]
     pub appearance_mode: String,
-    // 液态玻璃强度：clear（通透，透出桌面壁纸）| tinted（着色，更实、对比更高）
-    #[serde(default = "default_glass_style")]
-    pub glass_style: String,
+    // 液态玻璃强度 0~100：0 通透（透出桌面壁纸），100 着色（更实、对比更高），设置里是一条滑块
+    #[serde(default = "default_glass_tint")]
+    pub glass_tint: u8,
+    // 旧版只有通透 / 着色两档开关。只读不写：读到后由 migrate_legacy_fields 折算成 glass_tint，
+    // 下次写盘时这个字段就消失了；也因为不序列化，save_settings 的字段白名单里没有它，前端改不动
+    #[serde(default, skip_serializing)]
+    pub glass_style: Option<String>,
     // 应用壁纸：铺在整个窗口最底层，给液态玻璃「底下的东西」。默认没有。
     // 和终端背景图同一套存储（图片复制进 <workspace>/backgrounds/，这里只记文件名），
     // opacity 是图片压在画布上的可见度，blur 是模糊半径，fit 固定 cover。
@@ -131,9 +135,20 @@ impl Default for WorkspaceSettings {
             ssh_keepalive_seconds: default_ssh_keepalive_seconds(),
             terminal_background: None,
             appearance_mode: default_appearance_mode(),
-            glass_style: default_glass_style(),
+            glass_tint: default_glass_tint(),
+            glass_style: None,
             app_wallpaper: None,
             session_restore: SessionRestoreState::default(),
+        }
+    }
+}
+
+impl WorkspaceSettings {
+    /// 把旧版字段折算成现在的形状；读盘后调用一次，写盘时旧字段不会再写出去
+    pub fn migrate_legacy_fields(&mut self) {
+        // 两档开关落到滑块两端：通透就是 0，着色就是 100
+        if let Some(style) = self.glass_style.take() {
+            self.glass_tint = if style == "tinted" { 100 } else { 0 };
         }
     }
 }
@@ -187,10 +202,11 @@ pub fn default_appearance_mode() -> String {
     "system".to_string()
 }
 
-/// 默认通透；前端 utils/glassStyle.js 负责把它挂到 <html data-glass>
-pub fn default_glass_style() -> String {
-    "clear".to_string()
+/// 默认最通透；前端 utils/glassTint.js 把它换算成 0~1 写到 <html> 的 --xin-glass-tint
+pub fn default_glass_tint() -> u8 {
+    0
 }
+
 pub fn default_terminal_font_family() -> String {
     "Cascadia Code".to_string()
 }

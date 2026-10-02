@@ -6,6 +6,7 @@ import { clearCommandHistory } from "../../services/commandHistory";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore, SSH_KEEPALIVE_SECONDS_OPTIONS } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
+import GlassTintSetting from "./GlassTintSetting.vue";
 import WallpaperSetting from "./WallpaperSetting.vue";
 
 const emit = defineEmits(["close"]);
@@ -36,16 +37,6 @@ const appearanceItems = computed(() => [
   { value: "system", label: t("settings.appearanceSystem"), icon: "i-lucide-monitor-smartphone" },
   { value: "light", label: t("settings.appearanceLight"), icon: "i-lucide-sun" },
   { value: "dark", label: t("settings.appearanceDark"), icon: "i-lucide-moon" },
-]);
-
-const glassStyle = computed({
-  get: () => settingsStore.glassStyle,
-  set: (value) => settingsStore.setGlassStyle(value),
-});
-
-const glassStyleItems = computed(() => [
-  { value: "clear", label: t("settings.glassClear"), icon: "i-lucide-droplet" },
-  { value: "tinted", label: t("settings.glassTinted"), icon: "i-lucide-contrast" },
 ]);
 
 const commandSuggestions = computed({
@@ -112,20 +103,7 @@ const keepaliveItems = computed(() =>
           />
         </div>
 
-        <div class="settings-row settings-row-stacked">
-          <div>
-            <strong>{{ t("settings.glassStyle") }}</strong>
-            <small>{{ t("settings.glassStyleHint") }}</small>
-          </div>
-          <UTabs
-            v-model="glassStyle"
-            class="settings-appearance"
-            variant="pill"
-            size="sm"
-            :items="glassStyleItems"
-            :content="false"
-          />
-        </div>
+        <GlassTintSetting />
 
         <WallpaperSetting />
 

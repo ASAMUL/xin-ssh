@@ -91,8 +91,8 @@
      深色模式下 fill 基色换成一层**比画布更亮**的深灰（深色 UI 里"抬高"= 变亮），
      而不是把白色反成黑：直接反色只会得到一块脏灰，玻璃感全靠高光和边缘交代。
      饱和度只提一点：窗口底下是桌面壁纸（Mica），提太狠壁纸的颜色会从面板里冒出来发艳。 */
-  --xin-glass: rgb(var(--xin-fill-rgb) / 0.6);
-  --xin-glass-strong: rgb(var(--xin-fill-rgb) / 0.78);
+  --xin-glass: rgb(var(--xin-fill-rgb) / calc(0.6 + 0.14 * var(--xin-glass-tint)));
+  --xin-glass-strong: rgb(var(--xin-fill-rgb) / calc(0.78 + 0.1 * var(--xin-glass-tint)));
   --xin-glass-muted: rgb(250 250 252 / 0.45);
   --xin-glass-border: rgb(var(--xin-fill-rgb) / 0.62);
   --xin-glass-edge: rgb(var(--xin-ink-rgb) / 0.08);
@@ -135,12 +135,17 @@
   --xin-canvas-raised-rgb: 250 250 252;
   --xin-canvas: rgb(var(--xin-canvas-rgb));
   --xin-canvas-raised: rgb(var(--xin-canvas-raised-rgb));
-  /* Tauri 里压在系统 Mica 上的那层画布有多不透明：越低，桌面壁纸透出来越多。
-     具体值由「玻璃效果」设置决定（liquid-glass.css 的玻璃强度一节），这里是着色档的兜底 */
-  --xin-window-veil-top: 0.84;
-  --xin-window-veil-bottom: 0.88;
-  /* 首页那张纸的不透明度，同样跟着玻璃强度走 */
-  --xin-sheet-alpha: 0.58;
+  /* —— 玻璃强度：设置里那条「通透 ↔ 着色」滑块，0~1 ——
+     utils/glassTint.js 拿到存档后写到 <html> 的内联样式上，这里的 0 是读档前的兜底。
+     凡是写了 var(--xin-glass-tint) 的令牌，都在「通透」「着色」两个端点之间线性插值：
+     calc(通透值 + (着色值 - 通透值) × tint)。端点各自定义在令牌旁边，不集中成一张表——
+     改一个令牌时两端就在眼前，不用跨文件对照。 */
+  --xin-glass-tint: 0;
+  /* Tauri 里压在系统 Mica 上的那层画布有多不透明：越低，桌面壁纸透出来越多 */
+  --xin-window-veil-top: calc(0.38 + 0.54 * var(--xin-glass-tint));
+  --xin-window-veil-bottom: calc(0.5 + 0.45 * var(--xin-glass-tint));
+  /* 首页那张纸的不透明度 */
+  --xin-sheet-alpha: calc(0.44 + 0.36 * var(--xin-glass-tint));
 
   --xin-radius-xl: 22px;
   --xin-radius-lg: 16px;

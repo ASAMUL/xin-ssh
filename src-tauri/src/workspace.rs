@@ -957,7 +957,10 @@ fn write_profiles_file(workspace: &Path, profiles_file: &ProfilesFile) -> Result
 }
 
 fn read_settings_file(workspace: &Path) -> Result<WorkspaceSettings, AppError> {
-    read_json_file_or_recover(&workspace.join(SETTINGS_FILE), WorkspaceSettings::default)
+    let mut settings =
+        read_json_file_or_recover(&workspace.join(SETTINGS_FILE), WorkspaceSettings::default)?;
+    settings.migrate_legacy_fields();
+    Ok(settings)
 }
 
 fn write_settings_file(workspace: &Path, settings: &WorkspaceSettings) -> Result<(), AppError> {

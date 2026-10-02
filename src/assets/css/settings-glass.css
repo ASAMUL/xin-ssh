@@ -1,0 +1,38 @@
+/* 设置 → 玻璃效果（GlassTintSetting.vue 专用，scoped 引入）。行的外框、标题样式沿用 modal-forms.css 的 .settings-row。
+   滑块上方一排刻度：「通透」「着色」正对滑轨两头，中间是当前百分比——不看说明也知道往哪边拖是什么。 */
+.glass-tint {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.glass-tint-scale {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  color: var(--xin-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.glass-tint-scale span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.glass-tint-scale span:last-child {
+  justify-content: flex-end;
+}
+
+.glass-tint-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--xin-text-muted);
+}
+
+.glass-tint-scale em {
+  color: var(--xin-text-muted);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
