@@ -545,7 +545,7 @@ async function createInlineGroup() {
                 />
               </label>
             </template>
-            <label class="form-row form-row-toggle">
+            <label class="form-row form-row-split">
               <span class="form-row-label">{{ saveCredentialLabel }}</span>
               <USwitch v-model="shouldSaveCredential" />
             </label>

@@ -9,7 +9,8 @@
      .form-section          一组：标题 + 卡片 + 组下说明
        .form-section-title
        .form-list           卡片
-         .form-row          一行：.form-row-label | 输入 | 行尾按钮（可选）
+         .form-row          一行：.form-row-label | 输入 | 行尾按钮（可选）；
+                            .form-row-split 标签左、控件右；.form-row-block 整行自定义
        .form-section-footer
    ———————————————————————————————————————————————————————————— */
 
@@ -99,11 +100,18 @@
   grid-column: 2 / -1;
 }
 
-/* 开关行：标签可以比标签列长，开关贴右边，不走三列网格 */
-.form-row.form-row-toggle {
+/* 两端对齐的行：标签在左、控件贴右边（开关、下拉、按钮）。不走三列网格，标签可以比标签列长——
+   设置页的行大多是这种，iOS 设置里开关和取值也都靠右 */
+.form-row.form-row-split {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding-right: var(--form-row-inset);
+}
+
+/* 整行自定义内容（滑块、缩略图）：不分标签列，四周留和行一样的边距 */
+.form-row.form-row-block {
+  display: block;
+  padding: 12px var(--form-row-inset);
 }

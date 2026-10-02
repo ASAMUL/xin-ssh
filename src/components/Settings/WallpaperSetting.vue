@@ -64,44 +64,44 @@ onBeforeUnmount(flushPendingWrite);
 </script>
 
 <template>
-  <div class="settings-row settings-row-stacked">
-    <div>
-      <strong>{{ t("settings.wallpaper") }}</strong>
-      <small>{{ t("settings.wallpaperHint") }}</small>
-    </div>
+  <section class="form-section">
+    <h4 class="form-section-title">{{ t("settings.wallpaper") }}</h4>
+    <div class="form-list">
+      <div class="form-row form-row-block">
+        <div class="wallpaper-setting">
+          <div
+            class="wallpaper-preview"
+            :class="{ empty: !previewUrl }"
+            :style="previewUrl ? { backgroundImage: `url('${previewUrl}')` } : null"
+          >
+            <UIcon v-if="!previewUrl" name="i-lucide-image" />
+          </div>
 
-    <div class="wallpaper-setting">
-      <div
-        class="wallpaper-preview"
-        :class="{ empty: !previewUrl }"
-        :style="previewUrl ? { backgroundImage: `url('${previewUrl}')` } : null"
-      >
-        <UIcon v-if="!previewUrl" name="i-lucide-image" />
+          <div class="wallpaper-actions">
+            <UButton
+              color="neutral"
+              variant="soft"
+              size="sm"
+              icon="i-lucide-image-plus"
+              :loading="isImporting"
+              :label="wallpaper ? t('settings.wallpaperReplace') : t('settings.wallpaperChoose')"
+              @click="chooseWallpaper"
+            />
+            <UButton
+              v-if="wallpaper"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              icon="i-lucide-trash-2"
+              :label="t('settings.wallpaperRemove')"
+              @click="removeWallpaper"
+            />
+          </div>
+        </div>
       </div>
 
-      <div class="wallpaper-controls">
-        <div class="wallpaper-actions">
-          <UButton
-            color="neutral"
-            variant="outline"
-            size="sm"
-            icon="i-lucide-image-plus"
-            :loading="isImporting"
-            :label="wallpaper ? t('settings.wallpaperReplace') : t('settings.wallpaperChoose')"
-            @click="chooseWallpaper"
-          />
-          <UButton
-            v-if="wallpaper"
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            icon="i-lucide-trash-2"
-            :label="t('settings.wallpaperRemove')"
-            @click="removeWallpaper"
-          />
-        </div>
-
-        <template v-if="wallpaper">
+      <template v-if="wallpaper">
+        <div class="form-row form-row-block">
           <div class="wallpaper-slider">
             <span>
               {{ t("settings.wallpaperOpacity") }}
@@ -112,10 +112,13 @@ onBeforeUnmount(flushPendingWrite);
               :min="10"
               :max="100"
               size="sm"
+              :aria-label="t('settings.wallpaperOpacity')"
               @update:model-value="patchWallpaper({ opacity: $event / 100 })"
             />
           </div>
+        </div>
 
+        <div class="form-row form-row-block">
           <div class="wallpaper-slider">
             <span>
               {{ t("settings.wallpaperBlur") }}
@@ -126,13 +129,15 @@ onBeforeUnmount(flushPendingWrite);
               :min="0"
               :max="30"
               size="sm"
+              :aria-label="t('settings.wallpaperBlur')"
               @update:model-value="patchWallpaper({ blur: $event })"
             />
           </div>
-        </template>
-      </div>
+        </div>
+      </template>
     </div>
-  </div>
+    <p class="form-section-footer">{{ t("settings.wallpaperHint") }}</p>
+  </section>
 </template>
 
 <style scoped src="../../assets/css/settings-wallpaper.css"></style>

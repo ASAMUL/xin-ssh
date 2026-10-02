@@ -33,34 +33,35 @@ onBeforeUnmount(flushPendingWrite);
 </script>
 
 <template>
-  <div class="settings-row settings-row-stacked">
-    <div>
-      <strong>{{ t("settings.glassTint") }}</strong>
-      <small>{{ t("settings.glassTintHint") }}</small>
-    </div>
-
-    <div class="glass-tint">
-      <div class="glass-tint-scale" aria-hidden="true">
-        <span>
-          <UIcon class="glass-tint-icon" name="i-lucide-droplet" />
-          {{ t("settings.glassClear") }}
-        </span>
-        <em>{{ glassTint }}%</em>
-        <span>
-          {{ t("settings.glassTinted") }}
-          <UIcon class="glass-tint-icon" name="i-lucide-contrast" />
-        </span>
+  <section class="form-section">
+    <h4 class="form-section-title">{{ t("settings.glassTint") }}</h4>
+    <div class="form-list">
+      <div class="form-row form-row-block">
+        <div class="glass-tint">
+          <div class="glass-tint-scale" aria-hidden="true">
+            <span>
+              <UIcon class="glass-tint-icon" name="i-lucide-droplet" />
+              {{ t("settings.glassClear") }}
+            </span>
+            <em>{{ glassTint }}%</em>
+            <span>
+              {{ t("settings.glassTinted") }}
+              <UIcon class="glass-tint-icon" name="i-lucide-contrast" />
+            </span>
+          </div>
+          <USlider
+            :model-value="glassTint"
+            :min="0"
+            :max="100"
+            size="sm"
+            :aria-label="t('settings.glassTint')"
+            @update:model-value="previewTint"
+          />
+        </div>
       </div>
-      <USlider
-        :model-value="glassTint"
-        :min="0"
-        :max="100"
-        size="sm"
-        :aria-label="t('settings.glassTint')"
-        @update:model-value="previewTint"
-      />
     </div>
-  </div>
+    <p class="form-section-footer">{{ t("settings.glassTintHint") }}</p>
+  </section>
 </template>
 
 <style scoped src="../../assets/css/settings-glass.css"></style>

@@ -1,4 +1,4 @@
-/* 模态卡片（连接表单 / 设置面板 / 隧道面板）。
+/* 模态卡片（连接表单 / 隧道面板；设置窗口是左右分栏，另见 settings-window.css）。
    布局要点：卡片 max-height 受限于 backdrop，中段 .form-body 内部滚动，
    头尾常驻 —— 非全屏小窗口下保存按钮也始终可见。
    卡片材质是液态玻璃 .liquid-sheet（liquid-glass.css），折射由 main.js 的自动挂载补上。 */
@@ -107,78 +107,4 @@
 
 .form-error {
   color: var(--xin-danger-strong);
-}
-
-.settings-body {
-  min-height: 0;
-  overflow-y: auto;
-  /* 只写 overflow-y 的话，另一轴的 visible 会被规范强制算成 auto，
-     于是底部平白多一条横向滚动条——必须显式关掉。 */
-  overflow-x: hidden;
-  padding: 4px 24px 14px;
-}
-
-.settings-row {
-  min-height: 58px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 0;
-  border-bottom: 1px solid rgb(var(--xin-neutral-rgb) / 0.14);
-}
-
-.settings-row:last-child {
-  border-bottom: 0;
-}
-
-/* 文案块要能收缩，否则 small 的 nowrap 会给整行撑出一个撑不下的最小宽度 */
-.settings-row > div:first-child {
-  min-width: 0;
-}
-
-/* 一行里同时有按钮和开关（命令联想：清空记录 + 开关） */
-.settings-actions {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.settings-locale {
-  min-width: 160px;
-}
-
-/* 外观：三选一的分段控件挤在行右侧会顶破弹窗宽度，改成整行铺满
-   （iOS 设置里的分段控件也是这么放的，三个选项等分更好点）。
-   注意本文件是全局 CSS（main.css @import 进来的），不是 SFC scoped 样式，
-   所以直接写后代选择器——:deep() 在这里是无效选择器。 */
-.settings-row-stacked {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-}
-
-.settings-appearance [role="tablist"] {
-  width: 100%;
-  margin: 0;
-}
-
-.settings-appearance [role="tab"] {
-  flex: 1;
-}
-
-.settings-row strong,
-.settings-row small {
-  display: block;
-}
-
-.settings-row small {
-  max-width: 420px;
-  overflow: hidden;
-  margin-top: 5px;
-  color: var(--xin-text-muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

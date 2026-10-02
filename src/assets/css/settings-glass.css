@@ -1,9 +1,9 @@
-/* 设置 → 玻璃效果（GlassTintSetting.vue 专用，scoped 引入）。行的外框、标题样式沿用 modal-forms.css 的 .settings-row。
+/* 设置 → 玻璃效果（GlassTintSetting.vue 专用，scoped 引入）。卡片和行的样子沿用 form-list.css。
    滑块上方一排刻度：「通透」「着色」正对滑轨两头，中间是当前百分比——不看说明也知道往哪边拖是什么。 */
 .glass-tint {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .glass-tint-scale {

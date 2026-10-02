@@ -1,16 +1,18 @@
-/* 设置 → 应用壁纸（WallpaperSetting.vue 专用，scoped 引入）。行的外框、标题样式沿用 modal-forms.css 的 .settings-row。
-   左边一张缩略图，右边操作和滑块；没有壁纸时缩略图是虚线空位。 */
+/* 设置 → 应用壁纸（WallpaperSetting.vue 专用，scoped 引入）。卡片和行的样子沿用 form-list.css。
+   第一行是缩略图 + 操作，有壁纸时下面再多两行滑块；没有壁纸时缩略图是虚线空位。
+   缩略图以前是一大块 152px 的灰框，没壁纸时整行大半是空的，缩到和按钮一行的高度就够认图了。 */
 .wallpaper-setting {
-  display: grid;
-  grid-template-columns: 152px minmax(0, 1fr);
-  align-items: start;
-  gap: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .wallpaper-preview {
+  width: 96px;
+  flex: 0 0 auto;
   aspect-ratio: 16 / 10;
   border: 1px solid var(--xin-border-soft);
-  border-radius: var(--xin-radius);
+  border-radius: var(--xin-radius-sm);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -24,17 +26,11 @@
   border-style: dashed;
   background-color: rgb(var(--xin-ink-rgb) / 0.03);
   box-shadow: none;
-  font-size: 22px;
-}
-
-.wallpaper-controls {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  font-size: 18px;
 }
 
 .wallpaper-actions {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -43,15 +39,15 @@
 .wallpaper-slider {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .wallpaper-slider span {
   display: flex;
   justify-content: space-between;
-  color: var(--xin-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 560;
 }
 
 .wallpaper-slider em {

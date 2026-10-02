@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "@nuxt/ui/composables";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { clearCommandHistory } from "../../services/commandHistory";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore, SSH_KEEPALIVE_SECONDS_OPTIONS } from "../../stores/settingsStore";
@@ -16,6 +17,15 @@ const settingsStore = useSettingsStore();
 const uiStore = useUiStore();
 const toast = useToast();
 const isClearingHistory = ref(false);
+
+// 左边分类、右边是这一类的设置（macOS 系统设置的结构）。设置项会越加越多，
+// 一整页从上滚到下很快就找不到东西；分好类以后加新项只是往某一页里多放一张卡片
+const activeSection = ref("appearance");
+const sectionItems = computed(() => [
+  { value: "appearance", label: t("settings.appearance"), icon: "i-lucide-palette", slot: "appearance" },
+  { value: "terminal", label: t("settings.terminal"), icon: "i-lucide-square-terminal", slot: "terminal" },
+  { value: "general", label: t("settings.general"), icon: "i-lucide-settings-2", slot: "general" },
+]);
 
 const locale = computed({
   get: () => settingsStore.locale,
@@ -70,88 +80,145 @@ const keepaliveItems = computed(() =>
     value: seconds,
   })),
 );
+
+// 只把路径写在那儿，想去目录里看一眼还得自己复制粘贴；给个按钮直接在文件管理器里打开
+async function openWorkspaceDir() {
+  try {
+    await openPath(appStore.workspaceDir);
+  } catch (error) {
+    uiStore.setError(error);
+  }
+}
 </script>
 
 <template>
   <div class="modal-backdrop">
-    <section class="settings-panel liquid-sheet">
-      <header>
-        <h2>{{ t("settings.title") }}</h2>
-        <UButton
-          color="neutral"
-          variant="ghost"
-          square
-          icon="i-lucide-x"
-          :aria-label="t('settings.close')"
-          @click="emit('close')"
-        />
-      </header>
+    <section class="settings-window liquid-sheet" :aria-label="t('settings.title')">
+      <UTabs
+        v-model="activeSection"
+        class="settings-tabs"
+        orientation="vertical"
+        variant="pill"
+        :items="sectionItems"
+        :ui="{
+          root: 'items-stretch gap-0',
+          list: 'settings-nav',
+          trigger: 'settings-nav-item',
+          indicator: 'settings-nav-indicator',
+          content: 'settings-pane',
+        }"
+      >
+        <template #list-leading>
+          <h2 class="settings-title">{{ t("settings.title") }}</h2>
+        </template>
 
-      <div class="settings-body">
-        <div class="settings-row settings-row-stacked">
-          <div>
-            <strong>{{ t("settings.appearance") }}</strong>
-            <small>{{ t("settings.appearanceHint") }}</small>
-          </div>
-          <UTabs
-            v-model="appearanceMode"
-            class="settings-appearance"
-            variant="pill"
-            size="sm"
-            :items="appearanceItems"
-            :content="false"
-          />
-        </div>
+        <template #appearance>
+          <h3 class="settings-pane-title">{{ t("settings.appearance") }}</h3>
+          <section class="form-section">
+            <div class="form-list">
+              <div class="form-row form-row-split">
+                <span class="form-row-label">{{ t("settings.colorScheme") }}</span>
+                <UTabs
+                  v-model="appearanceMode"
+                  v-liquid-stretch="appearanceMode"
+                  class="appearance-switch"
+                  variant="pill"
+                  size="sm"
+                  :items="appearanceItems"
+                  :content="false"
+                />
+              </div>
+            </div>
+            <p class="form-section-footer">{{ t("settings.appearanceHint") }}</p>
+          </section>
+          <GlassTintSetting />
+          <WallpaperSetting />
+        </template>
 
-        <GlassTintSetting />
+        <template #terminal>
+          <h3 class="settings-pane-title">{{ t("settings.terminal") }}</h3>
+          <section class="form-section">
+            <div class="form-list">
+              <label class="form-row form-row-split">
+                <span class="form-row-label">{{ t("settings.commandSuggestions") }}</span>
+                <USwitch v-model="commandSuggestions" />
+              </label>
+              <div class="form-row form-row-split">
+                <span class="form-row-label">{{ t("settings.commandHistory") }}</span>
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                  icon="i-lucide-eraser"
+                  :label="t('settings.clearCommandHistory')"
+                  :loading="isClearingHistory"
+                  @click="clearHistory"
+                />
+              </div>
+            </div>
+            <p class="form-section-footer">{{ t("settings.commandSuggestionsHint") }}</p>
+          </section>
+          <section class="form-section">
+            <h4 class="form-section-title">{{ t("settings.connection") }}</h4>
+            <div class="form-list">
+              <div class="form-row form-row-split">
+                <span class="form-row-label">{{ t("settings.keepalive") }}</span>
+                <USelect
+                  v-model="sshKeepaliveSeconds"
+                  class="settings-select"
+                  variant="soft"
+                  size="sm"
+                  :items="keepaliveItems"
+                />
+              </div>
+            </div>
+            <p class="form-section-footer">{{ t("settings.keepaliveHint") }}</p>
+          </section>
+        </template>
 
-        <WallpaperSetting />
+        <template #general>
+          <h3 class="settings-pane-title">{{ t("settings.general") }}</h3>
+          <section class="form-section">
+            <div class="form-list">
+              <div class="form-row form-row-split">
+                <span class="form-row-label">{{ t("settings.language") }}</span>
+                <USelect v-model="locale" class="settings-select" variant="soft" size="sm" :items="localeItems" />
+              </div>
+            </div>
+          </section>
+          <section class="form-section">
+            <h4 class="form-section-title">{{ t("settings.data") }}</h4>
+            <div class="form-list">
+              <div class="form-row form-row-split">
+                <span class="form-row-label">{{ t("settings.workspaceDir") }}</span>
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                  icon="i-lucide-folder-open"
+                  :label="t('settings.workspaceDirOpen')"
+                  :title="t('settings.workspaceDirOpenTitle')"
+                  :disabled="!appStore.workspaceDir"
+                  @click="openWorkspaceDir"
+                />
+              </div>
+            </div>
+            <p class="form-section-footer workspace-path">{{ appStore.workspaceDir }}</p>
+          </section>
+        </template>
+      </UTabs>
 
-        <div class="settings-row">
-          <div>
-            <strong>{{ t("settings.language") }}</strong>
-          </div>
-          <USelect v-model="locale" class="settings-locale" :items="localeItems" />
-        </div>
-
-        <div class="settings-row">
-          <div>
-            <strong>{{ t("settings.keepalive") }}</strong>
-            <small>{{ t("settings.keepaliveHint") }}</small>
-          </div>
-          <USelect
-            v-model="sshKeepaliveSeconds"
-            class="settings-locale"
-            :items="keepaliveItems"
-          />
-        </div>
-
-        <div class="settings-row">
-          <div>
-            <strong>{{ t("settings.commandSuggestions") }}</strong>
-            <small>{{ t("settings.commandSuggestionsHint") }}</small>
-          </div>
-          <div class="settings-actions">
-            <UButton
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              icon="i-lucide-eraser"
-              :label="t('settings.clearCommandHistory')"
-              :loading="isClearingHistory"
-              @click="clearHistory"
-            />
-            <USwitch v-model="commandSuggestions" :aria-label="t('settings.commandSuggestions')" />
-          </div>
-        </div>
-
-        <div class="settings-row">
-          <div>
-            <strong>{{ t("settings.workspaceDir") }}</strong>
-            <small>{{ appStore.workspaceDir }}</small>
-          </div>
-        </div>
-      </div>
+      <UButton
+        class="settings-close"
+        color="neutral"
+        variant="ghost"
+        square
+        icon="i-lucide-x"
+        :aria-label="t('settings.close')"
+        @click="emit('close')"
+      />
     </section>
   </div>
 </template>
+
+<style scoped src="../../assets/css/settings-window.css"></style>

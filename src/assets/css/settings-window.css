@@ -1,0 +1,152 @@
+/* 设置窗口（SettingsPanel.vue 专用，scoped 引入）。
+   左边分类导航、右边当前分类的设置——macOS 系统设置的结构；右边每一页用 form-list.css 的分组卡片，
+   和连接表单是同一套样子。导航和内容区由 UTabs 竖排渲染，它们是 UTabs 的内部元素，要用 :deep() 才够得着。
+   隧道面板还在用 modal-forms.css 里的 .settings-panel 外壳，所以这里另起 .settings-window。 */
+
+.settings-window {
+  /* .liquid-sheet 不带定位（UModal 靠 fixed 居中，不能被覆盖），关闭按钮和高光层 ::after 靠这里托住 */
+  position: relative;
+  width: min(780px, 100%);
+  /* 高度固定：切换分类时窗口不跟着内容忽高忽矮 */
+  height: min(600px, 100%);
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.settings-tabs {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+/* —— 左侧导航：比内容区略深的一条，选中项是樱色玻璃水滴（和顶栏、首页筛选一样） —— */
+.settings-tabs :deep(.settings-nav) {
+  width: 196px;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: 2px;
+  padding: 18px 10px;
+  border-right: 1px solid var(--xin-border-soft);
+  border-radius: 0;
+  background: rgb(var(--xin-ink-rgb) / 0.035);
+}
+
+.settings-title {
+  margin: 4px 10px 14px;
+  color: var(--xin-text);
+  font-size: 19px;
+  font-weight: 720;
+  letter-spacing: -0.2px;
+}
+
+.settings-tabs :deep(.settings-nav-item) {
+  height: 34px;
+  /* pill 变体给每一项加了 grow：横排时是等分，竖排时会把每一项拉高到铺满整列 */
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 10px;
+  color: var(--xin-text-secondary);
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 560;
+}
+
+.settings-tabs :deep(.settings-nav-item:hover:not([data-state="active"])) {
+  color: var(--xin-text);
+  background: rgb(var(--xin-ink-rgb) / 0.05);
+}
+
+.settings-tabs :deep(.settings-nav-item[data-state="active"]) {
+  color: var(--xin-accent-strong);
+}
+
+.settings-tabs :deep(.settings-nav-item [data-slot="leadingIcon"]) {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-tabs :deep(.settings-nav-indicator) {
+  right: 10px;
+  left: 10px;
+  width: auto;
+  border-radius: 9px;
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
+}
+
+/* —— 右侧内容区：自己滚动，导航不动 —— */
+.settings-tabs :deep(.settings-pane) {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  padding: 22px 26px 26px;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--xin-neutral-rgb) / 0.35) transparent;
+}
+
+.settings-pane-title {
+  margin: 0;
+  /* 右上角是关闭按钮，标题不能伸到它底下 */
+  padding-right: 40px;
+  color: var(--xin-text);
+  font-size: 20px;
+  font-weight: 720;
+  letter-spacing: -0.2px;
+}
+
+.settings-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+}
+
+/* —— 明暗分段控件：和连接表单的认证方式同一种样子（浅灰轨道 + 樱色水滴）——
+   Nuxt UI 的 pill 默认是一块实心主色，压在这一页的白卡片上太跳 */
+.appearance-switch {
+  width: 300px;
+  max-width: 100%;
+}
+
+.appearance-switch :deep([data-slot="list"]) {
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgb(var(--xin-ink-rgb) / 0.06);
+}
+
+.appearance-switch :deep([data-slot="trigger"]) {
+  height: 28px;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--xin-text-secondary);
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 560;
+}
+
+.appearance-switch :deep([data-slot="trigger"][data-state="active"]) {
+  color: var(--xin-accent-strong);
+}
+
+.appearance-switch :deep([data-slot="indicator"]) {
+  border-radius: 8px;
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
+}
+
+.settings-select {
+  min-width: 132px;
+}
+
+/* 目录路径写在卡片下面，长路径折行而不是被截断，也要能选中复制 */
+.workspace-path {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
