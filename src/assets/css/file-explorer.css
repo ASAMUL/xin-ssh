@@ -394,6 +394,21 @@
   font-weight: 650;
 }
 
+/* 表头上方、浮动工具栏背后那一段，也用表头的底色盖住。
+   滚动区一直伸到面板顶上（为了让工具栏胶囊有东西可折射），列表往上滚时，行会越过表头继续往上走，
+   在表头和工具栏之间的缝里淡淡地露出来——表头被夹在两段内容中间，像一条浮在列表中间的带子。
+   盖住以后行滚到表头上沿就消失，工具栏、表头连成列表的顶边。左边目录树没有表头，行照旧从玻璃底下滚过。 */
+.file-heading::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: var(--file-toolbar-height);
+  background: inherit;
+  pointer-events: none;
+}
+
 .file-entry {
   width: 100%;
   text-align: left;
