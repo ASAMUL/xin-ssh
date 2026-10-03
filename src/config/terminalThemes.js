@@ -68,7 +68,7 @@ export function getTerminalTheme(themeId) {
   return TERMINAL_THEMES.find((theme) => theme.id === id);
 }
 
-// 家族缺哪一版就退回仅有的那一版：墨樱、Dracula 都只有深色，硬造浅色版就不是它了
+// 家族缺哪一版就退回仅有的那一版：Nord、Dracula 都只有深色，硬造浅色版就不是它了
 export function resolveThemeVariant(theme, appearance, appAppearance) {
   const mode = appearance === "auto" ? appAppearance : appearance;
   return theme.variants[mode] ?? theme.variants.dark ?? theme.variants.light;
@@ -122,7 +122,7 @@ function variant(mode, spec) {
 
 export const TERMINAL_THEMES = [
   // —— Xin ——
-  // 墨樱：品牌自己的主题，只有深色一版——浅色终端试过（「宣」），用户明确不喜欢，已删。
+  // 墨樱：品牌自己的主题，深浅两版。
   // 色板在 OKLCH 里配：各色相亮度拉平、饱和度封顶，没有哪个颜色会「跳」出来。
   // 樱色只落在光标、选区、magenta（也是 root 提醒色）上，和应用的墨樱分工一致。
   {
@@ -157,6 +157,44 @@ export const TERMINAL_THEMES = [
           brightMagenta: "#fdabce",
           brightCyan: "#91e8f2",
           brightWhite: "#fafafa",
+        },
+      }),
+      // 昼：深色版翻过来，色相不动，只把明度压下去。之前那版浅色「宣 Paper」用户不喜欢
+      // （浅色终端不适应，名字也不属于墨樱）；后来还是决定给浅色留一个选择，名字跟着墨樱走。
+      // 底色是冷中性的 zinc-50，不走暖纸色，和应用的灰阶同源。
+      light: variant("light", {
+        id: "xin-ink-rose-day",
+        nameKey: "terminal.themeName.inkRoseDay",
+        // 樱色跟应用浅色的强调色同一个值，深色版也是这样
+        accent: "#c93a72",
+        xterm: {
+          background: "#fafafa",
+          foreground: "#27272a",
+          cursor: "#c93a72",
+          cursorAccent: "#fafafa",
+          selectionBackground: "rgba(201, 58, 114, 0.18)",
+          black: "#3f3f46",
+          // 六个彩色对底色都是 5.2:1 左右（深色版各色亮度不一，浅色下按对比度拉平更稳）。
+          // 黄色在这个明度只能是芥末棕，色相往橙偏一点，免得发绿
+          red: "#b5443a",
+          green: "#18793b",
+          yellow: "#8d6105",
+          blue: "#106bbd",
+          magenta: "#ad4379",
+          cyan: "#09757f",
+          // 很多程序默认背景是黑的，会拿 white 写字：给中灰而不是近白，浅底上还读得出
+          white: "#919197",
+          // 自动补全提示、注释：和深色版一样 ≈4:1
+          brightBlack: "#7b7b83",
+          // bright 在深色版是更亮，在这里是更深（≈6.8:1）——都是「更显眼」。
+          // 加粗的目录、可执行文件默认画成 bright 色，所以它们比普通色更沉
+          brightRed: "#a9241e",
+          brightGreen: "#03662d",
+          brightYellow: "#765102",
+          brightBlue: "#0159a2",
+          brightMagenta: "#a02468",
+          brightCyan: "#04616a",
+          brightWhite: "#a6a7ac",
         },
       }),
     },

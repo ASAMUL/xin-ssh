@@ -305,6 +305,7 @@ export const messages = {
       },
       themeName: {
         inkRose: "墨樱",
+        inkRoseDay: "墨樱 · 昼",
       },
       appearanceMode: "明暗",
       appearanceAuto: "跟随应用",
@@ -1202,6 +1203,7 @@ export const messages = {
       },
       themeName: {
         inkRose: "Ink & Rose",
+        inkRoseDay: "Ink & Rose Day",
       },
       appearanceMode: "Appearance",
       appearanceAuto: "Match app",
