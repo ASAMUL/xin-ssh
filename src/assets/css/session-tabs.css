@@ -42,6 +42,12 @@
   box-shadow: var(--lg-droplet-clear-shadow);
 }
 
+/* 生产机的「生产」角标排在标题后面，网格多给一列；不写的话它会被挤到第二行、掉出标签底部。
+   只在有角标时加这一列：空列也会多吃一份 gap，普通标签的标题和关闭按钮之间会平白多出 8px */
+.session-tab-main:has(.production-badge) {
+  grid-template-columns: auto 8px minmax(0, 1fr) auto;
+}
+
 /* 生产机的标签：一圈细红边。选中时水滴照旧，红边也留着——切到它的那一刻最需要知道这是生产机 */
 .session-tab.production,
 .session-tab.production.active {
