@@ -17,6 +17,7 @@ import { createCommandMarks } from "../../utils/commandMarks";
 import { createCommandSuggest } from "../../utils/commandSuggest";
 import { createTerminalCwd } from "../../utils/terminalCwd";
 import { parseShellPrompt, readTerminalRow } from "../../utils/shellPrompt";
+import { forgetWebgl, touchWebgl } from "../../utils/webglPool";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useSnippetStore } from "../../stores/snippetStore";
@@ -62,6 +63,9 @@ let terminalCwd = null;
 let detachSink = null;
 let layoutFrame = null;
 let disposed = false;
+// 上一次真正设到 xterm 上的外观；切回这个终端时外观多半没变，没变就不重设
+let appliedAppearance = null;
+const webglHolder = { release: releaseWebgl };
 const listeners = [];
 
 // 实例只在会话关闭、清屏或重连时销毁；隐藏期间仍解析输出，保留光标和 alternate screen。
@@ -160,12 +164,6 @@ watch(() => props.active, (active) => {
     terminal?.blur();
   }
 }, { flush: "post" });
-// GPU 上下文只在「别的终端要显示」时才让出去。切回连接首页时没有终端可见，
-// 这时释放 WebGL 反而最贵：xterm 会先退回 DOM 渲染器把整屏重画一遍（强制重排几百毫秒），
-// 回到工作区再重建 WebGL 又卡一次。留着不渲染也不耗电——终端不可见时 xterm 自己会暂停绘制。
-watch(() => sessionStore.activeSessionId, (activeId) => {
-  if (activeId && activeId !== props.sessionId) releaseWebgl();
-}, { flush: "post" });
 watch(() => [props.theme, props.material, props.fontFamily, props.fontSize], updateAppearance);
 
 // 隐藏节点的尺寸为零，不能拿来覆盖 PTY 大小；字体完成加载后再量一次可见区域。
@@ -180,29 +178,37 @@ function scheduleLayout() {
   });
 }
 
+// 切换终端时每次都会走到这里。重设主题不便宜：xterm 会清空字形图集整屏重画，
+// 命令标记也会把整个回滚区的提示符装饰撤掉重建——所以外观真变了才设。
 function updateAppearance() {
   if (!terminal || !props.active || disposed) return;
-  terminal.options.theme = buildXtermTheme(props.theme, props.material);
-  commandMarks.setTheme(props.theme);
-  commandSuggest.setTheme(props.theme);
-  terminal.options.fontFamily = props.fontFamily;
-  terminal.options.fontSize = props.fontSize;
+  const next = [props.theme, props.material, props.fontFamily, props.fontSize];
+  if (!appliedAppearance || next.some((value, index) => value !== appliedAppearance[index])) {
+    appliedAppearance = next;
+    terminal.options.theme = buildXtermTheme(props.theme, props.material);
+    commandMarks.setTheme(props.theme);
+    commandSuggest.setTheme(props.theme);
+    terminal.options.fontFamily = props.fontFamily;
+    terminal.options.fontSize = props.fontSize;
+  }
   scheduleLayout();
   document.fonts?.ready.then(scheduleLayout);
 }
 
-// 同一时刻只有一个终端占用 GPU 上下文（当前可见的那个，或切到首页前最后可见的那个）。
+// WebGL 上下文由 webglPool 统一分配：最近看过的几个终端留着，切回来不用重建
 function updateRenderer() {
-  if (!props.active) {
-    releaseWebgl();
+  if (!props.active) return;
+  if (webglAddon) {
+    touchWebgl(webglHolder);
     return;
   }
-  if (webglAddon || webglUnavailable) return;
+  if (webglUnavailable) return;
   let addon = null;
   try {
     addon = new WebglAddon();
     terminal.loadAddon(addon);
     webglAddon = addon;
+    touchWebgl(webglHolder);
     webglContextListener = addon.onContextLoss(() => {
       webglUnavailable = true;
       releaseWebgl();
@@ -216,6 +222,7 @@ function updateRenderer() {
 }
 
 function releaseWebgl() {
+  forgetWebgl(webglHolder);
   webglContextListener?.dispose();
   webglContextListener = null;
   const addon = webglAddon;
