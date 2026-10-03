@@ -1,6 +1,7 @@
-/* 文件区：工具栏不占行，浮在内容上（iOS 26 / Finder 的做法），目录树和文件列表都从它底下滚过去——
-   玻璃胶囊边缘这才有东西可折射。列表停在顶部时底下是留白，一滚动就看得见弯折。
-   --file-toolbar-height 是工具栏占的高度，两个滚动区都按它留出顶部空白。 */
+/* 文件区：工具栏不占行，浮在内容上（iOS 26 / Finder 的做法），目录树从它底下滚过去——
+   玻璃胶囊边缘这才有东西可折射。目录树停在顶部时底下是留白，一滚动就看得见弯折。
+   右侧文件表有表头，行只滚到表头下沿为止（见 .file-table-head）。
+   --file-toolbar-height 是工具栏占的高度，目录树和文件表都按它留出顶部空白。 */
 .file-explorer {
   --file-toolbar-height: 56px;
   position: relative;
@@ -234,11 +235,15 @@
   isolation: isolate;
 }
 
+/* 右侧文件表：工具栏底下那一截（padding）+ 表头 + 列表，三段共用同一层底色，读起来是一整块 */
 .file-workbench {
   position: relative;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  padding-top: var(--file-toolbar-height);
+  background: rgb(var(--xin-fill-rgb) / 0.4);
 }
 
 .file-workbench.drag-over {
@@ -247,7 +252,7 @@
 }
 
 /* ---- 左侧目录树 ---- */
-/* 两个滚动区都一直伸到面板顶上（工具栏底下），顶部留出工具栏的高度作起始空白；
+/* 滚动区一直伸到面板顶上（工具栏底下），顶部留出工具栏的高度作起始空白；
    scroll-padding 让键盘选中、滚动到某一行时停在工具栏下沿，而不是躲进玻璃底下 */
 .file-tree {
   min-height: 0;
@@ -350,12 +355,21 @@
   font-size: 20px;
 }
 
+/* 表头放在滚动区外面，而不是吸顶：行根本滚不到表头底下，表头就能和列表共用同一层半透明玻璃。
+   以前吸在滚动区里，只能二选一——半透明时滚过去的文件名和列名叠在一起；实底又只能拿不透明画布垫底，
+   浅色下玻璃透出深色壁纸是灰的，实底却是白的，表头和它上面那截成了一条白带。
+   代价是横向滚动要靠脚本同步（syncTableHeadScroll）；两边都留出滚动条的槽，
+   列表有没有竖向滚动条，表头和行的可用宽度都一样，按比例分的名称列才对得齐。 */
+.file-table-head {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  border-bottom: 1px solid rgb(var(--xin-neutral-rgb) / 0.2);
+}
+
 .file-table-wrap {
   min-height: 0;
   overflow: auto;
-  padding-top: var(--file-toolbar-height);
-  scroll-padding-top: calc(var(--file-toolbar-height) + 32px);
-  background: rgb(var(--xin-fill-rgb) / 0.4);
+  scrollbar-gutter: stable;
 }
 
 .file-row {
@@ -384,35 +398,11 @@
   width: 100%;
 }
 
-/* 表头吸在工具栏下沿。top 必须是 0：吸顶的参照框已经扣掉了滚动区的 padding-top（工具栏高度），
-   再写 top: 56px 会叠成 112px——表头被推下去压住第一行，滚动时还有行从它上面冒出来。
-   表头是表格结构、不是浮在内容上的控件，所以用实底不用玻璃：半透明时滚过去的文件名会和列名叠在一起。
-   实底 = 面板那层白纱叠在不透明画布上，和面板的观感基本一致，只是底下的行透不上来 */
+/* 分隔线画在外层 .file-table-head 上，横跨到滚动条那一列 */
 .file-heading {
-  position: sticky;
-  z-index: 2;
-  top: 0;
   color: var(--xin-text-secondary);
-  border-bottom-color: var(--xin-glass-edge);
-  background:
-    linear-gradient(rgb(var(--xin-fill-rgb) / 0.62), rgb(var(--xin-fill-rgb) / 0.62)),
-    rgb(var(--xin-canvas-rgb));
+  border-bottom: 0;
   font-weight: 650;
-}
-
-/* 表头上方、浮动工具栏背后那一段，也用表头的底色盖住。
-   滚动区一直伸到面板顶上（为了让工具栏胶囊有东西可折射），列表往上滚时，行会越过表头继续往上走，
-   在表头和工具栏之间的缝里淡淡地露出来——表头被夹在两段内容中间，像一条浮在列表中间的带子。
-   盖住以后行滚到表头上沿就消失，工具栏、表头连成列表的顶边。左边目录树没有表头，行照旧从玻璃底下滚过。 */
-.file-heading::before {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 100%;
-  left: 0;
-  height: var(--file-toolbar-height);
-  background: inherit;
-  pointer-events: none;
 }
 
 .file-entry {

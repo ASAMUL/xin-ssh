@@ -33,6 +33,7 @@ const uiStore = useUiStore();
 const sessionStore = useSessionStore();
 const fileExplorerRoot = ref(null);
 const fileTableWrap = ref(null);
+const fileTableHead = ref(null);
 const pathInput = ref("/");
 const pathInputControl = ref(null);
 const isEditingPath = ref(false);
@@ -154,6 +155,18 @@ const virtualEntryRows = computed(() =>
     .filter((row) => row.entry),
 );
 const totalListHeight = computed(() => rowVirtualizer.value.getTotalSize());
+
+// 表头不在滚动区里（原因见 file-explorer.css 的 .file-table-head），横向滚动时让它跟着列表走
+function syncTableHeadScroll(event) {
+  if (fileTableHead.value) fileTableHead.value.scrollLeft = event.target.scrollLeft;
+}
+
+// 表头和工具栏那一截也不在滚动区里：滚轮落在这儿照样滚列表，和以前表头还在滚动区里时一样
+function scrollTableFromChrome(event) {
+  const wrap = fileTableWrap.value;
+  if (!wrap || event.ctrlKey || wrap.contains(event.target)) return;
+  wrap.scrollBy({ left: event.deltaX, top: event.deltaY });
+}
 const selectedPathSet = computed(() => new Set(fileState.value.selectedPaths));
 const selectedEntries = computed(() =>
   fileState.value.entries.filter((entry) => selectedPathSet.value.has(entry.path)),
@@ -1611,8 +1624,13 @@ function sortAriaLabel(key) {
 
       <Pane :size="settingsStore.showFileTree ? 100 - settingsStore.fileTreeSize : 100">
         <UContextMenu :items="contextMenuItems" size="xs" :ui="fileContextMenuUi">
-          <div class="file-workbench" :class="{ 'drag-over': isDragOver }" @contextmenu="prepareContextMenu">
-        <section ref="fileTableWrap" class="file-table-wrap">
+          <div
+            class="file-workbench"
+            :class="{ 'drag-over': isDragOver }"
+            @contextmenu="prepareContextMenu"
+            @wheel.passive="scrollTableFromChrome"
+          >
+        <div ref="fileTableHead" class="file-table-head">
           <div class="file-row file-heading">
             <button
               type="button"
@@ -1656,7 +1674,9 @@ function sortAriaLabel(key) {
             </button>
             <span>{{ t("files.permissions") }}</span>
           </div>
+        </div>
 
+        <section ref="fileTableWrap" class="file-table-wrap" @scroll="syncTableHeadScroll">
           <div v-if="!visibleEntries.length" class="file-empty-state" :class="{ error: emptyState.isError }">
             <UIcon :name="emptyState.icon" :class="{ 'spin-icon': emptyState.spinning }" />
             <strong>{{ emptyState.title }}</strong>
