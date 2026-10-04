@@ -29,7 +29,7 @@ export function findDangerousCommand(command) {
   for (const segment of splitSegments(text)) {
     const tokens = stripWrappers(segment.trim().split(/\s+/).filter(Boolean));
     if (!tokens.length) continue;
-    const name = tokens[0].replace(/^.*\//, "");
+    const name = commandName(tokens[0]);
     const args = tokens.slice(1);
     const rule = COMMAND_RULES.find(({ test }) => test(name, args));
     if (rule) return { kind: rule.kind, segment: segment.trim() };
@@ -52,13 +52,22 @@ function stripWrappers(tokens) {
       index += 1;
       continue;
     }
-    if (!WRAPPERS.has(token.replace(/^.*\//, ""))) break;
+    if (!WRAPPERS.has(commandName(token))) break;
     index += 1;
     while (index < tokens.length && tokens[index].startsWith("-")) {
       index += WRAPPER_OPTIONS_WITH_VALUE.has(tokens[index]) ? 2 : 1;
     }
   }
   return tokens.slice(index);
+}
+
+// shell 真正执行的程序名。\rm 是绕开 alias 的写法——CentOS / RHEL 的 root 默认 alias rm='rm -i'，
+// 运维习惯敲 \rm -rf 跳过确认，恰恰是最该拦的那种；'rm'、"rm" 加引号同样是在执行 rm；/bin/rm 只看最后一段
+function commandName(token) {
+  return token
+    .replace(/^\\/, "")
+    .replace(/^(['"])(.*)\1$/, "$2")
+    .replace(/^.*\//, "");
 }
 
 // -rf / -fr / -Rf / -r -f / --recursive --force 都算
@@ -83,6 +92,14 @@ function hasShortFlag(args, flag) {
     if (/^-[A-Za-z]+$/.test(arg) && arg.includes(flag)) return true;
   }
   return false;
+}
+
+// bash 的 Ctrl+R / Ctrl+S 把整行改写成搜索框：(reverse-i-search)`关键字': 命令，
+// 这时回车执行的是冒号后面那段，提示符已经不在行上了。不是搜索框返回 null
+const HISTORY_SEARCH_PATTERN = /^\((?:failed )?(?:reverse-|bck-|fwd-)?i-search\)`.*?': ?(.*)$/;
+
+export function historySearchCommand(line) {
+  return HISTORY_SEARCH_PATTERN.exec(String(line ?? "").trim())?.[1].trim() || null;
 }
 
 // 粘贴的内容带换行：老版本 bash（没开括号粘贴模式）会把每一行立刻执行。

@@ -5,7 +5,8 @@
 //   · 命令那一行右侧淡淡地标出回车时间，跑了 3 秒以上再带上耗时；
 //   · Ctrl+↑ / Ctrl+↓ 在执行过的命令之间跳转；
 //   · 把执行过的命令交给 onCommand（命令联想的历史就从这里来）；
-//   · 每出现一个新的、等待输入的提示符就交给 onPrompt（文件面板跟随终端目录从这里来）。
+//   · 每出现一个新的、等待输入的提示符就交给 onPrompt（文件面板跟随终端目录从这里来）；
+//   · 记下每条输入从哪一格开始（noteKeystroke / readInput），生产机保护据此读出要执行的命令。
 // 思路同 Windows Terminal 的 autoMarkPrompts（回车即打标记，不需要 shell 集成）。
 import { mixHex } from "./hexColor";
 import { parseShellPrompt, readTerminalRow } from "./shellPrompt";
@@ -27,6 +28,9 @@ export function createCommandMarks(terminal, { onCommand, onPrompt } = {}) {
   // 提示符出现以后用户有没有输入过：回车那一刻回显可能还没回来，不能靠读屏幕判断命令是否为空
   let hasInput = false;
   let inspectTimer = null;
+  // 在这一行开始按键时光标停在哪一格（{ marker, x }）——那就是提示符的末尾，不管提示符长什么样。
+  // 生产机保护靠它从认不出的提示符（[PROD] root@web:~#、➜ ~、❯）后面读出真正要执行的命令
+  let inputStart = null;
 
   const listeners = [
     terminal.onWriteParsed(scheduleInspect),
@@ -49,6 +53,44 @@ export function createCommandMarks(terminal, { onCommand, onPrompt } = {}) {
 
   function findMark(line) {
     return marks.find((mark) => mark.marker.line === line);
+  }
+
+  // 长命令、长提示符会折成好几行，这组折行从哪一行开始
+  function groupStart(line) {
+    while (line > 0 && buffer().getLine(line)?.isWrapped) line -= 1;
+    return line;
+  }
+
+  // 每次按键、xterm 处理之前调用：光标还在同一组折行上就是同一条输入，起点不动；
+  // 换到了新的一组行上（回车后出了新提示符、Ctrl+C 换了行），这一下按键的位置就是新起点。
+  // 只认真实按键，不认 onData：服务器查询光标位置时 xterm 的自动应答也走 onData，那时光标未必在提示符后面
+  function noteKeystroke() {
+    if (!isNormalBuffer()) return;
+    const line = cursorLine();
+    if (inputStart && !inputStart.marker.isDisposed
+      && groupStart(inputStart.marker.line) === groupStart(line)) return;
+    inputStart?.marker.dispose();
+    const marker = terminal.registerMarker(0);
+    inputStart = marker ? { marker, x: buffer().cursorX } : null;
+  }
+
+  // 光标所在这组折行里、从开始输入那一格往后的文字；不知道这一行从哪开始输入的返回 null
+  function readInput() {
+    if (!isNormalBuffer() || !inputStart || inputStart.marker.isDisposed) return null;
+    const inputLine = inputStart.marker.line;
+    const start = groupStart(cursorLine());
+    if (groupStart(inputLine) !== start) return null;
+
+    let text = "";
+    let line = start;
+    do {
+      const row = readTerminalRow(buffer(), line);
+      // 起点之前的几行是折行的长提示符，跳过
+      if (row && line === inputLine) text += row.text.slice(textIndexAt(row, inputStart.x));
+      else if (row && line > inputLine) text += row.text;
+      line += 1;
+    } while (buffer().getLine(line)?.isWrapped);
+    return text.trim();
   }
 
   function addMark(line, prompt, signature) {
@@ -286,9 +328,17 @@ export function createCommandMarks(terminal, { onCommand, onPrompt } = {}) {
     clearTimeout(inspectTimer);
     listeners.forEach((listener) => listener.dispose());
     [...marks].forEach(discardMark);
+    inputStart?.marker.dispose();
+    inputStart = null;
   }
 
-  return { handleInput, jump, setTheme, dispose };
+  return { handleInput, noteKeystroke, readInput, jump, setTheme, dispose };
+}
+
+// 格子列号 → 这一行文字里的下标（宽字符占两格，两者对不上）
+function textIndexAt(row, x) {
+  const index = row.columns.findIndex((column) => column >= x);
+  return index < 0 ? row.text.length : index;
 }
 
 function labelPart(text, kind, color) {

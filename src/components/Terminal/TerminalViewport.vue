@@ -16,6 +16,7 @@ import { useTerminalGuard } from "../../composables/useTerminalGuard";
 import { createCommandMarks } from "../../utils/commandMarks";
 import { createCommandSuggest } from "../../utils/commandSuggest";
 import { createTerminalCwd } from "../../utils/terminalCwd";
+import { historySearchCommand } from "../../utils/dangerousCommands";
 import { parseShellPrompt, readTerminalRow } from "../../utils/shellPrompt";
 import { forgetWebgl, touchWebgl } from "../../utils/webglPool";
 import { useSessionStore } from "../../stores/sessionStore";
@@ -236,6 +237,7 @@ function focus() {
 
 function handleTerminalKey(event) {
   if (!props.active) return false;
+  if (event.type === "keydown") commandMarks.noteKeystroke();
   if (event.type === "keydown" && acceptSuggestion(event)) return false;
   if (event.type === "keydown" && guardEnter(event)) return false;
   if (event.type !== "keydown" || !event.ctrlKey || event.altKey || event.metaKey) return true;
@@ -272,17 +274,17 @@ function acceptSuggestion(event) {
 }
 
 // 生产机上回车之前先读出这一行要执行的命令，命中危险规则就先不发回车，弹确认；
-// 点了确认再补发回车，取消就什么都不发，命令留在原处可以改。
+// 点了确认再补发回车，取消就什么都不发，命令留在原处可以改。没命中的回车原样放过去。
 // vim / top 这类全屏程序里不拦（那里的回车不是在执行命令），输入法选字时的回车也不拦。
 function guardEnter(event) {
   const plain = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
   if (!plain || event.key !== "Enter" || event.isComposing) return false;
   if (!terminalGuard.isProduction(session.value) || terminal.buffer.active.type !== "normal") return false;
 
-  const command = readCurrentCommand();
-  if (!command) return false;
+  const request = terminalGuard.inspectCommand(session.value, readCommandCandidates());
+  if (!request) return false;
   event.preventDefault();
-  terminalGuard.confirmCommand(session.value, command).then((confirmed) => {
+  terminalGuard.confirm(request).then((confirmed) => {
     if (disposed) return;
     if (confirmed && canSendData.value) terminal.input("\r");
     focus();
@@ -290,12 +292,15 @@ function guardEnter(event) {
   return true;
 }
 
-// 光标所在的这一行（长命令折行时拼回整条）；认得出提示符就去掉提示符，认不出就看整行——
-// 这样在 mysql 客户端里敲 drop database 也拦得住
-function readCurrentCommand() {
+// 光标所在这一行要执行的命令（长命令折行时拼回整条）。提示符在哪结束不一定认得准，
+// 所以按可信程度给出几种读法，生产机保护任何一种命中都拦：
+//   ① 从开始按键的那一格往后读——不管提示符长什么样都准；
+//   ② 认得出提示符（发行版默认样式）就去掉提示符；
+//   ③ bash 的 Ctrl+R 把整行改写成了搜索框，取冒号后面那段；
+//   ④ 整行——在 mysql 客户端里敲 drop database 靠它拦。
+function readCommandCandidates() {
   const buffer = terminal.buffer.active;
-  const cursorLine = buffer.baseY + buffer.cursorY;
-  let start = cursorLine;
+  let start = buffer.baseY + buffer.cursorY;
   while (start > 0 && buffer.getLine(start)?.isWrapped) start -= 1;
 
   let text = "";
@@ -307,7 +312,13 @@ function readCurrentCommand() {
 
   const first = readTerminalRow(buffer, start);
   const prompt = first && parseShellPrompt(first);
-  return (prompt ? text.slice(prompt.end + 1) : text).trim();
+  const candidates = [
+    commandMarks.readInput(),
+    prompt && text.slice(prompt.end + 1),
+    historySearchCommand(text),
+    text,
+  ];
+  return [...new Set(candidates.map((command) => command?.trim()).filter(Boolean))];
 }
 
 function guardPaste(event) {
