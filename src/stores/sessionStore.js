@@ -414,7 +414,6 @@ export const useSessionStore = defineStore("sessions", {
           password: resolved.password || null,
           privateKeyPath: session.privateKeyPath || null,
           passphrase: resolved.passphrase || null,
-          defaultRemotePath: session.remotePath,
           columns: session.terminalColumns,
           rows: session.terminalRows,
           keepaliveSeconds: useSettingsStore().sshKeepaliveSeconds,

@@ -29,7 +29,6 @@ use crate::ssh::registry::{TerminalControl, TerminalRegistry};
 use crate::system_info::{
     collect_system_info_on_session, measure_latency_on_session, SystemInfoSampler,
 };
-use crate::util::shell_quote;
 
 const TERMINAL_EVENT: &str = "terminal-event";
 const TERMINAL_CLOSE_REASON_CLIENT: &str = "client";
@@ -192,13 +191,9 @@ async fn run_terminal_shell(
         None,
     );
 
-    let initial_path = request.default_remote_path.as_str();
-    if !initial_path.is_empty() && initial_path != "/" {
-        channel
-            .data_bytes(format!("cd {}\r", shell_quote(initial_path)).into_bytes())
-            .await
-            .map_err(connection_error)?;
-    }
+    // 终端停在 sshd 给的登录目录，不替用户敲 cd：提示符出来之前就往 shell 里塞命令，
+    // 回显会重复一遍、会进 shell 历史，登录后先出堡垒机菜单或网络设备命令行时还会被当成输入。
+    // 文件面板的起始目录走 SFTP，和终端无关。
 
     let cached_sftp = CachedSftp::new(Arc::clone(&session), cancellation.clone());
     // 删除独占子通道，并单独限流，不能让大目录删除占满普通操作的并发名额。

@@ -505,7 +505,6 @@ pub struct TerminalStartRequest {
     pub password: Option<String>,
     pub private_key_path: Option<String>,
     pub passphrase: Option<String>,
-    pub default_remote_path: String,
     pub columns: u32,
     pub rows: u32,
     // 未传时用默认 30s（settings 可调，0 = 禁用）
