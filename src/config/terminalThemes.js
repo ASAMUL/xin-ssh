@@ -9,6 +9,9 @@
 // 主题只负责把字配好色。面板描边、投影、胶囊材质都从调色板派生（buildTerminalChrome），
 // 主题里不再手写 ui 字段——之前每套主题各染一圈描边，终端像一块贴上去的色板。
 
+// 带 .js 扩展名：scripts/check-theme-palettes.mjs 在 Node 里直接导入这个文件
+import { mixHex } from "../utils/hexColor.js";
+
 export const DEFAULT_TERMINAL_THEME_ID = "xin";
 export const TERMINAL_THEME_GROUPS = ["xin", "classic"];
 
@@ -107,6 +110,47 @@ export function buildTerminalChrome(variant, material) {
     "--term-soft": withAlpha(foreground, 0.1),
     // 液态玻璃的高光：浅色底上要亮白，深色底上收着，否则一圈白边像贴纸
     "--term-highlight": isLight ? "rgb(255 255 255 / 0.92)" : "rgb(255 255 255 / 0.18)",
+  };
+}
+
+// 远程编辑器和终端用同一套配色：背景、前景、光标、选区直接取，语法高亮映射到 ANSI 色——
+// 和终端里 ls、git 的着色是一个色板，深浅也跟着终端的明暗走（以前写死一块深蓝，浅色下很突兀）。
+// 映射沿用 base16 的分工：关键字 magenta、字符串 green、数字 yellow、函数 blue、类型 cyan、
+// 属性 / 标签 red（JSON、YAML 的键是这个色，和绿色的值一眼分开）、注释 brightBlack。
+// 编辑器总是实底，不跟终端的通透材质：代码区底下透出壁纸会影响读字
+export function buildEditorTheme(variant) {
+  const { xterm, accent } = variant;
+  const tint = (weight) => mixHex(xterm.foreground, xterm.background, weight);
+  return {
+    "--xin-editor-bg": xterm.background,
+    "--xin-editor-bg-gutter": tint(0.025),
+    "--xin-editor-bg-panel": tint(0.06),
+    "--xin-editor-bg-field": tint(0.04),
+    "--xin-editor-text": xterm.foreground,
+    "--xin-editor-text-muted": tint(0.45),
+    "--xin-editor-edge": tint(0.12),
+    "--xin-editor-accent": accent,
+    "--xin-editor-accent-soft": withAlpha(accent, 0.08),
+    "--xin-editor-accent-line": withAlpha(accent, 0.7),
+    "--xin-editor-selection": xterm.selectionBackground,
+    "--xin-editor-match": withAlpha(xterm.yellow, 0.2),
+    "--xin-editor-search-match": withAlpha(xterm.yellow, 0.3),
+    "--xin-editor-search-current": withAlpha(accent, 0.4),
+    "--xin-editor-bracket": withAlpha(xterm.yellow, 0.18),
+    "--xin-editor-invalid": withAlpha(xterm.red, 0.2),
+    // 和终端自绘滚动条同一个配方（buildXtermTheme）
+    "--xin-editor-scrollbar": withAlpha(xterm.foreground, 0.26),
+    "--xin-editor-scrollbar-hover": withAlpha(xterm.foreground, 0.38),
+    "--xin-syntax-keyword": xterm.magenta,
+    "--xin-syntax-string": xterm.green,
+    "--xin-syntax-number": xterm.yellow,
+    "--xin-syntax-comment": xterm.brightBlack,
+    "--xin-syntax-function": xterm.blue,
+    "--xin-syntax-type": xterm.cyan,
+    "--xin-syntax-property": xterm.red,
+    "--xin-syntax-operator": tint(0.72),
+    "--xin-syntax-meta": xterm.brightMagenta,
+    "--xin-syntax-invalid": xterm.red,
   };
 }
 

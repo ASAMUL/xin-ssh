@@ -99,7 +99,7 @@
 
 /* ---- CodeMirror 编辑区 ---- */
 
-/* 编辑器画布外观（深色令牌、cm-* 样式、浮动搜索面板）在 code-editor.css，这里只管弹窗内布局 */
+/* 编辑器画布外观（跟终端主题走的配色令牌、cm-* 样式）在 code-editor.css，这里只管弹窗内布局 */
 .remote-editor-surface {
   flex: 1;
   min-height: 0;

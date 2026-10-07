@@ -19,6 +19,11 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  // 打开时光标放在哪一行哪一列（{ line, column }，从 1 数），并滚到可视区中间
+  initialPosition: {
+    type: Object,
+    default: null,
+  },
 });
 
 const emit = defineEmits(["change", "save", "language-change", "cursor-change"]);
@@ -27,54 +32,70 @@ const host = ref(null);
 const searchPanel = ref(null);
 const searchOpen = ref(false);
 const editorView = shallowRef(null);
-const editorTick = ref(0);
+// 搜索面板分开听两种变化：文档变了才要重扫全文，光标动了只用在已有结果里找「当前第几个」
+const docVersion = ref(0);
+const selectionVersion = ref(0);
 const languageCompartment = new Compartment();
 let view = null;
 let languageLoadToken = 0;
 let activeLanguageName = null;
 
+// 颜色都是 CSS 变量，值由 RemoteFileEditor 按当前终端主题算好（terminalThemes.js 的 buildEditorTheme），
+// 换主题、切明暗时不用重建编辑器
 const syntaxHighlightTheme = HighlightStyle.define([
   {
     tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword],
-    color: "#c792ea",
+    color: "var(--xin-syntax-keyword)",
   },
   {
     tag: [tags.string, tags.special(tags.string), tags.regexp],
-    color: "#c3e88d",
+    color: "var(--xin-syntax-string)",
   },
   {
     tag: [tags.number, tags.bool, tags.null, tags.atom],
-    color: "#f78c6c",
+    color: "var(--xin-syntax-number)",
   },
   {
     tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
-    color: "#7383a3",
+    color: "var(--xin-syntax-comment)",
     fontStyle: "italic",
   },
   {
     tag: [tags.function(tags.variableName), tags.definition(tags.variableName)],
-    color: "#82aaff",
+    color: "var(--xin-syntax-function)",
   },
   {
     tag: [tags.typeName, tags.className, tags.namespace],
-    color: "#ffcb6b",
+    color: "var(--xin-syntax-type)",
   },
   {
-    tag: [tags.propertyName, tags.attributeName],
-    color: "#89ddff",
+    tag: [tags.propertyName, tags.attributeName, tags.tagName],
+    color: "var(--xin-syntax-property)",
   },
   {
     tag: [tags.operator, tags.operatorKeyword, tags.punctuation, tags.bracket],
-    color: "#9cb4d8",
+    color: "var(--xin-syntax-operator)",
   },
   {
     tag: [tags.meta, tags.processingInstruction],
-    color: "#f07178",
+    color: "var(--xin-syntax-meta)",
   },
   {
+    tag: tags.heading,
+    color: "var(--xin-syntax-function)",
+    fontWeight: "bold",
+  },
+  {
+    tag: [tags.link, tags.url],
+    color: "var(--xin-syntax-type)",
+    textDecoration: "underline",
+  },
+  { tag: tags.strong, fontWeight: "bold" },
+  { tag: tags.emphasis, fontStyle: "italic" },
+  {
     tag: tags.invalid,
-    color: "#ff9b9b",
-    backgroundColor: "rgba(239, 68, 68, 0.2)",
+    color: "var(--xin-syntax-invalid)",
+    backgroundColor: "var(--xin-editor-invalid)",
   },
 ]);
 
@@ -102,6 +123,7 @@ onMounted(() => {
   });
   editorView.value = view;
   view.focus();
+  revealInitialPosition();
   emitCursorPosition(view.state);
   loadLanguage(props.filename);
 });
@@ -127,6 +149,7 @@ watch(
       searchOpen.value = false;
       view.setState(createEditorState(content));
       activeLanguageName = null;
+      revealInitialPosition();
       emitCursorPosition(view.state);
     }
 
@@ -178,14 +201,28 @@ function createEditorState(doc) {
       syntaxHighlighting(syntaxHighlightTheme),
       languageCompartment.of([]),
       EditorView.updateListener.of((update) => {
-        if (update.docChanged) emit("change");
+        if (update.docChanged) {
+          emit("change");
+          docVersion.value += 1;
+        }
         if (update.docChanged || update.selectionSet) {
           emitCursorPosition(update.state);
-          editorTick.value += 1;
+          selectionVersion.value += 1;
         }
       }),
     ],
   });
+}
+
+// 行列超出文档时收到最后一行、行尾：文件可能在报错之后被改短了
+function revealInitialPosition() {
+  const position = props.initialPosition;
+  if (!view || !position?.line) return;
+
+  const { doc } = view.state;
+  const line = doc.line(Math.min(Math.max(position.line, 1), doc.lines));
+  const anchor = line.from + Math.min(Math.max((position.column ?? 1) - 1, 0), line.length);
+  view.dispatch({ selection: { anchor }, effects: EditorView.scrollIntoView(anchor, { y: "center" }) });
 }
 
 // 打开（或重新聚焦）搜索面板；有单行选区时预填为搜索词
@@ -293,7 +330,8 @@ defineExpose({
         v-if="searchOpen && editorView"
         ref="searchPanel"
         :view="editorView"
-        :tick="editorTick"
+        :doc-version="docVersion"
+        :selection-version="selectionVersion"
         @close="closeSearch"
       />
     </Transition>

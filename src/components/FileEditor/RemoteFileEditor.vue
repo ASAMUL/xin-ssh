@@ -2,10 +2,16 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import CodeMirrorEditor from "./CodeMirrorEditor.vue";
-import { TERMINAL_FONTS } from "../../config/terminalThemes";
+import {
+  TERMINAL_FONTS,
+  buildEditorTheme,
+  getTerminalTheme,
+  resolveThemeVariant,
+} from "../../config/terminalThemes";
 import { useEditorStore } from "../../stores/editorStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
+import { resolvedAppearance } from "../../utils/appearanceMode";
 import { errorCode, localizeError } from "../../utils/appError";
 
 const { t, locale } = useI18n();
@@ -28,6 +34,13 @@ const editorFontStack = computed(() => {
   const font = TERMINAL_FONTS.find((item) => item.name === settingsStore.terminalFontFamily);
   return (font ?? TERMINAL_FONTS[0]).stack;
 });
+
+// 编辑器和终端用同一版调色板：终端主题、终端明暗（跟随应用时看应用明暗）都算进去
+const editorTheme = computed(() => buildEditorTheme(resolveThemeVariant(
+  getTerminalTheme(settingsStore.terminalTheme),
+  settingsStore.terminalAppearance,
+  resolvedAppearance.value,
+)));
 
 const loadErrorText = computed(() => localizeError(editorStore.loadError));
 const saveErrorText = computed(() => localizeError(editorStore.saveError));
@@ -197,9 +210,10 @@ function handleCursorChange(position) {
         <CodeMirrorEditor
           ref="editorRef"
           class="remote-editor-surface"
-          :style="{ fontFamily: editorFontStack }"
+          :style="[editorTheme, { fontFamily: editorFontStack }]"
           :content="editorStore.initialContent"
           :filename="editorStore.name"
+          :initial-position="editorStore.initialPosition"
           @change="editorStore.markDirty()"
           @cursor-change="handleCursorChange"
           @language-change="handleLanguageChange"

@@ -39,6 +39,8 @@ export const useEditorStore = defineStore("editor", {
     saveError: null,
     lastSavedAt: null,
     requestToken: null,
+    // 打开后光标停在哪：{ line, column }，终端里点 app.js:42:7 这类链接时带进来
+    initialPosition: null,
   }),
   getters: {
     session(state) {
@@ -59,7 +61,7 @@ export const useEditorStore = defineStore("editor", {
       if (content == null) return false;
       return this.saveFile(content, options);
     },
-    async openFile(session, entry) {
+    async openFile(session, entry, { line = null, column = null } = {}) {
       if (!session || session.status !== "connected" || !entry || entry.isDirectory) return;
 
       const token = crypto.randomUUID();
@@ -77,6 +79,7 @@ export const useEditorStore = defineStore("editor", {
       this.loadError = null;
       this.saveError = null;
       this.lastSavedAt = null;
+      this.initialPosition = line ? { line, column } : null;
 
       const guardError = quickEditGuardError(entry);
       if (guardError) {
@@ -122,7 +125,7 @@ export const useEditorStore = defineStore("editor", {
         name: this.name,
         size: this.size,
         isDirectory: false,
-      });
+      }, this.initialPosition ?? {});
     },
     async saveFile(content, options = {}) {
       if (!this.hasDocument || this.isSaving || typeof content !== "string") return false;

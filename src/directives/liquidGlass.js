@@ -20,6 +20,9 @@ const DEFAULTS = {
   // 色散强度：R / B 通道比 G 少弯 / 多弯的比例，0 关闭。
   // 曾给到 0.07，压在樱色水滴、终端彩字上时边缘析出的彩边太明显，会被当成玻璃描了一圈颜色
   dispersion: 0.03,
+  // false = 只要高光线，不做折射，底下退回 CSS 的 backdrop 模糊。
+  // 给「几乎整块都被不透明内容盖住」的大玻璃用：折射全花在看不见的地方，而里面内容一变整块滤镜都要重算
+  refraction: true,
 };
 
 // 色散要把位移做三遍，成本随面积涨；整条顶栏、大对话框底下本来也没有高对比的边缘可析出彩边，只给控件尺寸的玻璃开
@@ -74,23 +77,24 @@ class LiquidGlassSurface {
     const { width, height } = geometry;
     const radius = Math.min(geometry.radius, width / 2, height / 2);
     const { scale, blur, saturation } = this.options;
+    const refraction = supportsLiquidRefraction && this.options.refraction;
     const dispersion = width * height <= DISPERSION_MAX_AREA ? this.options.dispersion : 0;
     const bezel = Math.max(2, Math.min(this.options.bezel ?? Math.max(radius * 0.8, 8), width / 2, height / 2));
-    const signature = [width, height, radius, bezel, scale, blur, saturation, dispersion].join(":");
+    const signature = [width, height, radius, bezel, scale, blur, saturation, dispersion, refraction].join(":");
     if (signature !== this.signature) {
       this.signature = signature;
       const { displacementUrl, specularUrl } = getGlassMaps({
-        width, height, radius, bezel, displacement: supportsLiquidRefraction,
+        width, height, radius, bezel, displacement: refraction,
       });
       this.element.style.setProperty("--lg-specular", `url("${specularUrl}")`);
-      if (supportsLiquidRefraction) {
+      if (refraction) {
         upsertLiquidGlassFilter(this.id, {
           width, height, scale, blur, saturation, dispersion, mapUrl: displacementUrl,
         });
       }
     }
     // 内联样式压过 .liquid-glass 里的模糊回退
-    if (supportsLiquidRefraction) this.element.style.setProperty("backdrop-filter", `url(#${this.id})`);
+    if (refraction) this.element.style.setProperty("backdrop-filter", `url(#${this.id})`);
   }
 
   destroy() {

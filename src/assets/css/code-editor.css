@@ -1,25 +1,39 @@
 /* CodeMirror 编辑器画布（CodeMirrorEditor.vue 专用，scoped 引入） */
 
 /*
- * 编辑区是一块深色代码画布（与终端一致，不随浅/深主题翻转），
- * 但颜色集中在这组令牌里，避免散落的魔法色值，后续要接主题只改这里。
- * 浮动搜索面板（EditorSearchPanel）也复用这组令牌。
+ * 编辑区和终端用同一套配色：这组令牌的实际值由 RemoteFileEditor 按当前终端主题写在内联样式上
+ * （terminalThemes.js 的 buildEditorTheme），换主题、切明暗都跟着走。
+ * 这里的值只是兜底（墨樱深色），万一没传主题也不至于一片白。
  */
 .code-editor-shell {
-  --xin-editor-bg: #101827;
-  --xin-editor-bg-gutter: #0c1423;
-  --xin-editor-bg-panel: #162033;
-  --xin-editor-bg-field: #0d1524;
-  --xin-editor-text: #d8e2f4;
-  --xin-editor-text-muted: #64748f;
-  --xin-editor-edge: rgba(148, 163, 184, 0.16);
-  --xin-editor-accent: #7dd3fc;
-  --xin-editor-accent-soft: rgba(96, 165, 250, 0.12);
-  --xin-editor-accent-line: rgba(96, 165, 250, 0.72);
-  --xin-editor-selection: rgba(59, 130, 246, 0.34);
-  --xin-editor-match: rgba(251, 191, 36, 0.22);
-  --xin-editor-scrollbar: rgba(148, 163, 184, 0.38);
-  --xin-editor-scrollbar-hover: rgba(148, 163, 184, 0.62);
+  --xin-editor-bg: #18181b;
+  --xin-editor-bg-gutter: #1b1b1e;
+  --xin-editor-bg-panel: #1f1f22;
+  --xin-editor-bg-field: #1d1d20;
+  --xin-editor-text: #e4e4e7;
+  --xin-editor-text-muted: #75757a;
+  --xin-editor-edge: #2f2f33;
+  --xin-editor-accent: #ec7aa4;
+  --xin-editor-accent-soft: rgba(236, 122, 164, 0.08);
+  --xin-editor-accent-line: rgba(236, 122, 164, 0.7);
+  --xin-editor-selection: rgba(236, 122, 164, 0.26);
+  --xin-editor-match: rgba(238, 206, 116, 0.2);
+  --xin-editor-search-match: rgba(238, 206, 116, 0.3);
+  --xin-editor-search-current: rgba(236, 122, 164, 0.4);
+  --xin-editor-bracket: rgba(238, 206, 116, 0.18);
+  --xin-editor-invalid: rgba(237, 129, 116, 0.2);
+  --xin-editor-scrollbar: rgba(228, 228, 231, 0.26);
+  --xin-editor-scrollbar-hover: rgba(228, 228, 231, 0.4);
+  --xin-syntax-keyword: #ed95bc;
+  --xin-syntax-string: #7fd492;
+  --xin-syntax-number: #eece74;
+  --xin-syntax-comment: #787880;
+  --xin-syntax-function: #73aff1;
+  --xin-syntax-type: #72d6e1;
+  --xin-syntax-property: #ed8174;
+  --xin-syntax-operator: #a9a9ad;
+  --xin-syntax-meta: #fdabce;
+  --xin-syntax-invalid: #ed8174;
 
   position: relative;
   display: flex;
@@ -79,8 +93,8 @@
 }
 
 .code-editor-host :deep(.cm-activeLineGutter) {
-  color: #9cc6ff;
-  background: rgba(96, 165, 250, 0.12);
+  color: var(--xin-editor-text);
+  background: var(--xin-editor-accent-soft);
 }
 
 .code-editor-host :deep(.cm-selectionBackground) {
@@ -96,22 +110,21 @@
 }
 
 .code-editor-host :deep(.cm-matchingBracket) {
-  color: #fef3c7 !important;
-  border-bottom: 1px solid #fbbf24;
-  background: rgba(251, 191, 36, 0.14);
+  border-bottom: 1px solid var(--xin-syntax-number);
+  background: var(--xin-editor-bracket);
 }
 
 .code-editor-host :deep(.cm-nonmatchingBracket) {
-  color: #fecaca !important;
-  background: rgba(248, 113, 113, 0.18);
+  color: var(--xin-syntax-invalid) !important;
+  background: var(--xin-editor-invalid);
 }
 
 .code-editor-host :deep(.cm-foldPlaceholder) {
   padding: 0 4px;
-  color: #93c5fd;
-  border: 1px solid rgba(96, 165, 250, 0.34);
+  color: var(--xin-editor-text-muted);
+  border: 1px solid var(--xin-editor-edge);
   border-radius: 4px;
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--xin-editor-bg-panel);
 }
 
 .code-editor-host :deep(.cm-panels) {
@@ -131,46 +144,44 @@
 }
 
 .code-editor-host :deep(.cm-textfield) {
-  color: #e4edf9;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: var(--xin-editor-text);
+  border: 1px solid var(--xin-editor-edge);
   border-radius: 5px;
   outline: none;
   background: var(--xin-editor-bg-field);
 }
 
 .code-editor-host :deep(.cm-button) {
-  color: #c8d8f1;
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  color: var(--xin-editor-text);
+  border: 1px solid var(--xin-editor-edge);
   border-radius: 5px;
-  background: rgba(148, 163, 184, 0.1);
+  background: var(--xin-editor-bg-panel);
   cursor: pointer;
 }
 
 .code-editor-host :deep(.cm-button:hover) {
-  background: rgba(96, 165, 250, 0.18);
+  background: var(--xin-editor-accent-soft);
 }
 
 .code-editor-host :deep(.cm-searchMatch) {
-  color: #fef3c7;
-  background: rgba(251, 191, 36, 0.28);
+  background: var(--xin-editor-search-match);
 }
 
 .code-editor-host :deep(.cm-searchMatch.cm-searchMatch-selected) {
-  color: #ffffff;
-  background: rgba(59, 130, 246, 0.6);
+  background: var(--xin-editor-search-current);
 }
 
 .code-editor-host :deep(.cm-tooltip) {
   color: var(--xin-editor-text);
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid var(--xin-editor-edge);
   border-radius: 6px;
   background: var(--xin-editor-bg-panel);
   box-shadow: 0 14px 30px rgba(2, 6, 23, 0.35);
 }
 
 .code-editor-host :deep(.cm-tooltip-autocomplete > ul > li[aria-selected]) {
-  color: #eff6ff;
-  background: rgba(59, 130, 246, 0.45);
+  color: var(--xin-editor-text);
+  background: var(--xin-editor-selection);
 }
 
 /* 编辑器画布跟着编辑器主题走（深色主题下应用可能是浅色），滚动条只换颜色，形状沿用全局的 scrollbars.css */

@@ -18,8 +18,13 @@ const props = defineProps({
     type: Object,
     required: true,
   },
-  // 父组件在文档/选区变化时自增，驱动匹配计数刷新
-  tick: {
+  // 父组件在文档变化时自增：要重新全文扫描匹配
+  docVersion: {
+    type: Number,
+    default: 0,
+  },
+  // 父组件在选区变化时自增：只需要重新算「当前是第几个」
+  selectionVersion: {
     type: Number,
     default: 0,
   },
@@ -30,6 +35,8 @@ const emit = defineEmits(["close"]);
 const { t } = useI18n();
 
 const MATCH_LIMIT = 999;
+// 连续打字时停手这么久才重扫全文：5MB 的文件扫一遍要几十毫秒，逐键扫会卡输入
+const RECOUNT_DELAY_MS = 150;
 
 const searchInput = ref(null);
 const searchText = ref("");
@@ -40,7 +47,9 @@ const useRegex = ref(false);
 const showReplace = ref(false);
 const matchState = ref({ total: 0, current: 0, overflow: false });
 
-let recountScheduled = false;
+// 上一次全文扫描到的匹配（按位置排好，最多 MATCH_LIMIT 个），光标移动时在这里二分找当前是第几个
+let matchRanges = [];
+let recountTimer = null;
 let disposed = false;
 
 const regexInvalid = computed(() => {
@@ -80,10 +89,12 @@ const counterTitle = computed(() => {
 
 watch([searchText, caseSensitive, wholeWord, useRegex], () => syncQuery({ jump: true }));
 watch(replaceText, () => syncQuery({ jump: false }));
-watch(() => props.tick, scheduleRecount);
+watch(() => props.docVersion, scheduleRecount);
+watch(() => props.selectionVersion, updateCurrent);
 
 onBeforeUnmount(() => {
   disposed = true;
+  clearTimeout(recountTimer);
 });
 
 function buildQuery() {
@@ -127,40 +138,60 @@ function firstMatchFrom(query, state, from) {
   return step.done ? null : step.value;
 }
 
-// 选区/文档高频变化时按帧合并计数，避免大文件下逐键全文扫描
+// 文档改了才重扫全文，而且等停手再扫——以前每一帧都扫，大文件开着搜索打字会卡
 function scheduleRecount() {
-  if (recountScheduled) return;
-
-  recountScheduled = true;
-  requestAnimationFrame(() => {
-    recountScheduled = false;
+  clearTimeout(recountTimer);
+  recountTimer = setTimeout(() => {
+    recountTimer = null;
     if (!disposed) recount();
-  });
+  }, RECOUNT_DELAY_MS);
 }
 
 function recount() {
+  clearTimeout(recountTimer);
+  recountTimer = null;
   if (!hasQuery.value || regexInvalid.value) {
+    matchRanges = [];
     matchState.value = { total: 0, current: 0, overflow: false };
     return;
   }
 
-  const { state } = props.view;
-  const selection = state.selection.main;
-  const iterator = buildQuery().getCursor(state);
-  let total = 0;
-  let current = 0;
-
-  while (total < MATCH_LIMIT) {
-    const step = iterator.next();
-    if (step.done) {
-      matchState.value = { total, current, overflow: false };
-      return;
+  const iterator = buildQuery().getCursor(props.view.state);
+  const ranges = [];
+  let overflow = false;
+  for (let step = iterator.next(); !step.done; step = iterator.next()) {
+    if (ranges.length === MATCH_LIMIT) {
+      overflow = true;
+      break;
     }
-    total += 1;
-    if (step.value.from === selection.from && step.value.to === selection.to) current = total;
+    ranges.push({ from: step.value.from, to: step.value.to });
   }
 
-  matchState.value = { total, current, overflow: true };
+  matchRanges = ranges;
+  matchState.value = { total: ranges.length, current: currentMatchNumber(), overflow };
+}
+
+// 光标、选区移动：在上次的结果里二分，不扫全文。
+// 文档刚改、重扫还没跑的那一会儿，旧结果的位置已经对不上了，交给重扫去算
+function updateCurrent() {
+  if (recountTimer || !matchState.value.total) return;
+  const current = currentMatchNumber();
+  if (current !== matchState.value.current) matchState.value = { ...matchState.value, current };
+}
+
+// 选区正好是某个匹配时返回它是第几个（从 1 数），否则 0
+function currentMatchNumber() {
+  const { from, to } = props.view.state.selection.main;
+  let low = 0;
+  let high = matchRanges.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const range = matchRanges[middle];
+    if (range.from < from) low = middle + 1;
+    else if (range.from > from) high = middle - 1;
+    else return range.to === to ? middle + 1 : 0;
+  }
+  return 0;
 }
 
 function goNext() {

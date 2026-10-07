@@ -78,5 +78,8 @@ trackLiquidGlassPointer();
 // 菜单要读字，滤镜里的模糊比控件胶囊重；对话框面积大、离内容远，折射和模糊都再加一档。
 autoAttachLiquidGlass([
   { selector: ".liquid-menu", options: { scale: 22, blur: 8 } },
+  // 远程编辑器：正文是不透明的代码区，整块折射看不见；打字、光标闪烁、背后终端刷新都会让整块滤镜重算，
+  // 只留高光线和 CSS 模糊。规则按顺序取第一条匹配的，所以写在通用的 .liquid-sheet 前面
+  { selector: ".liquid-sheet.remote-editor-modal", options: { refraction: false } },
   { selector: ".liquid-sheet", options: { scale: 32, blur: 12 } },
 ]);
