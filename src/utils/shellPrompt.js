@@ -46,6 +46,24 @@ export function readTerminalRow(buffer, y) {
   return { text, columns, isWrapped: line.isWrapped };
 }
 
+// 等待输入的提示符不一定从行首开始：上一条命令的输出没以换行结尾（cat 一个末尾没换行的文件），
+// 提示符就紧贴在那截输出后面，比如 /dataroot@web:/home#。这时以光标为终点往前找：从每个起点试一遍，
+// 提示符后面到光标之间不能再有别的字。用户名和前面的输出粘在一起时（data + root）光看文字分不开，
+// 优先取认识的用户名（登录用户、之前提示符里出现过的）；都不认识就取最长的那个。
+// cursorIndex 是光标所在格对应的文字下标；返回的 end / 各区间都是整行坐标
+export function parsePromptBeforeCursor(row, cursorIndex, knownUsers = []) {
+  const atLineStart = parseShellPrompt(row);
+  if (atLineStart) return atLineStart;
+
+  const candidates = [];
+  for (let start = 1; start < cursorIndex; start += 1) {
+    const prompt = parseShellPrompt({ text: row.text.slice(start), columns: row.columns.slice(start) });
+    if (!prompt || row.text.slice(start + prompt.end, cursorIndex).trim()) continue;
+    candidates.push({ ...prompt, end: prompt.end + start });
+  }
+  return candidates.find((prompt) => knownUsers.includes(prompt.userName)) ?? candidates[0] ?? null;
+}
+
 // 返回 null 表示这一行不是认得的提示符；否则各区间都已换算成格子（x, width）。
 export function parseShellPrompt(row) {
   for (const { pattern, pathStyle } of PROMPT_PATTERNS) {

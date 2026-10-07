@@ -1,7 +1,7 @@
 // 提示符识别：命令标记上色、文件面板跟随终端目录、生产机保护去掉提示符都靠它
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseShellPrompt } from "../src/utils/shellPrompt.js";
+import { parsePromptBeforeCursor, parseShellPrompt } from "../src/utils/shellPrompt.js";
 
 // 测试里都是窄字符，第 i 个字符就落在第 i 格
 const row = (text) => ({ text, columns: [...Array(text.length + 1).keys()] });
@@ -34,5 +34,41 @@ describe("parseShellPrompt", () => {
     for (const text of ["[PROD] root@web:~# rm -rf /data", "➜  ~ rm -rf /data", "❯ rm -rf /data", "web% rm -rf /data"]) {
       assert.equal(parseShellPrompt(row(text)), null, text);
     }
+  });
+});
+
+describe("parsePromptBeforeCursor", () => {
+  // 光标停在提示符后面那个空格之后
+  const waiting = (text) => [row(text), text.length];
+
+  it("提示符从行首开始时和 parseShellPrompt 一样", () => {
+    const [line, cursor] = waiting("root@web:/home# ");
+    assert.equal(parsePromptBeforeCursor(line, cursor).end, parseShellPrompt(line).end);
+  });
+
+  it("紧贴在没换行的输出后面也认得出，用认识的用户名分开粘在一起的字", () => {
+    const [line, cursor] = waiting("/dataroot@VM-4-9-ubuntu:/home# ");
+    const prompt = parsePromptBeforeCursor(line, cursor, ["root"]);
+    assert.deepEqual(
+      { user: prompt.userName, host: prompt.hostName, path: prompt.pathText, x: prompt.cells.x },
+      { user: "root", host: "VM-4-9-ubuntu", path: "/home", x: 5 },
+    );
+    assert.equal(line.text.slice(0, prompt.cells.x), "/data");
+  });
+
+  it("用户名都不认识时取最长的那个", () => {
+    const [line, cursor] = waiting("/dataroot@web:/home# ");
+    assert.equal(parsePromptBeforeCursor(line, cursor).userName, "dataroot");
+  });
+
+  it("RHEL 的方括号提示符本身就分得开", () => {
+    const [line, cursor] = waiting("done[root@web ~]# ");
+    const prompt = parsePromptBeforeCursor(line, cursor);
+    assert.deepEqual({ user: prompt.userName, x: prompt.cells.x }, { user: "root", x: 4 });
+  });
+
+  it("提示符后面到光标之间还有字的，不是等待输入的提示符", () => {
+    const text = "/dataroot@web:/home# ls";
+    assert.equal(parsePromptBeforeCursor(row(text), text.length, ["root"]), null);
   });
 });

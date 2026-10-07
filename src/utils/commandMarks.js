@@ -9,7 +9,7 @@
 //   · 记下每条输入从哪一格开始（noteKeystroke / readInput），生产机保护据此读出要执行的命令。
 // 思路同 Windows Terminal 的 autoMarkPrompts（回车即打标记，不需要 shell 集成）。
 import { mixHex } from "./hexColor";
-import { parseShellPrompt, readTerminalRow } from "./shellPrompt";
+import { parsePromptBeforeCursor, parseShellPrompt, readTerminalRow } from "./shellPrompt";
 
 // Powerlevel10k 默认也是 3 秒：短于这个的命令，耗时只是噪音
 const DURATION_THRESHOLD_MS = 3000;
@@ -18,7 +18,8 @@ const INSPECT_DELAY_MS = 60;
 // 右侧标签和命令文字之间至少留这么多格，挤不下就不显示
 const LABEL_GAP_CELLS = 3;
 
-export function createCommandMarks(terminal, { onCommand, onPrompt } = {}) {
+// knownUsers：返回认识的用户名（登录用户），提示符紧贴在没换行的输出后面时靠它分出提示符从哪开始
+export function createCommandMarks(terminal, { onCommand, onPrompt, knownUsers } = {}) {
   const marks = [];
   let palette = null;
   // 回车后在等下一个提示符出现、好算耗时的那条
@@ -53,6 +54,24 @@ export function createCommandMarks(terminal, { onCommand, onPrompt } = {}) {
 
   function findMark(line) {
     return marks.find((mark) => mark.marker.line === line);
+  }
+
+  // 认识的用户名：登录用户，加上之前认出来的提示符里出现过的（su 切过去的用户）
+  function promptUsers() {
+    const users = new Set(knownUsers?.() ?? []);
+    for (const mark of marks) if (mark.prompt?.userName) users.add(mark.prompt.userName);
+    return [...users];
+  }
+
+  // 这一行输出是在哪个提示符下面产生的：在它上面（或就是它）、离它最近的那条标记。
+  // 认不出的提示符也会打标记（prompt 为 null）——那时说明不了目录，交给调用方退回别的办法
+  function promptAbove(line) {
+    let found = null;
+    for (const mark of marks) {
+      if (mark.marker.line > line) break;
+      found = mark;
+    }
+    return found?.prompt ?? null;
   }
 
   // 长命令、长提示符会折成好几行，这组折行从哪一行开始
@@ -168,11 +187,12 @@ export function createCommandMarks(terminal, { onCommand, onPrompt } = {}) {
     detectPrompt(line);
   }
 
-  // 光标停在一个认得的提示符末尾、后面什么都没有：这是一个新的、等待输入的提示符
+  // 光标停在一个认得的提示符末尾、后面什么都没有：这是一个新的、等待输入的提示符。
+  // 提示符可能紧贴在上一条命令没换行的输出后面，所以以光标为终点找，不要求从行首开始
   function detectPrompt(line) {
     const row = readTerminalRow(buffer(), line);
     if (!row || row.isWrapped) return;
-    const prompt = parseShellPrompt(row);
+    const prompt = parsePromptBeforeCursor(row, textIndexAt(row, buffer().cursorX), promptUsers());
     if (!prompt || row.text.slice(prompt.end).trim() || buffer().cursorX < prompt.cells.x + prompt.cells.width) return;
 
     const existing = findMark(line);
@@ -332,7 +352,7 @@ export function createCommandMarks(terminal, { onCommand, onPrompt } = {}) {
     inputStart = null;
   }
 
-  return { handleInput, noteKeystroke, readInput, jump, setTheme, dispose };
+  return { handleInput, noteKeystroke, readInput, promptAbove, jump, setTheme, dispose };
 }
 
 // 格子列号 → 这一行文字里的下标（宽字符占两格，两者对不上）
