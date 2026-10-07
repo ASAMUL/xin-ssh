@@ -16,6 +16,7 @@ import { useSessionStore } from "../stores/sessionStore";
 import { TRANSFER_CONFLICT_CODES, hasErrorCode, localizeError } from "../utils/appError";
 import { formatPathsForShell, joinRemotePath, parentRemotePath, quoteRemotePathForShell } from "../utils/remotePath";
 import { TERMINAL_CWD_STATUS } from "../utils/terminalCwd";
+import { compactMenuUi } from "../config/menuUi";
 import {
   highlightTerminalDrop,
   terminalDropTargetAt,
@@ -88,18 +89,6 @@ const fileSearchInputUi = {
   leading: "ps-3.5",
   leadingIcon: "size-4 text-muted",
   trailing: "pe-2.5",
-};
-const fileContextMenuUi = {
-  content: "min-w-40 rounded-lg border border-default bg-default shadow-xl backdrop-blur-xl",
-  viewport: "divide-y divide-default",
-  group: "p-1",
-  separator: "my-1 bg-border",
-  item: "min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold leading-none",
-  itemLeadingIcon: "size-4 w-4 shrink-0 text-muted",
-  itemWrapper: "min-w-0 flex-1 justify-center",
-  itemLabel: "truncate leading-4",
-  itemTrailing: "ms-auto h-4 items-center",
-  itemTrailingIcon: "size-4",
 };
 
 let unlistenDragDrop = null;
@@ -1656,7 +1645,7 @@ function sortAriaLabel(key) {
         min-size="12"
         max-size="46"
       >
-        <UContextMenu :items="treeContextMenuItems" size="xs" :ui="fileContextMenuUi">
+        <UContextMenu :items="treeContextMenuItems" size="xs" :ui="compactMenuUi">
           <aside class="file-tree" @contextmenu="prepareTreeContextMenu">
             <template v-if="isConnected">
               <button
@@ -1700,7 +1689,7 @@ function sortAriaLabel(key) {
       </Pane>
 
       <Pane :size="settingsStore.showFileTree ? 100 - settingsStore.fileTreeSize : 100">
-        <UContextMenu :items="contextMenuItems" size="xs" :ui="fileContextMenuUi">
+        <UContextMenu :items="contextMenuItems" size="xs" :ui="compactMenuUi">
           <div
             class="file-workbench"
             :class="{ 'drag-over': isDragOver }"

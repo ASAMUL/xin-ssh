@@ -10,23 +10,13 @@ import {
 import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
 import { localizeError } from "../utils/appError";
+import { compactMenuUi } from "../config/menuUi";
 
 const { t } = useI18n();
 const transferStore = useTransferStore();
 const uiStore = useUiStore();
 
 const contextTask = ref(null);
-
-const contextMenuUi = {
-  content: "min-w-44 rounded-lg border border-default bg-default shadow-xl backdrop-blur-xl",
-  viewport: "divide-y divide-default",
-  group: "p-1",
-  separator: "my-1 bg-border",
-  item: "min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold leading-none",
-  itemLeadingIcon: "size-4 w-4 shrink-0 text-muted",
-  itemWrapper: "min-w-0 flex-1 justify-center",
-  itemLabel: "truncate leading-4",
-};
 
 const FINISHED_STATUSES = ["completed", "failed", "canceled"];
 
@@ -279,7 +269,7 @@ function formatTaskTime(timestamp) {
       icon="i-lucide-database" :title="localizeError(transferStore.historyError)"
       :actions="[{ label: t('common.retry'), icon: 'i-lucide-refresh-cw', onClick: () => transferStore.retryHistoryStorage() }]" />
 
-    <UContextMenu :items="contextMenuItems" size="xs" :ui="contextMenuUi">
+    <UContextMenu :items="contextMenuItems" size="xs" :ui="compactMenuUi">
       <div class="transfer-list" @contextmenu="prepareContextMenu">
         <p v-if="!transferStore.hasTasks && !transferStore.historyIsLoading" class="transfer-empty">
           <UIcon name="i-lucide-inbox" class="transfer-empty-icon" />
