@@ -33,6 +33,7 @@ russh-sftp = "2.3.0"
 tokio = { version = "1.52.3", features = ["fs", "io-util", "macros", "net", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 ring = "0.17.14"
+tauri-plugin-clipboard-manager = "2.3.2"
 
 [profile.release]
 codegen-units = 4

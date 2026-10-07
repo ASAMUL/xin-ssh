@@ -349,12 +349,23 @@ function guardPaste(event) {
 
   event.preventDefault();
   event.stopPropagation();
+  pasteText(text);
+}
+
+// 右键菜单的粘贴不经过浏览器 paste 事件，生产机的多行确认得和快捷键粘贴共用这一处
+function pasteText(text) {
+  if (!text || !canSendData.value) return;
   terminalGuard.confirmPaste(session.value, text).then((confirmed) => {
     if (disposed) return;
     // terminal.paste 会按 shell 是否开了括号粘贴模式包好再发，和直接粘贴走同一条路
     if (confirmed && canSendData.value) terminal.paste(text);
     focus();
   });
+}
+
+// vim / htop / tmux 开了鼠标模式时右键归它们；按住 Shift 绕过，和 xterm 强制选择文本的约定一致
+function capturesRightClick(event) {
+  return terminal?.modes.mouseTrackingMode !== "none" && !event.shiftKey;
 }
 
 // 关掉联想时也不记历史：用户关掉它，多半就是不希望本机留下命令记录
@@ -447,7 +458,20 @@ function toggleSearch() {
   else openSearch();
 }
 
-defineExpose({ sessionId: props.sessionId, focus, toggleSearch, insertText, isSearchOpen });
+defineExpose({
+  sessionId: props.sessionId,
+  focus,
+  openSearch,
+  toggleSearch,
+  insertText,
+  isSearchOpen,
+  canSendData,
+  hasSelection: () => terminal?.hasSelection() ?? false,
+  copySelection,
+  pasteText,
+  selectAll: () => terminal?.selectAll(),
+  capturesRightClick,
+});
 </script>
 
 <template>

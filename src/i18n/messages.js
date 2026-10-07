@@ -291,6 +291,13 @@ export const messages = {
         toggle: "查找",
         placeholder: "查找",
       },
+      menu: {
+        copy: "复制",
+        paste: "粘贴",
+        selectAll: "全选",
+        find: "查找…",
+        snippets: "命令片段…",
+      },
       remotePath: "远程路径",
       protocol: "协议",
       clear: "清空终端",
@@ -1211,6 +1218,13 @@ export const messages = {
       search: {
         toggle: "Find",
         placeholder: "Find",
+      },
+      menu: {
+        copy: "Copy",
+        paste: "Paste",
+        selectAll: "Select all",
+        find: "Find…",
+        snippets: "Snippets…",
       },
       remotePath: "Remote path",
       protocol: "Protocol",

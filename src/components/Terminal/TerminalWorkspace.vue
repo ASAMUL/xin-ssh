@@ -10,6 +10,8 @@ import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useCredentialStore } from "../../stores/credentialStore";
+import { useTerminalContextMenu } from "../../composables/useTerminalContextMenu";
+import { compactMenuUi } from "../../config/menuUi";
 import { localizeError } from "../../utils/appError";
 import { usesSavedCredentials } from "../../utils/authentication";
 import { resolvedAppearance } from "../../utils/appearanceMode";
@@ -53,6 +55,19 @@ let pendingBackgroundWrite = null;
 const backgroundSelections = new Map();
 
 const isSearchOpen = computed(() => activeTerminal.value?.isSearchOpen ?? false);
+const {
+  items: terminalMenuItems,
+  routeRightClick: routeTerminalRightClick,
+  syncState: syncTerminalMenu,
+  restoreFocus: restoreTerminalFocus,
+} = useTerminalContextMenu(activeTerminal, {
+  find: () => activeTerminal.value?.openSearch(),
+  openSnippets: () => {
+    if (!isSnippetsOpen.value) toggleSnippets();
+  },
+  clear: () => sessionStore.clearActiveTerminal(),
+  focus: focusTerminal,
+});
 
 const activeSession = computed(() => sessionStore.activeSession);
 const isProductionSession = computed(() => profileStore.isProductionProfile(activeSession.value?.profileId));
@@ -595,113 +610,126 @@ async function savePendingCredential() {
         </div>
       </header>
 
-      <div class="terminal-screen" :style="backgroundStyleVars" @click="focusTerminal">
-        <!-- 自定义背景图：图片层 + 压暗层，都垫在 xterm 之下 -->
-        <template v-if="backgroundStyleVars">
-          <div class="terminal-screen-image" aria-hidden="true"></div>
-          <div class="terminal-screen-scrim" aria-hidden="true"></div>
-        </template>
-
-        <TerminalViewport
-          v-for="session in sessionStore.sessions"
-          :key="`${session.id}:${session.terminalRevision}`"
-          ref="terminalViews"
-          :session-id="session.id"
-          :revision="session.terminalRevision"
-          :active="session.id === activeSession?.id"
-          :theme="displayTheme"
-          :material="settingsStore.terminalMaterial"
-          :font-family="terminalFontStack"
-          :font-size="settingsStore.terminalFontSize"
-        />
-
-        <form v-if="needsCredentials" class="terminal-auth-panel" @click.stop @submit.prevent="startTerminal">
-          <div class="auth-panel-copy">
-            <strong>{{ authenticationTitle }}</strong>
-            <small v-if="hasCredentialInput">{{ t("terminal.authDescription") }}</small>
-          </div>
-
-          <UFormField v-if="isPasswordAuth" class="terminal-auth-field" :label="t('profile.password')">
-            <UInput
-              ref="credentialInput"
-              v-model="credentials.password"
-              type="password"
-              size="lg"
-              class="w-full"
-              autocomplete="current-password"
-            />
-          </UFormField>
-
-          <UFormField v-if="isPrivateKeyAuth" class="terminal-auth-field" :label="t('profile.privateKeyPath')">
-            <UInput :model-value="activeSession.privateKeyPath || ''" size="lg" class="w-full" readonly />
-          </UFormField>
-
-          <UFormField v-if="isPrivateKeyAuth" class="terminal-auth-field" :label="t('profile.passphrase')">
-            <UInput
-              ref="credentialInput"
-              v-model="credentials.passphrase"
-              type="password"
-              size="lg"
-              class="w-full"
-              autocomplete="current-password"
-            />
-          </UFormField>
-
-          <UCheckbox v-if="hasCredentialInput" v-model="shouldSaveCredential" class="terminal-save-credential" :label="saveCredentialLabel"
-            :description="t('terminal.saveCredentialDescription')" />
-
-          <p v-if="activeSession?.error" class="terminal-auth-error">{{ activeSession.error }}</p>
-
-          <UButton
-            type="submit"
-            color="primary"
-            size="lg"
-            class="cta-button"
-            icon="i-lucide-plug-zap"
-            :loading="activeSession?.status === 'connecting'"
-            :label="t('terminal.connectReal')"
-          />
-        </form>
-
-        <div v-else-if="activeSession?.status === 'connecting'" class="terminal-connecting">
-          <UIcon name="i-lucide-loader-circle" class="spin-icon" />
-          <span>{{ t("terminal.connecting") }}</span>
-        </div>
-
+      <UContextMenu
+        :items="terminalMenuItems"
+        size="xs"
+        :ui="compactMenuUi"
+        :content="{ onCloseAutoFocus: restoreTerminalFocus }"
+        @update:open="syncTerminalMenu"
+      >
         <div
-          v-else-if="activeSession?.status === 'error' && activeSession?.hostKeyChange"
-          class="terminal-hostkey-panel"
+          class="terminal-screen"
+          :style="backgroundStyleVars"
+          @click="focusTerminal"
+          @contextmenu.capture="routeTerminalRightClick"
         >
-          <div class="hostkey-head">
-            <UIcon name="i-lucide-shield-alert" />
-            <strong>{{ t("terminal.hostKeyChangedTitle") }}</strong>
-          </div>
-          <p>{{ t("terminal.hostKeyChangedDescription") }}</p>
-          <div class="hostkey-fingerprints">
-            <div>
-              <span>{{ t("terminal.hostKeyExpected") }}</span>
-              <code>{{ activeSession.hostKeyChange.expectedFingerprint }}</code>
-            </div>
-            <div>
-              <span>{{ t("terminal.hostKeyActual") }}</span>
-              <code>{{ activeSession.hostKeyChange.actualFingerprint }}</code>
-            </div>
-          </div>
-          <UButton
-            color="primary"
-            size="lg"
-            class="cta-button"
-            icon="i-lucide-shield-check"
-            :label="t('terminal.trustHostKey')"
-            @click="trustCurrentHostKey"
-          />
-        </div>
+          <!-- 自定义背景图：图片层 + 压暗层，都垫在 xterm 之下 -->
+          <template v-if="backgroundStyleVars">
+            <div class="terminal-screen-image" aria-hidden="true"></div>
+            <div class="terminal-screen-scrim" aria-hidden="true"></div>
+          </template>
 
-        <div v-else-if="activeSession?.status === 'error'" class="terminal-connecting error">
-          <UIcon name="i-lucide-circle-alert" />
-          <span>{{ activeSession.error }}</span>
+          <TerminalViewport
+            v-for="session in sessionStore.sessions"
+            :key="`${session.id}:${session.terminalRevision}`"
+            ref="terminalViews"
+            :session-id="session.id"
+            :revision="session.terminalRevision"
+            :active="session.id === activeSession?.id"
+            :theme="displayTheme"
+            :material="settingsStore.terminalMaterial"
+            :font-family="terminalFontStack"
+            :font-size="settingsStore.terminalFontSize"
+          />
+
+          <form v-if="needsCredentials" class="terminal-auth-panel" @click.stop @submit.prevent="startTerminal">
+            <div class="auth-panel-copy">
+              <strong>{{ authenticationTitle }}</strong>
+              <small v-if="hasCredentialInput">{{ t("terminal.authDescription") }}</small>
+            </div>
+
+            <UFormField v-if="isPasswordAuth" class="terminal-auth-field" :label="t('profile.password')">
+              <UInput
+                ref="credentialInput"
+                v-model="credentials.password"
+                type="password"
+                size="lg"
+                class="w-full"
+                autocomplete="current-password"
+              />
+            </UFormField>
+
+            <UFormField v-if="isPrivateKeyAuth" class="terminal-auth-field" :label="t('profile.privateKeyPath')">
+              <UInput :model-value="activeSession.privateKeyPath || ''" size="lg" class="w-full" readonly />
+            </UFormField>
+
+            <UFormField v-if="isPrivateKeyAuth" class="terminal-auth-field" :label="t('profile.passphrase')">
+              <UInput
+                ref="credentialInput"
+                v-model="credentials.passphrase"
+                type="password"
+                size="lg"
+                class="w-full"
+                autocomplete="current-password"
+              />
+            </UFormField>
+
+            <UCheckbox v-if="hasCredentialInput" v-model="shouldSaveCredential" class="terminal-save-credential" :label="saveCredentialLabel"
+              :description="t('terminal.saveCredentialDescription')" />
+
+            <p v-if="activeSession?.error" class="terminal-auth-error">{{ activeSession.error }}</p>
+
+            <UButton
+              type="submit"
+              color="primary"
+              size="lg"
+              class="cta-button"
+              icon="i-lucide-plug-zap"
+              :loading="activeSession?.status === 'connecting'"
+              :label="t('terminal.connectReal')"
+            />
+          </form>
+
+          <div v-else-if="activeSession?.status === 'connecting'" class="terminal-connecting">
+            <UIcon name="i-lucide-loader-circle" class="spin-icon" />
+            <span>{{ t("terminal.connecting") }}</span>
+          </div>
+
+          <div
+            v-else-if="activeSession?.status === 'error' && activeSession?.hostKeyChange"
+            class="terminal-hostkey-panel"
+          >
+            <div class="hostkey-head">
+              <UIcon name="i-lucide-shield-alert" />
+              <strong>{{ t("terminal.hostKeyChangedTitle") }}</strong>
+            </div>
+            <p>{{ t("terminal.hostKeyChangedDescription") }}</p>
+            <div class="hostkey-fingerprints">
+              <div>
+                <span>{{ t("terminal.hostKeyExpected") }}</span>
+                <code>{{ activeSession.hostKeyChange.expectedFingerprint }}</code>
+              </div>
+              <div>
+                <span>{{ t("terminal.hostKeyActual") }}</span>
+                <code>{{ activeSession.hostKeyChange.actualFingerprint }}</code>
+              </div>
+            </div>
+            <UButton
+              color="primary"
+              size="lg"
+              class="cta-button"
+              icon="i-lucide-shield-check"
+              :label="t('terminal.trustHostKey')"
+              @click="trustCurrentHostKey"
+            />
+          </div>
+
+          <div v-else-if="activeSession?.status === 'error'" class="terminal-connecting error">
+            <UIcon name="i-lucide-circle-alert" />
+            <span>{{ activeSession.error }}</span>
+          </div>
         </div>
-      </div>
+      </UContextMenu>
 
       <Transition name="snippet-slide">
         <SnippetPanel v-if="isSnippetsOpen" @close="isSnippetsOpen = false" />
