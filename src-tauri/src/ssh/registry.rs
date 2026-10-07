@@ -64,6 +64,17 @@ pub(crate) enum TerminalControl {
     ResolveHome {
         responder: oneshot::Sender<Result<String, AppError>>,
     },
+    StatPath {
+        path: String,
+        responder: oneshot::Sender<Result<RemoteFileEntry, AppError>>,
+    },
+    ForwardPort {
+        remote_port: u16,
+        responder: oneshot::Sender<Result<u16, AppError>>,
+    },
+    StopForward {
+        local_port: u16,
+    },
     ReadFileText {
         path: String,
         responder: oneshot::Sender<Result<RemoteFileContent, AppError>>,
@@ -309,6 +320,41 @@ impl TerminalRegistry {
         receiver
             .await
             .map_err(|_| request_canceled("resolveHome"))?
+    }
+
+    // 终端里点开的路径是文件还是目录（跟随软链接）
+    pub(crate) async fn stat_path(&self, session_id: &str, path: String) -> Result<RemoteFileEntry, AppError> {
+        let sender = self.sender_for(session_id)?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::StatPath { path, responder })
+            .map_err(|_| not_accepting("file"))?;
+
+        receiver.await.map_err(|_| request_canceled("statPath"))?
+    }
+
+    // 在终端这条 SSH 连接上把服务器的 127.0.0.1:remote_port 转发到本机，返回本机端口
+    pub(crate) async fn forward_port(&self, session_id: &str, remote_port: u16) -> Result<u16, AppError> {
+        let sender = self.sender_for(session_id)?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::ForwardPort { remote_port, responder })
+            .map_err(|_| not_accepting("forward"))?;
+
+        receiver.await.map_err(|_| request_canceled("forwardPort"))?
+    }
+
+    // 会话已经断了就什么都不用做：转发随会话一起停了
+    pub(crate) fn stop_forward(&self, session_id: &str, local_port: u16) -> Result<(), AppError> {
+        match self.sender_for(session_id) {
+            Ok(sender) => {
+                let _ = sender.send(TerminalControl::StopForward { local_port });
+                Ok(())
+            }
+            Err(_) => Ok(()),
+        }
     }
 
     pub(crate) async fn read_file_text(

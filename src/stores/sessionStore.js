@@ -2,11 +2,13 @@ import { defineStore } from "pinia";
 import { listen } from "@tauri-apps/api/event";
 import {
   closeTerminalSession,
+  forwardTerminalPort,
   getRemoteSystemInfo,
   measureSessionLatency,
   resizeTerminal,
   sendTerminalInput,
   startTerminalSession,
+  stopTerminalForward,
   trustHostKey,
 } from "../services/workspaceApi";
 import { i18n } from "../i18n";
@@ -175,6 +177,8 @@ export const useSessionStore = defineStore("sessions", {
         terminalRevision: 0,
         // 终端当前目录（terminalCwd.js 推断）：{ path, status }，文件面板的「跟随终端」按钮读它
         terminalCwd: null,
+        // 终端里点端口开的临时转发：[{ remotePort, localPort }]，挂在这条 SSH 连接上，连接断了就没了
+        portForwards: [],
         terminalColumns: INITIAL_TERMINAL_COLUMNS,
         terminalRows: INITIAL_TERMINAL_ROWS,
         systemInfo: null,
@@ -491,6 +495,34 @@ export const useSessionStore = defineStore("sessions", {
         useFileExplorerStore().followTerminal(session, cwd.path);
       }
     },
+    // 同一个端口已经转发过就直接复用：反复点同一个端口不该开一堆本机端口
+    async forwardPort(sessionId, remotePort) {
+      const session = this.findSession(sessionId);
+      if (!session || session.status !== "connected") throw { code: ERROR_CODES.sessionNotRunning, message: "", params: {} };
+      session.portForwards ??= [];
+      const existing = session.portForwards.find((forward) => forward.remotePort === remotePort);
+      if (existing) return existing;
+
+      const revision = session.terminalRevision;
+      const localPort = await forwardTerminalPort(sessionId, remotePort);
+      const forward = { remotePort, localPort };
+      // 等后端回话期间连接断了或重连了：后端那条已经跟着旧连接停掉，不能记到新连接上
+      if (this.findSession(sessionId)?.terminalRevision !== revision || session.status !== "connected") return forward;
+      // 连点两下：等待期间另一次已经转好了，留先到的那个，这次开的关掉
+      const raced = session.portForwards.find((item) => item.remotePort === remotePort);
+      if (raced) {
+        stopTerminalForward(sessionId, localPort).catch(() => {});
+        return raced;
+      }
+      session.portForwards.push(forward);
+      return forward;
+    },
+    async stopForward(sessionId, localPort) {
+      const session = this.findSession(sessionId);
+      if (!session) return;
+      session.portForwards = session.portForwards.filter((forward) => forward.localPort !== localPort);
+      await stopTerminalForward(sessionId, localPort);
+    },
     updateSessionRemotePath(sessionId, remotePath) {
       const session = this.findSession(sessionId);
       if (!session || !remotePath) return;
@@ -560,6 +592,7 @@ export const useSessionStore = defineStore("sessions", {
 
       if (event.kind === "closed") {
         discardPendingCredentials(session.id, event.attemptId);
+        session.portForwards = [];
         const reason = event.reason ?? "remote";
         session.status = "closed";
         session.lastDisconnectReason = reason;
@@ -569,6 +602,7 @@ export const useSessionStore = defineStore("sessions", {
 
       if (event.kind === "error") {
         const wasConnected = session.status === "connected";
+        session.portForwards = [];
         const authenticationFailed = hasErrorCode(event.error, [ERROR_CODES.authFailed, ERROR_CODES.authKeyFile]);
         discardPendingCredentials(session.id, event.attemptId);
         if (authenticationFailed) clearSessionCredentials(session.id);
@@ -759,6 +793,8 @@ function resetTerminalBuffer(session) {
   session.terminalRevision += 1;
   // 新终端从头认提示符，旧终端推断出的目录不再算数
   session.terminalCwd = null;
+  // 转发挂在旧连接上，已经跟着停了
+  session.portForwards = [];
 }
 
 // 主机密钥变更：后端用 hostKey.changed + params.expected/actual 上报，

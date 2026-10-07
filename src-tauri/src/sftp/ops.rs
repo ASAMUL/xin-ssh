@@ -22,7 +22,7 @@ use crate::models::{
     RemoteReadFileRequest, RemoteRenameRequest, RemoteWriteFileRequest,
 };
 use crate::sftp::error::{remote_io_error, sftp_error};
-use crate::sftp::path::{normalize_remote_path, join_remote_path, remote_parent_path};
+use crate::sftp::path::{normalize_remote_path, join_remote_path, remote_basename, remote_parent_path};
 use crate::sftp::{open_raw_sftp_session, remote_file_entry, remote_file_entry_from_attrs};
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
@@ -114,6 +114,25 @@ pub async fn resolve_remote_home(
     timeout(Duration::from_secs(12), registry.resolve_home(&session_id))
         .await
         .map_err(|_| timeout_error("resolveHome", 12))?
+}
+
+// 终端里 Ctrl+点击一个路径：先看它是文件还是目录，前端据此打开编辑器，或者让文件面板跳过去
+#[tauri::command]
+pub async fn stat_remote_path(
+    registry: State<'_, TerminalRegistry>,
+    session_id: String,
+    path: String,
+) -> Result<RemoteFileEntry, AppError> {
+    if session_id.trim().is_empty() {
+        return Err(required("sessionId"));
+    }
+    if path.trim().is_empty() {
+        return Err(required("remotePath"));
+    }
+
+    timeout(Duration::from_secs(12), registry.stat_path(&session_id, normalize_remote_path(&path)))
+        .await
+        .map_err(|_| timeout_error("statPath", 12))?
 }
 
 #[tauri::command]
@@ -580,6 +599,17 @@ async fn write_editor_bytes(file: &mut russh_sftp::client::fs::File, path: &str,
     file.sync_all()
         .await
         .map_err(|error| sftp_error(error, path))
+}
+
+// metadata 跟随软链接：指向目录的软链接按目录处理
+pub(crate) async fn stat_path_on_session(sftp: &SftpSession, path: &str) -> Result<RemoteFileEntry, AppError> {
+    let path = normalize_remote_path(path);
+    let metadata = sftp
+        .metadata(path.clone())
+        .await
+        .map_err(|error| sftp_error(error, &path))?;
+    let name = remote_basename(&path);
+    Ok(remote_file_entry_from_attrs(path, name, &metadata))
 }
 
 pub(crate) async fn resolve_home_on_session(sftp: &SftpSession) -> Result<String, AppError> {

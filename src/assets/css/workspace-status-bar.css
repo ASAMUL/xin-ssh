@@ -100,7 +100,8 @@
   color: var(--xin-danger-strong);
 }
 
-.status-transfers {
+.status-transfers,
+.status-forwards {
   color: var(--xin-text-secondary);
   border-radius: 999px;
   font-size: 12px;
@@ -108,7 +109,9 @@
 }
 
 .status-transfers:hover,
-.status-transfers.active {
+.status-transfers.active,
+.status-forwards:hover,
+.status-forwards[data-state="open"] {
   color: var(--xin-accent-strong);
   background: rgb(var(--xin-accent-rgb) / 0.1);
 }

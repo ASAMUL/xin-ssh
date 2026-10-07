@@ -1,14 +1,19 @@
 <script setup>
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { useToast } from "@nuxt/ui/composables";
 import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useTransferStore } from "../../stores/transferStore";
+import { useUiStore } from "../../stores/uiStore";
 import { useSessionLatency } from "../../composables/useSessionLatency";
 
 const { t } = useI18n();
 const sessionStore = useSessionStore();
 const transferStore = useTransferStore();
+const uiStore = useUiStore();
+const toast = useToast();
 useSessionLatency(sessionStore);
 
 const session = computed(() => sessionStore.activeSession);
@@ -34,6 +39,33 @@ const latencyLevel = computed(() => {
 const terminalSize = computed(() => (session.value
   ? `${session.value.terminalColumns} × ${session.value.terminalRows}`
   : ""));
+// 终端里点端口开的临时转发：一条一组，打开 / 复制地址 / 停止
+const forwards = computed(() => session.value?.portForwards ?? []);
+const forwardMenuItems = computed(() => forwards.value.map((forward) => [
+  { type: "label", label: t("statusBar.forwardItem", { remote: forward.remotePort, local: forward.localPort }) },
+  {
+    label: t("statusBar.forwardOpen"),
+    icon: "i-lucide-external-link",
+    onSelect: () => openUrl(`http://localhost:${forward.localPort}/`).catch((error) => uiStore.setError(error)),
+  },
+  { label: t("statusBar.forwardCopy"), icon: "i-lucide-copy", onSelect: () => copyForwardAddress(forward) },
+  {
+    label: t("statusBar.forwardStop"),
+    icon: "i-lucide-circle-stop",
+    color: "error",
+    onSelect: () => sessionStore.stopForward(session.value.id, forward.localPort).catch((error) => uiStore.setError(error)),
+  },
+]));
+
+async function copyForwardAddress(forward) {
+  const address = `127.0.0.1:${forward.localPort}`;
+  try {
+    await navigator.clipboard.writeText(address);
+    toast.add({ title: t("statusBar.forwardCopied", { address }), icon: "i-lucide-copy", color: "success" });
+  } catch (error) {
+    uiStore.setError(error);
+  }
+}
 </script>
 
 <template>
@@ -66,6 +98,19 @@ const terminalSize = computed(() => (session.value
       {{ t("statusBar.transfers") }}
       <strong>{{ transferStore.summary.activeCount }}</strong>
     </UButton>
+    <UDropdownMenu v-if="forwards.length" :items="forwardMenuItems" :content="{ side: 'top', align: 'start' }">
+      <UButton
+        class="status-item status-forwards"
+        color="neutral"
+        variant="ghost"
+        size="xs"
+        trailing-icon="i-lucide-arrow-right-left"
+        :title="t('statusBar.forwardsHint')"
+      >
+        {{ t("statusBar.forwards") }}
+        <strong>{{ forwards.length }}</strong>
+      </UButton>
+    </UDropdownMenu>
 
     <span class="status-spacer"></span>
     <span v-if="terminalSize" class="status-item status-muted" :title="t('statusBar.terminalSize')">

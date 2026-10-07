@@ -1,5 +1,6 @@
 pub(crate) mod agent;
 pub(crate) mod client;
+pub(crate) mod forward;
 pub(crate) mod interactive;
 pub(crate) mod known_hosts;
 pub(crate) mod registry;

@@ -139,6 +139,10 @@ pub mod codes {
     pub const TUNNEL_LISTENER_FAILED: &str = "tunnel.listenerFailed";
     pub const TUNNEL_STOP_FAILED: &str = "tunnel.stopFailed";
 
+    pub const FORWARD_PROHIBITED: &str = "forward.prohibited";
+    pub const FORWARD_CONNECT_FAILED: &str = "forward.connectFailed";
+    pub const FORWARD_FAILED: &str = "forward.failed";
+
     pub const SSH_CONNECTION: &str = "ssh.connection";
     pub const SSH_RESOLVE_FAILED: &str = "ssh.resolveFailed";
     pub const SSH_DISCONNECTED: &str = "ssh.disconnected";

@@ -501,6 +501,12 @@ function persistFilePaneSize(event) {
   settingsStore.applySettingsPatch({ filePaneSize: panes[panes.length - 1].size });
 }
 
+// 文件面板拖进来的路径。上传完才插的那种，传完时用户可能已经切到别的会话：不往看不见的终端里塞字
+function insertIntoTerminal(text, sessionId) {
+  if (sessionId !== sessionStore.activeSessionId) return;
+  activeTerminal.value?.insertText(text);
+}
+
 function themeVariant(theme) {
   return resolveThemeVariant(theme, settingsStore.terminalAppearance, resolvedAppearance.value);
 }
@@ -941,7 +947,7 @@ async function savePendingCredential() {
       min-size="16"
       max-size="72"
     >
-      <FileExplorer :active-session="activeSession" />
+      <FileExplorer :active-session="activeSession" @insert-terminal-text="insertIntoTerminal" />
     </Pane>
   </Splitpanes>
 </template>

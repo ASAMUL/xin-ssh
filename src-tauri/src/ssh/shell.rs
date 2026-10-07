@@ -17,13 +17,14 @@ use crate::sftp::session::CachedSftp;
 use crate::sftp::ops::{
     create_directory_on_session, create_file_on_session,
     chmod_path_on_session, copy_path_on_session, list_directory_on_session, read_file_text_on_session, rename_path_on_session,
-    resolve_home_on_session,
+    resolve_home_on_session, stat_path_on_session,
     stream_directory_on_session, write_file_text_on_session,
 };
 use crate::sftp::transfer::{
     remove_transfer_cancellation, run_download_transfer, run_upload_transfer,
 };
 use crate::ssh::client::{authenticate_session, connect_with_tofu, disconnect_session};
+use crate::ssh::forward::PortForwards;
 use crate::ssh::interactive::{AuthenticationContext, AuthenticationEvent};
 use crate::ssh::registry::{TerminalControl, TerminalRegistry};
 use crate::system_info::{
@@ -199,6 +200,11 @@ async fn run_terminal_shell(
     // 删除独占子通道，并单独限流，不能让大目录删除占满普通操作的并发名额。
     let delete_permits = Arc::new(Semaphore::new(2));
     let system_info_sampler = Arc::new(AsyncMutex::new(SystemInfoSampler::default()));
+    let port_forwards = PortForwards::default();
+    // 这条连接上开的端口转发都挂在这个令牌下：不管循环怎么结束（包括中途出错提前 return），
+    // guard 一丢就全部停掉，本机端口立刻释放
+    let forwards_scope = cancellation.child_token();
+    let forwards_guard = forwards_scope.clone().drop_guard();
     let mut output_buffer: Vec<u8> = Vec::new();
     let mut flush_deadline: Option<Instant> = None;
 
@@ -304,6 +310,23 @@ async fn run_terminal_shell(
                         cached_sftp.spawn(responder, false, |sftp| async move {
                             resolve_home_on_session(&sftp).await
                         });
+                    }
+                    TerminalControl::StatPath { path, responder } => {
+                        cached_sftp.spawn(responder, false, |sftp| async move {
+                            stat_path_on_session(&sftp, &path).await
+                        });
+                    }
+                    // 绑定端口 + 试开一次通道要等服务器回话，放到后台，不能卡住终端输入输出
+                    TerminalControl::ForwardPort { remote_port, responder } => {
+                        let port_forwards = port_forwards.clone();
+                        let session = Arc::clone(&session);
+                        let scope = forwards_scope.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = responder.send(port_forwards.start(session, remote_port, &scope).await);
+                        });
+                    }
+                    TerminalControl::StopForward { local_port } => {
+                        let _ = port_forwards.stop(local_port);
                     }
                     TerminalControl::ReadFileText { path, responder } => {
                         cached_sftp.spawn(responder, false, |sftp| async move {
@@ -442,6 +465,8 @@ async fn run_terminal_shell(
             }
         }
     }
+
+    drop(forwards_guard);
 
     if !output_buffer.is_empty() {
         emit_terminal_event(

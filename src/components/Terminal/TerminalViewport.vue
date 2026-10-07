@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -13,10 +14,12 @@ import { buildXtermTheme } from "../../config/terminalThemes";
 import { loadCommandHistory, recordCommand, suggestCommand } from "../../services/commandHistory";
 import { resolveRemoteHome } from "../../services/workspaceApi";
 import { useTerminalGuard } from "../../composables/useTerminalGuard";
+import { useTerminalLinks } from "../../composables/useTerminalLinks";
 import { createCommandMarks } from "../../utils/commandMarks";
 import { createCommandSuggest } from "../../utils/commandSuggest";
 import { createTerminalCwd } from "../../utils/terminalCwd";
 import { historySearchCommand } from "../../utils/dangerousCommands";
+import { registerTerminalLinks } from "../../utils/terminalLinkProvider";
 import { parseShellPrompt, readTerminalRow } from "../../utils/shellPrompt";
 import { forgetWebgl, touchWebgl } from "../../utils/webglPool";
 import { useSessionStore } from "../../stores/sessionStore";
@@ -40,11 +43,20 @@ const settingsStore = useSettingsStore();
 const snippetStore = useSnippetStore();
 const uiStore = useUiStore();
 const terminalGuard = useTerminalGuard();
+const terminalLinks = useTerminalLinks();
+const { t } = useI18n();
+// 链接上的修饰键在 Mac 上是 ⌘
+const LINK_MODIFIER = /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
+// URL 指向这些主机时，说的是服务器自己，不是本机
+const LOOPBACK_HOSTS = new Set(["localhost", "0.0.0.0", "[::1]", "[::]"]);
 const session = computed(() => sessionStore.findSession(props.sessionId));
 // 后台终端仍需向原会话回复光标/设备查询；不能因不可见而关闭整个输入通道。
 const canSendData = computed(() => session.value?.status === "connected"
   && session.value.terminalRevision === props.revision);
+const viewportRoot = ref(null);
 const terminalMount = ref(null);
+// 悬停在路径 / 端口上时的提示：{ text, x, y }，相对终端区域
+const linkHint = ref(null);
 const searchAddon = shallowRef(null);
 const searchPanel = ref(null);
 const isSearchOpen = ref(false);
@@ -62,6 +74,7 @@ let commandMarks = null;
 let commandSuggest = null;
 let terminalCwd = null;
 let detachSink = null;
+let linkProvider = null;
 let layoutFrame = null;
 let disposed = false;
 // 上一次真正设到 xterm 上的外观；切回这个终端时外观多半没变，没变就不重设
@@ -92,6 +105,11 @@ onMounted(() => {
   terminal.unicode.activeVersion = "11";
   terminal.loadAddon(new WebLinksAddon(openTerminalLink));
   terminal.open(terminalMount.value);
+  linkProvider = registerTerminalLinks(terminal, {
+    activate: activateLink,
+    hover: showLinkHint,
+    leave: () => { linkHint.value = null; },
+  });
   // 终端目录跟着这个终端实例走：重连会换一个新终端，旧的目录记录随之作废
   terminalCwd = createTerminalCwd(terminal, {
     loginUser: session.value?.username ?? null,
@@ -101,6 +119,7 @@ onMounted(() => {
   commandMarks = createCommandMarks(terminal, {
     onCommand: handleCommand,
     onPrompt: (prompt) => terminalCwd.handlePrompt(prompt),
+    knownUsers: () => [session.value?.username].filter(Boolean),
   });
   commandMarks.setTheme(props.theme);
   commandSuggest = createCommandSuggest(terminal, {
@@ -139,6 +158,7 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(layoutFrame);
   terminalMount.value?.removeEventListener("paste", guardPaste, true);
   detachSink?.();
+  linkProvider?.dispose();
   resizeObserver?.disconnect();
   listeners.forEach((listener) => listener.dispose());
   releaseWebgl();
@@ -357,11 +377,51 @@ async function copySelection() {
   }
 }
 
+// 服务器上打印的 http://localhost:5173 指的是服务器自己：直接在本机打开会连到本机的 5173，
+// 所以先把端口转发过来再打开
 function openTerminalLink(event, uri) {
   event.preventDefault();
   const url = new URL(uri);
   if (!["http:", "https:"].includes(url.protocol)) return;
+  if (LOOPBACK_HOSTS.has(url.hostname) || url.hostname.startsWith("127.")) {
+    const port = Number(url.port) || (url.protocol === "https:" ? 443 : 80);
+    terminalLinks.openPort(session.value, port, {
+      scheme: url.protocol.slice(0, -1),
+      path: `${url.pathname}${url.search}${url.hash}`,
+    });
+    return;
+  }
   openUrl(url.href).catch((error) => uiStore.setError(error));
+}
+
+function activateLink(link, line) {
+  linkHint.value = null;
+  if (link.kind === "port") {
+    terminalLinks.openPort(session.value, link.port);
+    return;
+  }
+  // 完整路径样式的提示符（user@host:/var/log$）才写得出目录；RHEL 那种只有目录名的说明不了
+  const prompt = commandMarks.promptAbove(line);
+  terminalLinks.openPath(session.value, link, { promptDir: prompt?.pathStyle === "full" ? prompt.pathText : null });
+}
+
+function showLinkHint(link, event) {
+  const rect = viewportRoot.value?.getBoundingClientRect();
+  if (!rect) return;
+  linkHint.value = {
+    text: link.kind === "port"
+      ? t("terminal.links.forwardHint", { key: LINK_MODIFIER, port: link.port })
+      : t("terminal.links.openHint", { key: LINK_MODIFIER }),
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
+}
+
+// 从文件面板拖进来的路径插到光标处：走 paste，shell 开了括号粘贴时原样插入、不会被当成按键执行
+function insertText(text) {
+  if (!terminal || !text || !canSendData.value) return;
+  terminal.paste(text);
+  focus();
 }
 
 async function openSearch() {
@@ -386,12 +446,15 @@ function toggleSearch() {
   else openSearch();
 }
 
-defineExpose({ sessionId: props.sessionId, focus, toggleSearch, isSearchOpen });
+defineExpose({ sessionId: props.sessionId, focus, toggleSearch, insertText, isSearchOpen });
 </script>
 
 <template>
-  <div v-show="active" class="terminal-viewport" :inert="!active">
+  <div ref="viewportRoot" v-show="active" class="terminal-viewport" :inert="!active" data-terminal-drop>
     <div ref="terminalMount" class="terminal-xterm"></div>
+    <div v-if="linkHint" class="terminal-link-hint" :style="{ left: `${linkHint.x}px`, top: `${linkHint.y}px` }">
+      {{ linkHint.text }}
+    </div>
     <Transition name="terminal-search-pop">
       <TerminalSearchPanel
         v-if="isSearchOpen"

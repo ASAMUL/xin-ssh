@@ -180,6 +180,19 @@ export function resolveRemoteHome(sessionId) {
   return invoke("resolve_remote_home", { sessionId });
 }
 
+export function statRemotePath(sessionId, path) {
+  return invoke("stat_remote_path", { sessionId, path });
+}
+
+// 在终端这条 SSH 连接上转发服务器的 127.0.0.1:remotePort，返回本机端口
+export function forwardTerminalPort(sessionId, remotePort) {
+  return invoke("forward_terminal_port", { sessionId, remotePort });
+}
+
+export function stopTerminalForward(sessionId, localPort) {
+  return invoke("stop_terminal_forward", { sessionId, localPort });
+}
+
 export function readRemoteFileText(request) {
   return invoke("read_remote_file_text", { request });
 }

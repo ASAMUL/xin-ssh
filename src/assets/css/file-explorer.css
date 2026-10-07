@@ -631,3 +631,44 @@
     display: none;
   }
 }
+
+/* —— 拖到终端 ——
+   跟在指针右下方的小标签，和应用的 tooltip 同一种玻璃；不接指针，松手时 elementFromPoint 才能看到底下的终端 */
+.file-drag-chip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  max-width: 280px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  color: var(--xin-text);
+  border-radius: 999px;
+  background: var(--lg-fill-regular);
+  box-shadow:
+    inset 0 0 0 1px var(--lg-edge-ink),
+    0 10px 24px -10px rgb(var(--xin-shadow-rgb) / 0.36);
+  backdrop-filter: blur(18px) saturate(1.5);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.file-drag-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-drag-chip :deep(svg) {
+  flex: 0 0 auto;
+  color: var(--xin-text-muted);
+  font-size: 14px;
+}
+
+:global(body.xin-dragging),
+:global(body.xin-dragging *) {
+  cursor: grabbing !important;
+}

@@ -14,7 +14,13 @@ import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
 import { useSessionStore } from "../stores/sessionStore";
 import { TRANSFER_CONFLICT_CODES, hasErrorCode, localizeError } from "../utils/appError";
-import { joinRemotePath, parentRemotePath, quoteRemotePathForShell } from "../utils/remotePath";
+import { formatPathsForShell, joinRemotePath, parentRemotePath, quoteRemotePathForShell } from "../utils/remotePath";
+import { TERMINAL_CWD_STATUS } from "../utils/terminalCwd";
+import {
+  highlightTerminalDrop,
+  terminalDropTargetAt,
+  useFileDragToTerminal,
+} from "../composables/useFileDragToTerminal";
 
 const props = defineProps({
   activeSession: {
@@ -22,6 +28,8 @@ const props = defineProps({
     default: null,
   },
 });
+// 要插到终端命令行的文字（拖到终端上的路径）和它属于哪个会话，由 TerminalWorkspace 交给那个会话的终端
+const emit = defineEmits(["insert-terminal-text"]);
 
 const { t, locale } = useI18n();
 const fileExplorerStore = useFileExplorerStore();
@@ -102,6 +110,15 @@ const isConnected = computed(() => props.activeSession?.status === "connected");
 const isConnecting = computed(() => props.activeSession?.status === "connecting");
 const canNavigate = computed(() => isConnected.value && !fileState.value.isLoading);
 const canTransfer = computed(() => Boolean(props.activeSession) && isConnected.value);
+// 拖到终端上的本地文件传到哪：终端当前所在的目录；认不出终端在哪时退回文件面板的目录
+const terminalUploadDir = computed(() => {
+  const cwd = props.activeSession?.terminalCwd;
+  return cwd?.status === TERMINAL_CWD_STATUS.following ? cwd.path : currentPath.value;
+});
+const fileDrag = useFileDragToTerminal({
+  resolve: describeDraggedEntries,
+  onDrop: (paths) => emit("insert-terminal-text", formatPathsForShell(paths), props.activeSession?.id),
+});
 const canRefresh = computed(() => Boolean(props.activeSession) && !isConnecting.value && !fileState.value.isLoading);
 const canGoBack = computed(() => fileState.value.historyIndex > 0);
 // 跟随终端目录：开关是全局偏好，跟不跟得上看这个会话的终端（terminalCwd.js 推断，存在会话上）
@@ -1230,23 +1247,72 @@ async function registerDragDrop() {
   }
 }
 
+// 从桌面拖进窗口的文件：落在终端上就传到终端所在的目录、传完把路径插到命令行；落在别处照旧传到文件面板当前目录
 function handleDragDropPayload(payload) {
   if (!payload) return;
 
+  if (payload.type === "leave") {
+    isDragOver.value = false;
+    highlightTerminalDrop(null);
+    return;
+  }
+
+  // Tauri 给的是物理像素，elementFromPoint 要的是 CSS 像素
+  const terminal = canTransfer.value && payload.position
+    ? terminalDropTargetAt(payload.position.x / window.devicePixelRatio, payload.position.y / window.devicePixelRatio)
+    : null;
+
   if (payload.type === "enter" || payload.type === "over") {
-    isDragOver.value = canTransfer.value;
+    isDragOver.value = canTransfer.value && !terminal;
+    highlightTerminalDrop(terminal, t("files.dropUploadToTerminal", { path: terminalUploadDir.value }));
     return;
   }
 
   if (payload.type === "drop") {
     isDragOver.value = false;
-    startUploadPaths(payload.paths || []);
-    return;
+    highlightTerminalDrop(null);
+    if (terminal) uploadToTerminal(payload.paths || []);
+    else startUploadPaths(payload.paths || []);
   }
+}
 
-  if (payload.type === "leave") {
-    isDragOver.value = false;
+// 拖到终端上的本地文件：传完再把远程路径插到命令行——还没传完就插，用户可能马上回车去用一个不完整的文件。
+// 重名时用户选了「改名」，落地的名字就不是这个了，不插；选了「覆盖 / 跳过」等任务续上后照样插
+async function uploadToTerminal(localPaths) {
+  const paths = normalizeDialogSelection(localPaths);
+  const session = props.activeSession;
+  if (!canTransfer.value || !paths.length) return;
+
+  const remoteDir = terminalUploadDir.value;
+  const remotePaths = paths.map((path) => joinRemotePath(remoteDir, path.split(/[\\/]/).filter(Boolean).pop()));
+  try {
+    const taskId = await transferStore.uploadPaths(session, paths, remoteDir);
+    const stop = watch(() => transferStore.findTask(taskId)?.status, (status) => {
+      const task = transferStore.findTask(taskId);
+      if (status === "failed" && isTransferConflictError(task?.error)) return;
+      if (status && !["completed", "failed", "canceled"].includes(status)) return;
+      stop();
+      if (status === "completed" && task.conflictPolicy !== "rename") {
+        emit("insert-terminal-text", formatPathsForShell(remotePaths), session.id);
+      }
+    });
+  } catch (error) {
+    uiStore.setError(error);
   }
+}
+
+// 按下的那一行要拖哪些路径：它在多选里就拖整组（按列表顺序），否则只拖它自己
+function describeDraggedEntries(entry) {
+  if (!canTransfer.value) return null;
+  const selected = isSelected(entry) && fileState.value.selectedPaths.length > 1
+    ? visibleEntries.value.filter((item) => selectedPathSet.value.has(item.path))
+    : [entry];
+  return {
+    paths: selected.map((item) => item.path),
+    label: selected.length === 1 ? selected[0].name : t("files.dragItems", { count: selected.length }),
+    icon: selected.length === 1 ? selected[0].icon : "i-lucide-files",
+    hint: t("files.dropPathToTerminal"),
+  };
 }
 
 function entryRangePaths(targetPath) {
@@ -1402,8 +1468,19 @@ function sortAriaLabel(key) {
 
 <template>
   <section ref="fileExplorerRoot" class="file-explorer liquid-rim" aria-label="Remote file explorer">
+    <!-- 拖着文件往终端去时跟在指针右下方的小标签 -->
+    <Teleport to="body">
+      <div
+        v-if="fileDrag.chip.visible"
+        class="file-drag-chip"
+        :style="{ transform: `translate(${fileDrag.chip.x + 14}px, ${fileDrag.chip.y + 12}px)` }"
+      >
+        <UIcon :name="fileDrag.chip.icon" />
+        <span>{{ fileDrag.chip.label }}</span>
+      </div>
+    </Teleport>
     <!-- 工具栏浮在列表上：标题 · [目录树 | 后退 前进 上级] · 面包屑 ‖ 筛选 · 上传 · 新建 · 更多，每组一颗玻璃胶囊。
-         目录树和文件列表都从它底下滚过去，玻璃边缘才有东西可折射（样式见 file-explorer.css）。
+         目录树从它底下滚过去，玻璃边缘才有东西可折射；文件表的行只滚到表头下沿（样式见 file-explorer.css）。
          低频操作（上传文件夹、下载、重命名、删除、刷新、历史、隐藏文件）收进「更多」，右键菜单保留全部 -->
     <header class="file-toolbar">
       <h3 class="file-toolbar-title">{{ t("files.fileTab") }}</h3>
@@ -1700,6 +1777,7 @@ function sortAriaLabel(key) {
               :class="{ selected: isSelected(fileEntry), directory: fileEntry.isDirectory }"
               :style="{ height: `${virtualRow.size}px`, transform: `translateY(${virtualRow.start}px)` }"
               :data-file-path="fileEntry.path"
+              @pointerdown="fileDrag.start(fileEntry, $event)"
               @click="selectEntry(fileEntry, $event)"
               @dblclick="openEntry(fileEntry)"
               @keydown.enter.prevent="openEntry(fileEntry)"

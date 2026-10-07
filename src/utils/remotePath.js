@@ -38,3 +38,10 @@ export function joinRemotePath(base, child) {
 export function quoteRemotePathForShell(path) {
   return `'${String(path).replaceAll("'", `'\\''`)}'`;
 }
+
+// 拖进终端的几个路径拼成一段命令行参数：普通路径原样，带空格、引号这类字符的才加引号——
+// 插进命令行的东西要一眼能读；末尾留一个空格，接着敲下一个参数
+export function formatPathsForShell(paths) {
+  const words = paths.map((path) => (/^[\w@%+=:,./~-]+$/.test(path) ? path : quoteRemotePathForShell(path)));
+  return words.length ? `${words.join(" ")} ` : "";
+}
