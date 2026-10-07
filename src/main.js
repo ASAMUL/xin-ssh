@@ -24,6 +24,7 @@ import { createRouter, createWebHashHistory } from "vue-router";
 import App from "./App.vue";
 import { i18n } from "./i18n";
 import { applyAppearanceMode } from "./utils/appearanceMode";
+import { suppressNativeContextMenu } from "./utils/nativeContextMenu";
 import {
   autoAttachLiquidGlass,
   trackLiquidGlassPointer,
@@ -72,6 +73,7 @@ app.directive("liquid-glass", vLiquidGlass);
 app.directive("liquid-stretch", vLiquidStretch);
 app.mount("#app");
 
+suppressNativeContextMenu();
 trackLiquidGlassPointer();
 
 // 弹出层才是真正展示玻璃的地方：它们浮在卡片、终端、文件列表上，边缘的弯折最明显。
