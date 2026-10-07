@@ -8,6 +8,11 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  // 高亮配色由当前终端调色板派生（buildSearchDecorations）
+  decorations: {
+    type: Object,
+    required: true,
+  },
 });
 
 const emit = defineEmits(["close"]);
@@ -15,14 +20,6 @@ const emit = defineEmits(["close"]);
 const { t } = useI18n();
 
 const MATCH_LIMIT = 999;
-
-// 高亮色必须是 #RRGGBB：普通匹配深蓝灰、活跃匹配品牌蓝，深浅主题下白色前景都可读
-const SEARCH_DECORATIONS = {
-  matchBackground: "#3a4f7a",
-  activeMatchBackground: "var(--xin-accent-strong)",
-  matchOverviewRuler: "#3a4f7a",
-  activeMatchColorOverviewRuler: "var(--xin-accent-strong)",
-};
 
 const searchInput = ref(null);
 const searchText = ref("");
@@ -103,7 +100,7 @@ function searchOptions() {
     regex: useRegex.value && !regexInvalid.value,
     caseSensitive: caseSensitive.value,
     wholeWord: wholeWord.value,
-    decorations: SEARCH_DECORATIONS,
+    decorations: props.decorations,
   };
 }
 

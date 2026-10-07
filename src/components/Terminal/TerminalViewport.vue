@@ -10,7 +10,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import TerminalSearchPanel from "./TerminalSearchPanel.vue";
-import { buildXtermTheme } from "../../config/terminalThemes";
+import { buildSearchDecorations, buildXtermTheme } from "../../config/terminalThemes";
 import { loadCommandHistory, recordCommand, suggestCommand } from "../../services/commandHistory";
 import { resolveRemoteHome } from "../../services/workspaceApi";
 import { useTerminalGuard } from "../../composables/useTerminalGuard";
@@ -60,6 +60,7 @@ const linkHint = ref(null);
 const searchAddon = shallowRef(null);
 const searchPanel = ref(null);
 const isSearchOpen = ref(false);
+const searchDecorations = computed(() => buildSearchDecorations(props.theme));
 // 片段也是联想的候选：新服务器上什么都没敲过时先由它们顶上；多行脚本没法补进一行里，排除
 const snippetCommands = computed(() => snippetStore.activeSnippets
   .map((snippet) => snippet.command)
@@ -460,6 +461,7 @@ defineExpose({ sessionId: props.sessionId, focus, toggleSearch, insertText, isSe
         v-if="isSearchOpen"
         ref="searchPanel"
         :search-addon="searchAddon"
+        :decorations="searchDecorations"
         @click.stop
         @close="closeSearch()"
       />

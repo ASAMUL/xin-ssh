@@ -154,6 +154,20 @@ export function buildEditorTheme(variant) {
   };
 }
 
+// 终端查找的高亮跟着调色板走，配方同编辑器搜索（普通匹配黄、当前匹配强调色）。
+// xterm 只认不透明的 #RRGGBB，CSS 变量解析不了会让整帧渲染抛错——高亮不出、跳转也看不到——所以先混进底色
+export function buildSearchDecorations(variant) {
+  const { xterm, accent } = variant;
+  const match = mixHex(xterm.yellow, xterm.background, 0.3);
+  const activeMatch = mixHex(accent, xterm.background, 0.45);
+  return {
+    matchBackground: match,
+    activeMatchBackground: activeMatch,
+    matchOverviewRuler: xterm.yellow,
+    activeMatchColorOverviewRuler: accent,
+  };
+}
+
 function withAlpha(hex, alpha) {
   const value = hex.replace("#", "");
   const [r, g, b] = [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16));
