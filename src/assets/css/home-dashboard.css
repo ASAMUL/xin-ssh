@@ -1,11 +1,15 @@
-/* 连接页 = 一张铺在玻璃窗面上的「纸」：标题与工具栏常驻，只有下方列表滚动。 */
+/* 连接页直接铺在应用壁纸上：标题与工具栏常驻，只有下方列表滚动。
+   以前整页垫着一张磨砂「纸」（44% 白 + 30px 模糊），占了窗口九成五，壁纸只在边上露一圈；
+   纸本身又带 backdrop-filter，成了工具栏玻璃的 backdrop root——胶囊只能折射到那张白纸，看着就是实心白块。
+   现在只留布局：卡片是内容，自带纸面；工具栏胶囊是控件，浮在壁纸上才有东西可折射（Apple 的分层也是这样）。 */
 .home-dashboard {
   flex: 1;
   min-width: 0;
   min-height: 0;
   display: flex;
-  /* 和悬浮顶栏同一条 8px 边线 */
-  padding: 8px;
+  /* 左右上和悬浮顶栏同一条 8px 边线；底边不留，卡片一直滚出窗口下沿，
+     不会在壁纸半空中被一条看不见的边齐刷刷切断 */
+  padding: 8px 8px 0;
 }
 
 .home-sheet {
@@ -17,15 +21,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--xin-glass-border);
-  border-radius: 24px;
-  background: rgb(var(--xin-fill-rgb) / var(--xin-sheet-alpha));
-  box-shadow:
-    var(--xin-specular-strong),
-    0 0 0 1px rgb(var(--xin-ink-rgb) / 0.03),
-    0 24px 60px -36px rgb(var(--xin-shadow-rgb) / 0.3);
-  backdrop-filter: var(--xin-glass-blur);
-  -webkit-backdrop-filter: var(--xin-glass-blur);
 }
 
 /* —— 标题行 —— */

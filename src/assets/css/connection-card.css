@@ -1,4 +1,4 @@
-/* 连接卡片：压在玻璃上的一张「纸」。悬停时纸面泛一层樱色、描边转粉，
+/* 连接卡片：直接压在壁纸上的一张磨砂「纸」。悬停时纸面泛一层樱色、描边转粉，
    右下浮出「连接 →」——整张卡都可点，按钮只是把这件事说出来。 */
 .connection-card {
   --status-color: var(--xin-status-idle);
@@ -10,6 +10,10 @@
   border-radius: var(--xin-radius-lg);
   background: var(--xin-card);
   box-shadow: var(--xin-specular), var(--xin-card-shadow);
+  /* 首页不再垫磨砂纸，卡片直接压在壁纸上：自带一层模糊，深色下半透明的纸面后面不会透出清晰的波浪线跟字打架。
+     这是普通材质不是液态玻璃——卡片是内容，不折射 */
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
   transition:
     transform 200ms cubic-bezier(0.32, 0.72, 0.24, 1),
     border-color 160ms ease,
