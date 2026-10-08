@@ -238,9 +238,13 @@
 :root {
   --lg-fill-regular: rgb(255 255 255 / calc(0.72 + 0.16 * var(--xin-glass-tint)));
   /* 对话框也有折射了（边缘一圈要透才看得见弯折），底色比以前通透；
-     可读性交给折射滤镜里的那层模糊（见 main.js 的 autoAttachLiquidGlass） */
-  --lg-fill-sheet: rgb(250 250 252 / calc(0.7 + 0.22 * var(--xin-glass-tint)));
-  --lg-scrim: rgb(var(--xin-shadow-rgb) / 0.18);
+     可读性交给折射滤镜里的那层模糊（见 main.js 的 autoAttachLiquidGlass）。
+     通透档从 0.7 降到 0.6：用户嫌弹窗灰蒙蒙——透出来的是被遮罩压灰的背景，白底越厚越像一块灰白板；
+     着色档仍落在 0.92 */
+  --lg-fill-sheet: rgb(250 250 252 / calc(0.6 + 0.32 * var(--xin-glass-tint)));
+  /* 浅色遮罩只压一点：0.18 的深灰会把近白的界面整片压成中灰，弹窗透出去看到的也是这片灰。
+     和背景拉开层次主要靠遮罩的 3px 模糊和弹窗的投影（见 modal-forms.css） */
+  --lg-scrim: rgb(var(--xin-shadow-rgb) / 0.08);
 }
 
 .dark {
