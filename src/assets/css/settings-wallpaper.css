@@ -1,6 +1,6 @@
 /* 设置 → 应用壁纸（WallpaperSetting.vue 专用，scoped 引入）。卡片和行的样子沿用 form-list.css。
-   第一行是缩略图 + 操作，有壁纸时下面再多两行滑块；没有壁纸时缩略图是虚线空位。
-   缩略图以前是一大块 152px 的灰框，没壁纸时整行大半是空的，缩到和按钮一行的高度就够认图了。 */
+   浅色、深色各一行：缩略图 + 哪一档 / 默认还是自定义 + 操作，下面两行是两档共用的滑块。
+   每一档总有图（没换过就是内置图），所以缩略图不再需要「空位」的样子。 */
 .wallpaper-setting {
   display: flex;
   align-items: center;
@@ -13,27 +13,42 @@
   aspect-ratio: 16 / 10;
   border: 1px solid var(--xin-border-soft);
   border-radius: var(--xin-radius-sm);
+  background-color: rgb(var(--xin-ink-rgb) / 0.03);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
   box-shadow: var(--xin-card-shadow);
 }
 
-.wallpaper-preview.empty {
-  display: grid;
-  place-items: center;
-  color: var(--xin-text-faint);
-  border-style: dashed;
-  background-color: rgb(var(--xin-ink-rgb) / 0.03);
-  box-shadow: none;
-  font-size: 18px;
+/* 文字列吃掉剩余宽度，把按钮推到行尾；min-width: 0 让长英文标签能收缩而不是顶破卡片 */
+.wallpaper-meta {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wallpaper-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.wallpaper-meta small {
+  color: var(--xin-text-muted);
+  font-size: 11.5px;
 }
 
 .wallpaper-actions {
-  min-width: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .wallpaper-slider {

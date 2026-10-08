@@ -104,11 +104,10 @@ pub struct WorkspaceSettings {
     // 下次写盘时这个字段就消失了；也因为不序列化，save_settings 的字段白名单里没有它，前端改不动
     #[serde(default, skip_serializing)]
     pub glass_style: Option<String>,
-    // 应用壁纸：铺在整个窗口最底层，给液态玻璃「底下的东西」。默认没有。
-    // 和终端背景图同一套存储（图片复制进 <workspace>/backgrounds/，这里只记文件名），
-    // opacity 是图片压在画布上的可见度，blur 是模糊半径，fit 固定 cover。
+    // 应用壁纸：铺在整个窗口最底层，给液态玻璃「底下的东西」。
+    // None 和两档都没换过一样，都是内置壁纸——玻璃底下不能是空的，所以没有「无壁纸」这个状态。
     #[serde(default)]
-    pub app_wallpaper: Option<TerminalBackground>,
+    pub app_wallpaper: Option<AppWallpaper>,
     // 只恢复连接引用和界面位置；密码、OTP、sessionId 与终端输出永不进入配置。
     #[serde(default)]
     pub session_restore: SessionRestoreState,
@@ -153,6 +152,50 @@ impl WorkspaceSettings {
         // 两档开关落到滑块两端：通透就是 0，着色就是 100
         if let Some(style) = self.glass_style.take() {
             self.glass_tint = if style == "tinted" { 100 } else { 0 };
+        }
+        if let Some(wallpaper) = self.app_wallpaper.as_mut() {
+            wallpaper.migrate_legacy_file();
+        }
+    }
+}
+
+/// 应用壁纸。浅色 / 深色各一张，跟着应用的实际明暗切换。
+/// `None` 表示这一档用内置壁纸：内置图是前端打包进安装包的资源，不复制进工作区——
+/// 工作区可以同步到别的机器，没必要每份都带两张一样的图。
+/// 用户换上的图和终端背景图同一套存储：复制进 `<workspace>/backgrounds/`，这里只记文件名。
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AppWallpaper {
+    pub light: Option<String>,
+    pub dark: Option<String>,
+    /// 图片压在画布上的可见度 0.1~1，两档共用
+    pub opacity: f64,
+    /// 高斯模糊半径 px，0 = 不模糊，两档共用
+    pub blur: u16,
+    // 旧版只有一张壁纸、明暗共用（形状同 TerminalBackground，fit 读到也直接丢掉）。
+    // 只读不写：读到后由 migrate_legacy_file 落到两档上，下次写盘时这个字段就消失了
+    #[serde(skip_serializing)]
+    file: Option<String>,
+}
+
+impl Default for AppWallpaper {
+    fn default() -> Self {
+        Self {
+            light: None,
+            dark: None,
+            opacity: 1.0,
+            blur: 0,
+            file: None,
+        }
+    }
+}
+
+impl AppWallpaper {
+    // 升级前那张图两种明暗下都在用，升级后也得两档都是它，不能悄悄换成内置图
+    fn migrate_legacy_file(&mut self) {
+        if let Some(file) = self.file.take().filter(|file| !file.is_empty()) {
+            self.light = Some(file.clone());
+            self.dark = Some(file);
         }
     }
 }

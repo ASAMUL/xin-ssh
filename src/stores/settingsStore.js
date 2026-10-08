@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { saveSettings } from "../services/workspaceApi";
 import { normalizeTerminalBackground } from "../services/backgroundApi";
+import { normalizeAppWallpaper } from "../config/appWallpaper";
 import { applyAppearanceMode, normalizeAppearanceMode } from "../utils/appearanceMode";
 import { applyGlassTint, normalizeGlassTint } from "../utils/glassTint";
 import { i18n } from "../i18n";
@@ -60,8 +61,8 @@ export const useSettingsStore = defineStore("settings", {
     terminalBackground: (state) => normalizeTerminalBackground(state.settings?.terminalBackground),
     appearanceMode: (state) => normalizeAppearanceMode(state.settings?.appearanceMode),
     glassTint: (state) => normalizeGlassTint(state.settings?.glassTint),
-    // 应用壁纸和终端背景图同一个数据形状（file / opacity / blur / fit），校验也复用
-    appWallpaper: (state) => normalizeTerminalBackground(state.settings?.appWallpaper),
+    // 永远是完整对象：某一档没换过就是 null（= 内置图），没有「无壁纸」这个状态
+    appWallpaper: (state) => normalizeAppWallpaper(state.settings?.appWallpaper),
     sessionRestore: (state) => normalizeSessionRestore(state.settings?.sessionRestore),
   },
   actions: {
@@ -100,7 +101,7 @@ export const useSettingsStore = defineStore("settings", {
         patch.terminalBackground = normalizeTerminalBackground(patch.terminalBackground);
       }
       if (Object.hasOwn(patch, "appWallpaper")) {
-        patch.appWallpaper = normalizeTerminalBackground(patch.appWallpaper);
+        patch.appWallpaper = normalizeAppWallpaper(patch.appWallpaper);
       }
       this.previewSettings(patch);
       if (!workspaceDir) return null;
@@ -176,7 +177,7 @@ export const useSettingsStore = defineStore("settings", {
     setGlassTint(glassTint) {
       return this.applySettingsPatch({ glassTint: normalizeGlassTint(glassTint) });
     },
-    // null = 移除壁纸，窗口回到近白 / 近黑的画布
+    // 某一档设回 null 就是恢复内置图；整个壁纸不能清空，见 config/appWallpaper.js
     setAppWallpaper(appWallpaper) {
       return this.patchSettings({ appWallpaper });
     },
