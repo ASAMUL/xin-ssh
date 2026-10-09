@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useTimeoutFn } from "@vueuse/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -49,6 +50,10 @@ const { t } = useI18n();
 const LINK_MODIFIER = /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
 // URL 指向这些主机时，说的是服务器自己，不是本机
 const LOOPBACK_HOSTS = new Set(["localhost", "0.0.0.0", "[::1]", "[::]"]);
+// 行列数只在调大小时有用（排 vim / tmux 的版面），停手一秒就收起，不常驻
+const SIZE_HINT_MS = 1000;
+// 刚挂载、刚切回来时 fit 会顺手校正一次尺寸，字体加载完还会再量一次；那不是用户在调大小，不报
+const SIZE_HINT_QUIET_MS = 600;
 const session = computed(() => sessionStore.findSession(props.sessionId));
 // 后台终端仍需向原会话回复光标/设备查询；不能因不可见而关闭整个输入通道。
 const canSendData = computed(() => session.value?.status === "connected"
@@ -57,6 +62,10 @@ const viewportRoot = ref(null);
 const terminalMount = ref(null);
 // 悬停在路径 / 端口上时的提示：{ text, x, y }，相对终端区域
 const linkHint = ref(null);
+// 调整大小时浮在终端中间的行列数：{ cols, rows }
+const sizeHint = ref(null);
+const { start: scheduleSizeHintHide } = useTimeoutFn(() => { sizeHint.value = null; }, SIZE_HINT_MS, { immediate: false });
+let sizeHintQuietUntil = 0;
 const searchAddon = shallowRef(null);
 const searchPanel = ref(null);
 const isSearchOpen = ref(false);
@@ -145,8 +154,10 @@ onMounted(() => {
       if (session.value?.terminalRevision === props.revision) {
         sessionStore.resizeSessionTerminal(props.sessionId, cols, rows);
       }
+      showSizeHint(cols, rows);
     }),
   );
+  sizeHintQuietUntil = performance.now() + SIZE_HINT_QUIET_MS;
   detachSink = sessionStore.attachTerminalSink(props.sessionId, props.revision, (data) => terminal.write(data));
   resizeObserver = new ResizeObserver(scheduleLayout);
   resizeObserver.observe(terminalMount.value);
@@ -180,10 +191,13 @@ watch(canSendData, (enabled) => {
   if (enabled) sessionStore.resizeSessionTerminal(props.sessionId, terminal.cols, terminal.rows);
 }, { flush: "sync" });
 watch(() => props.active, (active) => {
-  if (active) updateAppearance();
-  else {
+  if (active) {
+    sizeHintQuietUntil = performance.now() + SIZE_HINT_QUIET_MS;
+    updateAppearance();
+  } else {
     closeSearch(false);
     terminal?.blur();
+    sizeHint.value = null;
   }
 }, { flush: "post" });
 watch(() => [props.theme, props.material, props.fontFamily, props.fontSize], updateAppearance);
@@ -250,6 +264,12 @@ function releaseWebgl() {
   const addon = webglAddon;
   webglAddon = null;
   addon?.dispose();
+}
+
+function showSizeHint(cols, rows) {
+  if (performance.now() < sizeHintQuietUntil) return;
+  sizeHint.value = { cols, rows };
+  scheduleSizeHintHide();
 }
 
 function focus() {
@@ -480,6 +500,9 @@ defineExpose({
     <div v-if="linkHint" class="terminal-link-hint" :style="{ left: `${linkHint.x}px`, top: `${linkHint.y}px` }">
       {{ linkHint.text }}
     </div>
+    <Transition name="terminal-size-hint">
+      <div v-if="sizeHint" class="terminal-size-hint">{{ t("terminal.sizeHint", sizeHint) }}</div>
+    </Transition>
     <Transition name="terminal-search-pop">
       <TerminalSearchPanel
         v-if="isSearchOpen"

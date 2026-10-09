@@ -382,6 +382,7 @@ export const messages = {
       },
       enterImmersive: "沉浸模式：只留终端",
       exitImmersive: "退出沉浸模式",
+      sizeHint: "{cols} 列 × {rows} 行",
     },
     statusBar: {
       latency: "延迟",
@@ -1315,6 +1316,7 @@ export const messages = {
       },
       enterImmersive: "Focus mode: terminal only",
       exitImmersive: "Exit focus mode",
+      sizeHint: "{cols} cols × {rows} rows",
     },
     statusBar: {
       latency: "Latency",

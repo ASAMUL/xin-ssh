@@ -89,6 +89,44 @@
   pointer-events: none;
 }
 
+/* 调整终端大小时正中间报一下行列数（macOS 终端、iTerm2 的习惯），停手一秒后淡出。
+   和链接提示同一种玻璃；压在终端画面正中，不接指针，免得挡住点击和选区 */
+.terminal-size-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  padding: 8px 18px;
+  color: var(--xin-text);
+  border-radius: 999px;
+  background: var(--lg-fill-regular);
+  box-shadow:
+    inset 0 0 0 1px var(--lg-edge-ink),
+    0 12px 28px -12px rgb(var(--xin-shadow-rgb) / 0.35);
+  backdrop-filter: blur(18px) saturate(1.5);
+  font-family: var(--xin-font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 出现要快，跟得上拖动；消失慢一点，免得像闪了一下 */
+.terminal-size-hint-enter-active {
+  transition: opacity 0.12s ease;
+}
+
+.terminal-size-hint-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.terminal-size-hint-enter-from,
+.terminal-size-hint-leave-to {
+  opacity: 0;
+}
+
 /* 从文件面板或桌面拖东西到终端上：描一圈樱色，中间一句话说清楚松手会发生什么（文字由拖拽方写进 data-drop-hint） */
 .terminal-viewport.drop-target::after {
   content: attr(data-drop-hint);
