@@ -3,11 +3,13 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useToast } from "@nuxt/ui/composables";
+import { useTimestamp } from "@vueuse/core";
 import { useProfileStore } from "../../stores/profileStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useTransferStore } from "../../stores/transferStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useSessionLatency } from "../../composables/useSessionLatency";
+import { formatUptimeShort } from "../../utils/formatMetrics";
 
 const { t } = useI18n();
 const sessionStore = useSessionStore();
@@ -36,9 +38,15 @@ const latencyLevel = computed(() => {
   if (latency < 300) return "fair";
   return "poor";
 });
-const terminalSize = computed(() => (session.value
-  ? `${session.value.terminalColumns} × ${session.value.terminalRows}`
-  : ""));
+// 只精确到分钟：按秒跳的读数会一直勾眼角，而「连了多久」本来也只需要个大概
+const now = useTimestamp({ interval: 15_000 });
+// 重连会把 connectedAt 重置，时长归零就等于告诉用户刚才断过一次
+const connectedFor = computed(() => {
+  const connectedAt = session.value?.status === "connected" ? session.value.connectedAt : null;
+  if (!connectedAt) return "";
+  const seconds = Math.floor((now.value - connectedAt) / 1000);
+  return seconds < 60 ? t("statusBar.connectedJustNow") : formatUptimeShort(seconds, t);
+});
 // 终端里点端口开的临时转发：一条一组，打开 / 复制地址 / 停止
 const forwards = computed(() => session.value?.portForwards ?? []);
 const forwardMenuItems = computed(() => forwards.value.map((forward) => [
@@ -113,8 +121,9 @@ async function copyForwardAddress(forward) {
     </UDropdownMenu>
 
     <span class="status-spacer"></span>
-    <span v-if="terminalSize" class="status-item status-muted" :title="t('statusBar.terminalSize')">
-      {{ terminalSize }}
+    <span v-if="connectedFor" class="status-item" :title="t('statusBar.connectedHint')">
+      {{ t("statusBar.connectedFor") }}
+      <strong>{{ connectedFor }}</strong>
     </span>
   </footer>
 </template>

@@ -1,5 +1,6 @@
 /* 工作区底部状态栏：一条贴着窗口下沿的细玻璃带，和顶栏上下呼应。
-   只放扫一眼就够的读数（连接、编码、延迟、传输、终端尺寸），不放操作。 */
+   只放扫一眼就够的读数（连接、编码、延迟、传输、连接时长），不放操作。
+   终端行列数不常驻在这里：平时用不上，只在调整大小时浮在终端中间（terminal-viewport.css）。 */
 .workspace-status-bar {
   flex: 0 0 auto;
   height: 34px;
@@ -72,7 +73,7 @@
   background: var(--xin-danger);
 }
 
-/* 主机地址可能很长（IPv6、长域名），只让它自己省略，别把右侧的终端尺寸挤出去 */
+/* 主机地址可能很长（IPv6、长域名），只让它自己省略，别把右侧的连接时长挤出去 */
 .status-endpoint {
   min-width: 0;
   max-width: 360px;
@@ -114,8 +115,4 @@
 .status-forwards[data-state="open"] {
   color: var(--xin-accent-strong);
   background: rgb(var(--xin-accent-rgb) / 0.1);
-}
-
-.status-muted {
-  color: var(--xin-text-muted);
 }
