@@ -84,8 +84,12 @@ export function reorderGroups(groupIds) {
   return invoke("reorder_groups", { groupIds });
 }
 
-export function moveProfile(profileId, groupId, beforeProfileId = null) {
-  return invoke("move_profile", { profileId, groupId, beforeProfileId });
+export function moveProfile(profileId, groupId) {
+  return invoke("move_profile", { profileId, groupId });
+}
+
+export function reorderProfiles(profileIds) {
+  return invoke("reorder_profiles", { profileIds });
 }
 
 export function retryDeletedCredentialCleanup() {

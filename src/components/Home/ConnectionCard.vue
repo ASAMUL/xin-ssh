@@ -24,10 +24,6 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
-  sortable: {
-    type: Boolean,
-    default: false,
-  },
 });
 
 const emit = defineEmits(["open", "toggleFavorite"]);
@@ -49,11 +45,7 @@ defineOptions({ inheritAttrs: false });
   <UContextMenu :items="menuItems" :disabled="!hasMenu" size="sm">
     <article v-bind="$attrs" class="connection-card liquid-rim" :class="[status, { favorite: profile.favorite }]">
       <button type="button" class="connection-card-main" @click="emit('open', profile)">
-        <span
-          class="connection-card-icon"
-          :class="{ 'connection-card-drag-handle': sortable }"
-          :title="sortable ? t('home.sortConnection') : undefined"
-        >
+        <span class="connection-card-icon">
           <OsIconTile :icon="osIcon" :size="52" />
         </span>
 

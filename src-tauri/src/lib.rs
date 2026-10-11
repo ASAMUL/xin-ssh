@@ -41,6 +41,7 @@ pub fn run() {
             workspace::list_tunnel_configs,
             workspace::mark_profile_connected,
             workspace::move_profile,
+            workspace::reorder_profiles,
             workspace::reorder_groups,
             workspace::retry_deleted_credential_cleanup,
             sftp::ops::stream_remote_directory,

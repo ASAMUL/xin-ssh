@@ -5,6 +5,7 @@ import {
   markProfileConnected,
   moveProfile,
   reorderGroups,
+  reorderProfiles,
   retryDeletedCredentialCleanup,
   saveGroup,
   saveProfile,
@@ -234,11 +235,41 @@ export const useProfileStore = defineStore("profiles", {
     async deleteGroup(groupId, { deleteProfiles = false } = {}) {
       return this.persistChange(() => deleteGroup(groupId, deleteProfiles));
     },
-    async moveProfileToGroup(profileId, groupId, beforeProfileId = null) {
+    async moveProfileToGroup(profileId, groupId) {
       if (this.isSavingLayout) return;
       this.isSavingLayout = true;
       try {
-        await this.persistChange(() => moveProfile(profileId, groupId, beforeProfileId));
+        await this.persistChange(() => moveProfile(profileId, groupId));
+      } finally {
+        this.isSavingLayout = false;
+      }
+    },
+    // visibleIds 是拖放后屏幕上的顺序，可能只是筛选出的子集：
+    // 只让被拖的连接贴到它的可见邻居旁边，被筛掉的连接保持原位。
+    async placeProfile(profileId, visibleIds) {
+      const ids = this.activeProfiles.map((profile) => profile.id).filter((id) => id !== profileId);
+      const position = visibleIds.indexOf(profileId);
+      const previousId = visibleIds[position - 1];
+      const index = previousId ? ids.indexOf(previousId) + 1 : ids.indexOf(visibleIds[position + 1]);
+      ids.splice(index < 0 ? ids.length : index, 0, profileId);
+      return this.reorderProfiles(ids);
+    },
+    async reorderProfiles(profileIds) {
+      if (this.isSavingLayout) return;
+      this.isSavingLayout = true;
+      // 松手时 SortableJS 已把 DOM 还原，等落盘回来再重排会先闪回原位，所以先在本地落位
+      const previousOrders = new Map(this.profiles.map((profile) => [profile.id, profile.sortOrder]));
+      const nextOrders = new Map(profileIds.map((id, index) => [id, index]));
+      this.profiles = this.profiles.map((profile) => nextOrders.has(profile.id)
+        ? { ...profile, sortOrder: nextOrders.get(profile.id) }
+        : profile);
+      try {
+        await this.persistChange(() => reorderProfiles(profileIds));
+      } catch (error) {
+        this.profiles = this.profiles.map((profile) => previousOrders.has(profile.id)
+          ? { ...profile, sortOrder: previousOrders.get(profile.id) }
+          : profile);
+        throw error;
       } finally {
         this.isSavingLayout = false;
       }

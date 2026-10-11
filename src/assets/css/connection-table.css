@@ -52,6 +52,25 @@
   background: rgb(var(--xin-accent-rgb) / 0.05);
 }
 
+/* 整行可拖：拖动途中别把单元格文字选蓝 */
+.connection-table tbody.sortable tr {
+  user-select: none;
+}
+
+/* 拖动时行在表格里实时换位，原行高亮就是落点 */
+.connection-table tbody tr.home-sort-ghost {
+  background: rgb(var(--xin-accent-rgb) / 0.1);
+}
+
+.connection-table tbody tr.home-sort-chosen {
+  cursor: grabbing;
+}
+
+/* 跟手的克隆行一脱离 table 就会被块级化、单元格挤成一团，直接藏掉，只看行在表里换位 */
+tr.home-sort-fallback {
+  visibility: hidden;
+}
+
 .connection-table tbody tr.connected {
   --status-color: var(--xin-success);
   --status-soft: rgb(var(--xin-success-rgb) / 0.15);

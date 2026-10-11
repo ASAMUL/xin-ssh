@@ -118,17 +118,15 @@ const emptyText = computed(() => {
   return t("home.emptyGroup");
 });
 
-// 平铺网格里只有「全部 + 选中单个分组 + 未搜索」时顺序才等于该分组的真实顺序，
-// 其余视图是跨组或筛过的子集，拖动结果无法落回某个分组，干脆不给拖。
-const sortableGroupId = computed(() =>
-  activeNav.value === "all" && !normalizedQuery.value ? uiStore.homeGroupFilter : null,
-);
+// 连接顺序是全局的，分组、收藏、搜索都只是筛出它的子序列，拖完照样能落回去；
+// 只有「最近」按连接时间排，手动顺序在那里没有意义。
+const canSort = computed(() => activeNav.value !== "recents" && !profileStore.isSavingLayout);
 
 useHomeSortable(cardGrid, {
   draggable: ".connection-card",
-  handle: ".connection-card-drag-handle",
-  disabled: () => !sortableGroupId.value || profileStore.isSavingLayout,
-  onDrop: ({ id, beforeId }) => moveProfile({ id, groupId: sortableGroupId.value, beforeId }),
+  handle: ".connection-card-main",
+  disabled: () => !canSort.value,
+  onDrop: placeProfile,
 });
 
 const featuredMenuItems = computed(() => {
@@ -224,8 +222,6 @@ function profileStatus(profile) {
 
 // 卡片、表格和右键共用操作定义，避免某个入口遗漏分组移动或删除确认。
 function menuItemsFor(profile) {
-  const siblings = profileStore.profilesInGroup(profile.groupId);
-  const index = siblings.findIndex((item) => item.id === profile.id);
   return [
     [
       {
@@ -241,30 +237,8 @@ function menuItemsFor(profile) {
           label: groupDisplayName(group),
           icon: group.id === profile.groupId ? "i-lucide-check" : "i-lucide-folder",
           disabled: group.id === profile.groupId,
-          onSelect: () => moveProfile({ id: profile.id, groupId: group.id }),
+          onSelect: () => moveProfile(profile.id, group.id),
         })),
-      },
-    ],
-    [
-      {
-        label: t("home.moveUp"),
-        icon: "i-lucide-arrow-up",
-        disabled: profileStore.isSavingLayout || index <= 0,
-        onSelect: () => moveProfile({
-          id: profile.id,
-          groupId: profile.groupId,
-          beforeId: siblings[index - 1].id,
-        }),
-      },
-      {
-        label: t("home.moveDown"),
-        icon: "i-lucide-arrow-down",
-        disabled: profileStore.isSavingLayout || index < 0 || index === siblings.length - 1,
-        onSelect: () => moveProfile({
-          id: profile.id,
-          groupId: profile.groupId,
-          beforeId: siblings[index + 2]?.id,
-        }),
       },
     ],
     [
@@ -407,8 +381,12 @@ function toggleFavorite(profileId) {
   profileStore.toggleFavorite(profileId).catch(showError);
 }
 
-function moveProfile({ id, groupId, beforeId = null }) {
-  profileStore.moveProfileToGroup(id, groupId, beforeId).catch(showError);
+function moveProfile(id, groupId) {
+  profileStore.moveProfileToGroup(id, groupId).catch(showError);
+}
+
+function placeProfile({ id, order }) {
+  profileStore.placeProfile(id, order).catch(showError);
 }
 
 // ---- 删除连接 ----
@@ -644,7 +622,6 @@ function showError(error) {
             v-else-if="viewMode === 'grid'"
             ref="cardGrid"
             class="home-card-grid"
-            :data-group-id="sortableGroupId"
             :aria-busy="profileStore.isSavingLayout"
           >
             <ConnectionCard
@@ -655,7 +632,6 @@ function showError(error) {
               :status="profileStatus(profile)"
               :group-name="cardGroupName(profile)"
               :menu-items="profileMenus[profile.id]"
-              :sortable="Boolean(sortableGroupId)"
               @open="openProfile"
               @toggle-favorite="toggleFavorite"
             />
@@ -664,7 +640,9 @@ function showError(error) {
           <ConnectionTable
             v-else-if="tableRows.length"
             :rows="tableRows"
+            :sortable="canSort"
             @open="openProfile"
+            @reorder="placeProfile"
             @edit="uiStore.openConnectionForm"
             @toggle-favorite="toggleFavorite"
           />

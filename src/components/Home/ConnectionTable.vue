@@ -1,19 +1,35 @@
 <script setup>
+import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import OsIconTile from "../ConnectionManager/OsIconTile.vue";
 import { resolveProfileOsIcon } from "../../config/osIcons";
 import { formatRelativeTime } from "../../utils/relativeTime";
+import { useHomeSortable } from "../../composables/useHomeSortable";
 
-defineProps({
+const props = defineProps({
   // 行结构：{ profile, groupName, status, menuItems }；默认分组的 groupName 为 null
   rows: {
     type: Array,
     default: () => [],
   },
+  sortable: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(["open", "edit", "toggleFavorite"]);
+const emit = defineEmits(["open", "edit", "toggleFavorite", "reorder"]);
 const { t } = useI18n();
+const tableBody = ref(null);
+
+// 整行都能拖，但星标、操作按钮要留给点击；行名按钮本身就是「点一下连接」，照样可以按住拖
+useHomeSortable(tableBody, {
+  draggable: "tr",
+  filter: "button:not(.row-name)",
+  preventOnFilter: false,
+  disabled: () => !props.sortable,
+  onDrop: ({ id, order }) => emit("reorder", { id, order }),
+});
 
 function statusLabel(status) {
   return status === "notOpen" ? t("workspace.notOpen") : t(`monitor.status.${status}`);
@@ -34,14 +50,14 @@ function statusLabel(status) {
           <th class="col-actions">{{ t("home.table.actions") }}</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody ref="tableBody" :class="{ sortable }">
         <UContextMenu
           v-for="{ profile, groupName, status, menuItems } in rows"
           :key="profile.id"
           :items="menuItems"
           size="xs"
         >
-          <tr :class="status">
+          <tr :class="status" :data-sort-id="profile.id">
             <td class="col-name">
               <UButton
                 class="row-star"

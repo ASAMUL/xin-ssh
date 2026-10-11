@@ -544,25 +544,13 @@ pub async fn delete_group(
             profile.group_id == group_id
         })
     } else {
-        let next_order = profiles_file
-            .profiles
-            .iter()
-            .filter(|profile| {
-                profile.deleted_at.is_none() && profile.group_id == default_group_id()
-            })
-            .map(|profile| profile.sort_order)
-            .max()
-            .unwrap_or(-1)
-            + 1;
-        let mut moved_profiles: Vec<_> = profiles_file
+        // 连接顺序是全局的，移回未分组只换归属，首页列表里的位置不动
+        for profile in profiles_file
             .profiles
             .iter_mut()
             .filter(|profile| profile.deleted_at.is_none() && profile.group_id == group_id)
-            .collect();
-        moved_profiles.sort_by_key(|profile| profile.sort_order);
-        for (index, profile) in moved_profiles.into_iter().enumerate() {
+        {
             profile.group_id = default_group_id();
-            profile.sort_order = next_order + index as i32;
             profile.updated_at = deleted_at.clone();
         }
     }
@@ -605,13 +593,47 @@ pub async fn reorder_groups(
     load_workspace_from_dir(&workspace)
 }
 
-// 归属和目标组排序必须同时落盘，避免跨组拖拽中途失败后出现位置与分组不一致。
+// 首页把所有分组摊平成一条列表，所以连接顺序是全局的：一次写入整份顺序，
+// 分组视图按它筛出子序列就是组内顺序，不会再出现组内调序后在全部视图里乱跳。
+#[tauri::command]
+pub async fn reorder_profiles(
+    app: AppHandle,
+    profile_ids: Vec<String>,
+) -> Result<WorkspaceSnapshot, AppError> {
+    let _guard = lock_workspace();
+    let workspace = active_workspace_dir(&app)?;
+    let mut profiles_file = read_profiles_file(&workspace)?;
+    let mut profiles: Vec<_> = profiles_file
+        .profiles
+        .iter_mut()
+        .filter(|profile| profile.deleted_at.is_none())
+        .collect();
+    profiles.sort_by_key(|profile| {
+        (
+            profile_ids
+                .iter()
+                .position(|id| id == &profile.id)
+                .unwrap_or(usize::MAX),
+            profile.sort_order,
+        )
+    });
+    let now = now_stamp();
+    for (index, profile) in profiles.into_iter().enumerate() {
+        if profile.sort_order != index as i32 {
+            profile.sort_order = index as i32;
+            profile.updated_at = now.clone();
+        }
+    }
+    write_profiles_file(&workspace, &profiles_file)?;
+    load_workspace_from_dir(&workspace)
+}
+
+// 顺序是全局的，换组只改归属不挪位置：全部视图里卡片原地换个分组标签，不会跳走。
 #[tauri::command]
 pub async fn move_profile(
     app: AppHandle,
     profile_id: String,
     group_id: String,
-    before_profile_id: Option<String>,
 ) -> Result<WorkspaceSnapshot, AppError> {
     let _guard = lock_workspace();
     let workspace = active_workspace_dir(&app)?;
@@ -633,38 +655,8 @@ pub async fn move_profile(
         .ok_or_else(|| {
             AppError::new(codes::PROFILE_NOT_FOUND, "The connection no longer exists")
         })?;
-    let now = now_stamp();
-    profile.group_id = group_id.clone();
-    profile.updated_at = now.clone();
-    let mut ordered_ids: Vec<_> = profiles_file
-        .profiles
-        .iter()
-        .filter(|profile| {
-            profile.deleted_at.is_none() && profile.group_id == group_id && profile.id != profile_id
-        })
-        .collect();
-    ordered_ids.sort_by_key(|profile| profile.sort_order);
-    let mut ordered_ids: Vec<String> = ordered_ids
-        .into_iter()
-        .map(|profile| profile.id.clone())
-        .collect();
-    let insert_at = before_profile_id
-        .as_ref()
-        .and_then(|before| ordered_ids.iter().position(|id| id == before))
-        .unwrap_or(ordered_ids.len());
-    ordered_ids.insert(insert_at, profile_id);
-    for profile in profiles_file
-        .profiles
-        .iter_mut()
-        .filter(|profile| profile.deleted_at.is_none() && profile.group_id == group_id)
-    {
-        if let Some(index) = ordered_ids.iter().position(|id| id == &profile.id) {
-            if profile.sort_order != index as i32 {
-                profile.sort_order = index as i32;
-                profile.updated_at = now.clone();
-            }
-        }
-    }
+    profile.group_id = group_id;
+    profile.updated_at = now_stamp();
     write_profiles_file(&workspace, &profiles_file)?;
     load_workspace_from_dir(&workspace)
 }
