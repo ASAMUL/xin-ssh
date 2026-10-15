@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# 同一分支连推几次时只留最新一次，旧的排队任务没有意义
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Test and compile (Windows)
+    # 目前只在 Windows 上实测，平台相关的 cfg(windows) 分支也只有在这里才会被编译到
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm test
+
+      # Tauri 编译时会把 dist 嵌进二进制，没有前端产物 cargo check 会直接报错
+      - run: pnpm build
+
+      - run: cargo check
+        working-directory: src-tauri

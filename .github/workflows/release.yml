@@ -1,0 +1,112 @@
+name: Release
+
+# 推一个 v 开头的 tag（比如 v0.1.0）触发：先建草稿 Release，再四个平台并行打包上传。
+# 草稿只有仓库主人看得见，检查无误后在 GitHub 上手动点 Publish 才算正式发布。
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  create-release:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create.outputs.result }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # 安装包文件名取自 tauri.conf.json 的版本号，tag 对不上的话 Release 标题和里面的文件会各说各话
+      - name: Check the tag matches the app version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          pkg=$(node -p "require('./package.json').version")
+          cargo=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d '"' -f2)
+          echo "tag=$tag tauri.conf.json=$conf package.json=$pkg Cargo.toml=$cargo"
+          if [ "$tag" != "$conf" ] || [ "$tag" != "$pkg" ] || [ "$tag" != "$cargo" ]; then
+            echo "::error::Tag v$tag does not match the version in tauri.conf.json, package.json and Cargo.toml"
+            exit 1
+          fi
+
+      # 先建好 Release 再让各平台往里传；各平台各自去建的话，几乎同时完成时会建出好几个重复草稿
+      - name: Create the draft release
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const tag = context.ref.replace("refs/tags/", "");
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `Xin SSH ${tag}`,
+              body: fs.readFileSync(".github/release-notes.md", "utf8"),
+              draft: true,
+            });
+            return data.id;
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      # macOS / Linux 还是实验性的，一个平台挂了不该连累其他平台
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            platform: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: macOS Apple silicon
+            platform: macos-latest
+            target: aarch64-apple-darwin
+          - name: macOS Intel
+            platform: macos-latest
+            target: x86_64-apple-darwin
+          - name: Linux x64
+            # AppImage 会带上构建机的 glibc 版本要求，用旧一点的系统打包能兼容更多发行版
+            platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # 两个 macOS 任务跑在同一种机器上，不按 target 区分缓存会互相覆盖
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: --target ${{ matrix.target }}
