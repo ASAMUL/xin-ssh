@@ -144,9 +144,8 @@ Found a bug? Congratulations, it's our bug now. Both of ours.
 
 ## Acknowledgements
 
-A lot of Xin SSH was pair-programmed with [Claude](https://claude.com/claude-code), Anthropic's AI. Claude wrote this README, too.
+A lot of Xin SSH was pair-programmed with [Claude](https://claude.com/claude-code).Claude wrote this README, too.
 
-So if the jokes above landed, that was Claude. If they didn't, that was also Claude.
 
 ## License
 

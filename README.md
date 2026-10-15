@@ -144,9 +144,7 @@ pnpm test          # 跑前端单元测试
 
 ## 致谢
 
-Xin SSH 的很多代码，是和 [Claude](https://claude.com/claude-code)（Anthropic 的 AI）结对写出来的。这份 README 也是它写的。
-
-所以上面那些冷笑话，如果你觉得好笑，是它写的；如果不好笑，也是它写的。
+Xin SSH 的很多代码，是和 [Claude](https://claude.com/claude-code)结对写出来的。这份 README 也是它写的。
 
 ## 许可证
 
