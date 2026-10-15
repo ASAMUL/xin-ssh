@@ -105,6 +105,15 @@ Xin SSH 想试试第三种。
 
 > 传到 97% 的时候手滑点了关闭？它会拦住你。不客气。
 
+## 下载
+
+去 [Releases](https://github.com/ASAMUL/xin-ssh/releases/latest) 下载对应系统的安装包：Windows 选 `-setup.exe`；macOS 选 `.dmg`，Apple 芯片选 `aarch64`，Intel 选 `x64`；Linux 有 `AppImage`、`deb` 和 `rpm`。macOS 和 Linux 版是实验性的。
+
+安装包暂时没有数字签名，所以第一次打开时：
+
+- **Windows** 可能会弹出「Windows 已保护你的电脑」。它是好意，只是还不认识我们。点「更多信息」→「仍要运行」就行
+- **macOS** 如果提示「已损坏，无法打开」，在终端里运行 `xattr -cr "/Applications/Xin SSH.app"` 再打开
+
 ## 现状
 
 Xin SSH 还在早期（0.1.0），功能迭代很快，有 bug 很正常。

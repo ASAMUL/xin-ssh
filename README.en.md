@@ -105,6 +105,15 @@ A host overview in the sidebar: distro, CPU history, memory, disk, upload and do
 
 > Hit close at 97% of a transfer? It'll stop you. Don't mention it.
 
+## Download
+
+Grab the installer for your system from [Releases](https://github.com/ASAMUL/xin-ssh/releases/latest): `-setup.exe` for Windows; `.dmg` for macOS, `aarch64` for Apple silicon and `x64` for Intel; `AppImage`, `deb` or `rpm` for Linux. The macOS and Linux builds are experimental.
+
+The installers aren't code-signed yet, so on first launch:
+
+- **Windows** may say "Windows protected your PC". It means well; it just hasn't met us yet. Click "More info" → "Run anyway"
+- **macOS** may claim the app is damaged. Run `xattr -cr "/Applications/Xin SSH.app"` in Terminal, then open it again
+
 ## Status
 
 Xin SSH is early (0.1.0) and changing fast. Bugs are to be expected.
@@ -144,8 +153,7 @@ Found a bug? Congratulations, it's our bug now. Both of ours.
 
 ## Acknowledgements
 
-A lot of Xin SSH was pair-programmed with [Claude](https://claude.com/claude-code).Claude wrote this README, too.
-
+A lot of Xin SSH was pair-programmed with [Claude](https://claude.com/claude-code). Claude wrote this README, too.
 
 ## License
 
