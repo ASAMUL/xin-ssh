@@ -55,3 +55,11 @@ src/.umi-production
 /.pnpm-store/v11
 /auto-imports.d.ts
 /components.d.ts
+
+# Local-only: private docs (its own git repo) and AI agent config
+/docs/
+/CLAUDE.md
+/AGENTS.md
+/.claude/
+/.agents/
+/skills-lock.json

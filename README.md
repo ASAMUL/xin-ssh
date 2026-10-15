@@ -15,5 +15,3 @@ pnpm install
 pnpm dev
 pnpm tauri dev
 ```
-
-See [docs/plan.md](docs/plan.md) for the full product and architecture plan.
