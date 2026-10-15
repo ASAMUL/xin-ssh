@@ -1,9 +1,10 @@
 [package]
 name = "xin-ssh"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Xin SSH: a modern SSH client that puts remote file management first"
+authors = ["Tongxin Wang"]
 license = "MIT"
+repository = "https://github.com/ASAMUL/xin-ssh"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
