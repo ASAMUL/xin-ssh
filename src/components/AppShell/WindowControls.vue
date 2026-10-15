@@ -3,9 +3,7 @@ import { useI18n } from "vue-i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useUiStore } from "../../stores/uiStore";
 
-// macOS 放在标题栏最左且是红黄绿圆点，其余平台在最右用线性图标
-defineProps({ mac: { type: Boolean, default: false } });
-
+// 只给 Windows / Linux 用：macOS 走系统原生红绿灯（见 tauri.macos.conf.json）
 const { t } = useI18n();
 const uiStore = useUiStore();
 const appWindow = window.__TAURI_INTERNALS__ ? getCurrentWindow() : null;
@@ -25,14 +23,14 @@ function closeWindow() {
 </script>
 
 <template>
-  <div class="window-controls" :class="{ mac }" @mousedown.stop>
+  <div class="window-controls" @mousedown.stop>
     <button
       type="button"
       class="window-control minimize"
       :aria-label="t('window.minimize')"
       @click.stop="minimizeWindow"
     >
-      <UIcon v-if="!mac" name="i-lucide-minus" />
+      <UIcon name="i-lucide-minus" />
     </button>
     <button
       type="button"
@@ -40,7 +38,7 @@ function closeWindow() {
       :aria-label="t('window.maximize')"
       @click.stop="toggleMaximizeWindow"
     >
-      <UIcon v-if="!mac" name="i-lucide-square" />
+      <UIcon name="i-lucide-square" />
     </button>
     <button
       type="button"
@@ -48,7 +46,7 @@ function closeWindow() {
       :aria-label="t('window.close')"
       @click.stop="closeWindow"
     >
-      <UIcon v-if="!mac" name="i-lucide-x" />
+      <UIcon name="i-lucide-x" />
     </button>
   </div>
 </template>

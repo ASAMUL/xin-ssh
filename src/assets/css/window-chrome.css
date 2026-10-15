@@ -38,6 +38,14 @@
   gap: 6px;
 }
 
+/* macOS 的红绿灯是系统画的，浮在网页上面，这里只占住位置别让品牌名钻到它底下。
+   宽度沿用之前自绘圆点的整段宽度，品牌名的位置因此不变 */
+.window-traffic-light-space {
+  width: 81px;
+  height: 100%;
+  flex: 0 0 auto;
+}
+
 .window-brand {
   min-width: 0;
   display: inline-flex;

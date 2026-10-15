@@ -72,7 +72,7 @@ async function startWindowDrag(event) {
     <div v-liquid-glass="{ scale: 24, blur: 3 }" class="window-chrome-glass liquid-glass" aria-hidden="true"></div>
 
     <div class="window-chrome-start">
-      <WindowControls v-if="isMac" mac />
+      <span v-if="isMac" class="window-traffic-light-space" aria-hidden="true"></span>
       <div class="window-brand">
         <span class="window-brand-avatar">
           <img :src="brandAvatar" alt="" draggable="false" />

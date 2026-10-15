@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "title": "Xin SSH",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 720,
+        "resizable": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 26, "y": 40 }
+      }
+    ]
+  }
+}

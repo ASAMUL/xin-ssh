@@ -26,26 +26,3 @@
   background: var(--xin-danger);
 }
 
-.window-controls.mac {
-  gap: 8px;
-  padding: 0 8px 0 18px;
-}
-
-/* 红黄绿是 Apple 固定色，不跟主题走 */
-.window-controls.mac .window-control {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-}
-
-.window-controls.mac .minimize {
-  background: #ffbd2e;
-}
-
-.window-controls.mac .maximize {
-  background: #28c840;
-}
-
-.window-controls.mac .close {
-  background: #ff5f57;
-}
