@@ -6,7 +6,7 @@
 
 | 系统 / OS | 选这个文件 / Pick this file |
 | --- | --- |
-| Windows | `*_x64-setup.exe`（推荐 / recommended）或 / or `*_x64_en-US.msi` |
+| Windows | `*_x64-setup.exe` |
 | macOS · Apple 芯片 / Apple silicon（实验性 / experimental） | `*_aarch64.dmg` |
 | macOS · Intel（实验性 / experimental） | `*_x64.dmg` |
 | Linux（实验性 / experimental） | `*_amd64.AppImage` / `*_amd64.deb` / `*.x86_64.rpm` |
