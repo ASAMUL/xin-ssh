@@ -113,8 +113,6 @@ Xin SSH 还在早期（0.1.0），功能迭代很快，有 bug 很正常。
 
 ## 从源码运行
 
-还没有发布安装包，现在的安装方式是自己编译。就当是一种仪式感。
-
 需要先装好：
 
 - Node.js 和 [pnpm](https://pnpm.io/)
@@ -143,6 +141,12 @@ pnpm test          # 跑前端单元测试
 欢迎提 issue 和 PR。
 
 如果你发现了 bug：恭喜，它现在是我们共同的 bug 了。
+
+## 致谢
+
+Xin SSH 的很多代码，是和 [Claude](https://claude.com/claude-code)（Anthropic 的 AI）结对写出来的。这份 README 也是它写的。
+
+所以上面那些冷笑话，如果你觉得好笑，是它写的；如果不好笑，也是它写的。
 
 ## 许可证
 

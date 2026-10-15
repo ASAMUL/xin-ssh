@@ -113,8 +113,6 @@ It's developed and tested mainly on Windows 11. Tauri is cross-platform, so macO
 
 ## Build from source
 
-There are no installers yet, so for now installing means compiling. Think of it as a rite of passage.
-
 You'll need:
 
 - Node.js and [pnpm](https://pnpm.io/)
@@ -143,6 +141,12 @@ pnpm test          # run the frontend unit tests
 Issues and pull requests are welcome.
 
 Found a bug? Congratulations, it's our bug now. Both of ours.
+
+## Acknowledgements
+
+A lot of Xin SSH was pair-programmed with [Claude](https://claude.com/claude-code), Anthropic's AI. Claude wrote this README, too.
+
+So if the jokes above landed, that was Claude. If they didn't, that was also Claude.
 
 ## License
 
