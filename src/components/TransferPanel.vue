@@ -336,10 +336,6 @@ function formatTaskTime(timestamp) {
         </article>
       </div>
     </UContextMenu>
-
-    <div v-if="transferStore.summary.activeCount" class="transfer-progress">
-      <span :style="{ width: `${transferStore.summary.progress}%` }"></span>
-    </div>
   </aside>
 </template>
 
@@ -496,8 +492,7 @@ function formatTaskTime(timestamp) {
   background: rgb(var(--xin-ink-rgb) / 0.09);
 }
 
-.task-progress span,
-.transfer-progress span {
+.task-progress span {
   display: block;
   height: 100%;
   border-radius: inherit;
@@ -506,13 +501,6 @@ function formatTaskTime(timestamp) {
 
 .transfer-task.download .task-progress span {
   background: linear-gradient(90deg, #16a34a, #22c55e);
-}
-
-.transfer-progress {
-  height: 5px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgb(var(--xin-ink-rgb) / 0.09);
 }
 
 @media (max-width: 980px) {

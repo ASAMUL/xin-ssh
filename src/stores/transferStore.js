@@ -38,19 +38,10 @@ export const useTransferStore = defineStore("transfers", {
   getters: {
     hasTasks: (state) => state.tasks.length > 0,
     hasFinishedTasks: (state) => state.tasks.some((task) => FINISHED_STATUSES.has(task.status)),
-    summary: (state) => {
-      const activeTasks = state.tasks.filter((task) => !FINISHED_STATUSES.has(task.status));
-      const sourceTasks = activeTasks.length ? activeTasks : state.tasks.slice(0, 2);
-      const bytesTransferred = sourceTasks.reduce((total, task) => total + task.bytesTransferred, 0);
-      const bytesTotal = sourceTasks.reduce((total, task) => total + task.bytesTotal, 0);
-      const progress = bytesTotal > 0 ? Math.round((bytesTransferred / bytesTotal) * 100) : 0;
-
-      return {
-        progress: Math.min(progress, 100),
-        activeCount: activeTasks.length,
-        totalCount: state.tasks.length,
-      };
-    },
+    summary: (state) => ({
+      activeCount: state.tasks.filter((task) => !FINISHED_STATUSES.has(task.status)).length,
+      totalCount: state.tasks.length,
+    }),
   },
   actions: {
     // 加载失败时保留磁盘原件；新任务可留在内存，重试成功后再合并写回。
