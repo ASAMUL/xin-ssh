@@ -18,7 +18,7 @@ const uiStore = useUiStore();
 
 const contextTask = ref(null);
 
-const FINISHED_STATUSES = ["completed", "failed", "canceled"];
+const FINISHED_STATUSES = ["completed", "failed", "canceled", "paused"];
 
 function isFinished(task) {
   return FINISHED_STATUSES.includes(task.status);
@@ -80,22 +80,30 @@ const contextMenuItems = computed(() => {
     });
   }
 
-  if (isActive(task)) {
+  if (transferStore.canPauseTask(task)) {
+    manageGroup.push({
+      label: t("transfers.pause"),
+      icon: "i-lucide-pause",
+      onSelect: () => transferStore.pauseTask(task.id),
+    });
+  }
+  if (transferStore.isResumeCandidate(task)) {
+    manageGroup.push({
+      label: t("transfers.resume"),
+      icon: "i-lucide-play",
+      disabled: !transferStore.canResumeTask(task),
+      onSelect: () => resumeTask(task),
+    });
+  }
+  if (transferStore.canCancelTask(task)) {
     manageGroup.push({
       label: t("transfers.cancel"),
       icon: "i-lucide-x",
       disabled: task.status === "canceling",
       onSelect: () => transferStore.cancelTask(task.id),
     });
-  } else {
-    if (transferStore.isResumeCandidate(task)) {
-      manageGroup.push({
-        label: t("transfers.resume"),
-        icon: "i-lucide-play",
-        disabled: !transferStore.canResumeTask(task),
-        onSelect: () => resumeTask(task),
-      });
-    }
+  }
+  if (!isActive(task)) {
     manageGroup.push({
       label: t("transfers.removeRecord"),
       icon: "i-lucide-trash-2",
@@ -161,6 +169,7 @@ function taskIcon(task) {
   if (task.status === "failed") return "i-lucide-circle-alert";
   if (task.status === "completed") return "i-lucide-circle-check";
   if (task.status === "canceled") return "i-lucide-circle-minus";
+  if (task.status === "paused") return "i-lucide-circle-pause";
 
   return task.direction === "upload" ? "i-lucide-arrow-up" : "i-lucide-arrow-down";
 }
@@ -188,6 +197,12 @@ function formatBytes(value) {
 
 function taskMeta(task) {
   if (task.status === "failed") return localizeError(task.error) || t("transfers.failed");
+  if (task.status === "paused") {
+    const parts = [t("transfers.paused")];
+    if (task.bytesTotal) parts.push(`${formatBytes(task.bytesTransferred)} / ${formatBytes(task.bytesTotal)}`);
+    if (task.sessionName) parts.push(task.sessionName);
+    return parts.join(" · ");
+  }
 
   if (isFinished(task)) {
     const statusText =
@@ -199,6 +214,7 @@ function taskMeta(task) {
   }
 
   if (task.status === "canceling") return t("transfers.canceling");
+  if (task.status === "pausing") return t("transfers.pausing");
   if (task.status === "queued") return t("transfers.queued");
   if (task.status === "planning") return t("transfers.planningMeta", { count: task.filesTotal });
   if (task.phase === "verifying") return t("transfers.verifying");
@@ -292,45 +308,56 @@ function formatTaskTime(timestamp) {
             <span :title="taskMeta(task)">{{ taskMeta(task) }}</span>
           </div>
 
-          <small v-if="isFinished(task)" class="transfer-time">{{
+          <small v-if="task.status === 'paused'">{{ taskProgress(task) }}%</small>
+          <small v-else-if="isFinished(task)" class="transfer-time">{{
             formatTaskTime(task.updatedAt)
           }}</small>
           <small v-else-if="task.status === 'planning'">{{ t("transfers.planning") }}</small>
           <small v-else>{{ taskProgress(task) }}%</small>
 
-          <UTooltip v-if="transferStore.isResumeCandidate(task)" :text="resumeHint(task)">
-            <span class="transfer-task-action" :tabindex="transferStore.canResumeTask(task) ? undefined : 0">
-              <UButton color="primary" variant="ghost" size="xs" icon="i-lucide-play"
-                :disabled="!transferStore.canResumeTask(task)" :aria-label="resumeHint(task)"
-                @click="resumeTask(task)" />
-            </span>
-          </UTooltip>
-          <UButton
-            v-else-if="canOpenTaskLocally(task)"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            icon="i-lucide-folder-open"
-            class="transfer-task-action"
-            :aria-label="t('transfers.revealInFolder')"
-            :title="t('transfers.revealInFolder')"
-            @click="runOpenAction(() => revealTaskInFolder(task))"
-          />
-          <UButton
-            v-else-if="transferStore.canCancelTask(task)"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            class="transfer-task-action"
-            :icon="task.status === 'canceling' ? 'i-lucide-loader-circle' : 'i-lucide-x'"
-            :disabled="task.status === 'canceling'"
-            :aria-label="t('transfers.cancel')"
-            :title="t('transfers.cancel')"
-            @click="transferStore.cancelTask(task.id)"
-          />
-          <span v-else class="transfer-task-action"></span>
+          <div class="transfer-task-actions">
+            <UTooltip v-if="transferStore.isResumeCandidate(task)" :text="resumeHint(task)">
+              <span :tabindex="transferStore.canResumeTask(task) ? undefined : 0">
+                <UButton color="primary" variant="ghost" size="xs" icon="i-lucide-play"
+                  :disabled="!transferStore.canResumeTask(task)" :aria-label="resumeHint(task)"
+                  @click="resumeTask(task)" />
+              </span>
+            </UTooltip>
+            <UButton
+              v-else-if="canOpenTaskLocally(task)"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              icon="i-lucide-folder-open"
+              :aria-label="t('transfers.revealInFolder')"
+              :title="t('transfers.revealInFolder')"
+              @click="runOpenAction(() => revealTaskInFolder(task))"
+            />
+            <UButton
+              v-if="transferStore.canPauseTask(task) || task.status === 'pausing'"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              :icon="task.status === 'pausing' ? 'i-lucide-loader-circle' : 'i-lucide-pause'"
+              :disabled="task.status === 'pausing'"
+              :aria-label="t('transfers.pause')"
+              :title="t('transfers.pause')"
+              @click="transferStore.pauseTask(task.id)"
+            />
+            <UButton
+              v-if="transferStore.canCancelTask(task)"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              :icon="task.status === 'canceling' ? 'i-lucide-loader-circle' : 'i-lucide-x'"
+              :disabled="task.status === 'canceling'"
+              :aria-label="t('transfers.cancelHint')"
+              :title="t('transfers.cancelHint')"
+              @click="transferStore.cancelTask(task.id)"
+            />
+          </div>
 
-          <span v-if="isActive(task)" class="task-progress">
+          <span v-if="isActive(task) || task.status === 'paused'" class="task-progress">
             <span :style="{ width: `${taskProgress(task)}%` }"></span>
           </span>
         </article>
@@ -421,7 +448,7 @@ function formatTaskTime(timestamp) {
 .transfer-task {
   min-width: 0;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto 26px;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   padding: 8px;
@@ -480,8 +507,13 @@ function formatTaskTime(timestamp) {
   white-space: nowrap;
 }
 
-.transfer-task-action {
-  justify-self: center;
+/* 进行中有暂停、取消两个按钮，其余状态一个或没有；留出最小宽度让右侧百分比和时间对齐 */
+.transfer-task-actions {
+  min-width: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
 }
 
 .task-progress {
@@ -501,6 +533,15 @@ function formatTaskTime(timestamp) {
 
 .transfer-task.download .task-progress span {
   background: linear-gradient(90deg, #16a34a, #22c55e);
+}
+
+/* 暂停时进度条停在原处并褪成灰色，一眼和正在传的区分开 */
+.transfer-task.paused .task-progress span {
+  background: rgb(var(--xin-ink-rgb) / 0.28);
+}
+
+.transfer-task.paused .transfer-icon {
+  color: var(--xin-text-muted);
 }
 
 @media (max-width: 980px) {

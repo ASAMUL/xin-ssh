@@ -15,14 +15,15 @@ use crate::error::{
     timeout as timeout_error, AppError,
 };
 use crate::models::{
-    RemoteChmodRequest, RemoteCopyRequest, RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent, RemoteFileEntry,
-    RemoteSystemSnapshot, RemoteUploadRequest,
+    PartialFile, RemoteChmodRequest, RemoteCopyRequest, RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent,
+    RemoteFileEntry, RemoteSystemSnapshot, RemoteUploadRequest,
 };
+use crate::sftp::transfer::TransferStop;
 
 #[derive(Clone, Default)]
 pub struct TerminalRegistry {
     sessions: Arc<Mutex<HashMap<String, TerminalHandle>>>,
-    pub(crate) transfer_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    pub(crate) transfer_cancellations: Arc<Mutex<HashMap<String, TransferStop>>>,
     directory_streams: Arc<Mutex<HashMap<String, (String, Arc<AtomicBool>)>>>,
     delete_cancellations: Arc<Mutex<HashMap<String, CancellationToken>>>,
 }
@@ -107,13 +108,17 @@ pub(crate) enum TerminalControl {
         cancellation: CancellationToken,
         responder: oneshot::Sender<Result<(), AppError>>,
     },
+    DiscardPartialFiles {
+        files: Vec<PartialFile>,
+        responder: oneshot::Sender<Result<Vec<PartialFile>, AppError>>,
+    },
     StartUpload {
         request: RemoteUploadRequest,
-        cancellation: Arc<AtomicBool>,
+        stop: TransferStop,
     },
     StartDownload {
         request: RemoteDownloadRequest,
-        cancellation: Arc<AtomicBool>,
+        stop: TransferStop,
     },
     Close,
 }
@@ -504,6 +509,19 @@ impl TerminalRegistry {
         Ok(())
     }
 
+    pub(crate) async fn discard_partial_files(
+        &self,
+        session_id: &str,
+        files: Vec<PartialFile>,
+    ) -> Result<Vec<PartialFile>, AppError> {
+        let sender = self.sender_for(session_id)?;
+        let (responder, receiver) = oneshot::channel();
+        sender
+            .send(TerminalControl::DiscardPartialFiles { files, responder })
+            .map_err(|_| not_accepting("file"))?;
+        receiver.await.map_err(|_| request_canceled("discardPartialFiles"))?
+    }
+
     pub(crate) fn finish_delete(&self, task_id: &str) {
         if let Ok(mut tasks) = self.delete_cancellations.lock() {
             tasks.remove(task_id);
@@ -511,20 +529,17 @@ impl TerminalRegistry {
     }
 
     pub(crate) fn start_upload(&self, request: RemoteUploadRequest) -> Result<(), AppError> {
-        let cancellation = Arc::new(AtomicBool::new(false));
+        let stop = TransferStop::default();
         let sender = self.sender_for(&request.session_id)?;
         let task_id = request.task_id.clone();
 
         self.transfer_cancellations
             .lock()
             .map_err(|_| lock_poisoned())?
-            .insert(task_id.clone(), Arc::clone(&cancellation));
+            .insert(task_id.clone(), stop.clone());
 
         let send_result = sender
-            .send(TerminalControl::StartUpload {
-                request,
-                cancellation,
-            })
+            .send(TerminalControl::StartUpload { request, stop })
             .map_err(|_| not_accepting("upload"));
 
         if send_result.is_err() {
@@ -538,20 +553,17 @@ impl TerminalRegistry {
     }
 
     pub(crate) fn start_download(&self, request: RemoteDownloadRequest) -> Result<(), AppError> {
-        let cancellation = Arc::new(AtomicBool::new(false));
+        let stop = TransferStop::default();
         let sender = self.sender_for(&request.session_id)?;
         let task_id = request.task_id.clone();
 
         self.transfer_cancellations
             .lock()
             .map_err(|_| lock_poisoned())?
-            .insert(task_id.clone(), Arc::clone(&cancellation));
+            .insert(task_id.clone(), stop.clone());
 
         let send_result = sender
-            .send(TerminalControl::StartDownload {
-                request,
-                cancellation,
-            })
+            .send(TerminalControl::StartDownload { request, stop })
             .map_err(|_| not_accepting("download"));
 
         if send_result.is_err() {
@@ -564,13 +576,14 @@ impl TerminalRegistry {
         send_result
     }
 
-    pub(crate) fn cancel_transfer(&self, task_id: &str) -> Result<(), AppError> {
-        let cancellations = self
+    // pause = true 停下后保留半成品供续传，false 当作取消删掉
+    pub(crate) fn stop_transfer(&self, task_id: &str, pause: bool) -> Result<(), AppError> {
+        let stops = self
             .transfer_cancellations
             .lock()
             .map_err(|_| lock_poisoned())?;
-        if let Some(cancellation) = cancellations.get(task_id) {
-            cancellation.store(true, Ordering::SeqCst);
+        if let Some(stop) = stops.get(task_id) {
+            stop.request(pause);
         }
 
         Ok(())

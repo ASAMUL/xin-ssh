@@ -833,6 +833,9 @@ pub struct RemoteUploadRequest {
     pub local_paths: Vec<String>,
     pub remote_dir: String,
     pub conflict_policy: Option<String>,
+    // 之前几次尝试留下、还没传完的文件；这次取消时一并删掉，失败时继续报给前端
+    #[serde(default)]
+    pub partial_files: Vec<PartialFile>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -843,6 +846,28 @@ pub struct RemoteDownloadRequest {
     pub remote_entries: Vec<RemoteTransferEntry>,
     pub local_dir: String,
     pub conflict_policy: Option<String>,
+    #[serde(default)]
+    pub partial_files: Vec<PartialFile>,
+}
+
+// 没传完的目标文件。删之前要确认它还是当时那个半成品，不能误删别人后来放上去的完整文件：
+// 记下了大小和修改时间就要求两者都没变；断线时读不到属性，只能要求它比完整文件小。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialFile {
+    pub path: String,
+    pub full_size: u64,
+    pub size: Option<u64>,
+    pub modified: Option<u64>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscardPartialFilesRequest {
+    pub direction: String,
+    // 上传的半成品在服务器上，要借一个已连接的会话去删；下载的在本机，不需要
+    pub session_id: Option<String>,
+    pub files: Vec<PartialFile>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -868,6 +893,8 @@ pub struct TransferEventPayload {
     pub files_done: u64,
     pub files_total: u64,
     pub error: Option<AppError>,
+    // 只在结束事件里有值：这次结束后还留在磁盘上的半成品；None 表示后端不清楚，前端沿用旧值
+    pub partial_files: Option<Vec<PartialFile>>,
 }
 
 #[derive(Clone, Serialize)]

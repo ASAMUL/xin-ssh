@@ -19,6 +19,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             sftp::transfer::cancel_transfer,
+            sftp::transfer::pause_transfer,
             workspace::change_workspace_dir,
             ssh::shell::close_terminal_session,
             sftp::ops::create_remote_directory,
@@ -31,6 +32,7 @@ pub fn run() {
             workspace::delete_tunnel_config,
             sftp::delete::start_remote_delete,
             sftp::delete::cancel_remote_delete,
+            sftp::partials::discard_partial_files,
             workspace::get_app_status,
             workspace::init_workspace,
             system_info::get_remote_system_info,

@@ -13,6 +13,7 @@ use crate::models::{
     TerminalStartRequest,
 };
 use crate::sftp::delete::run_delete_task;
+use crate::sftp::partials::discard_remote_files;
 use crate::sftp::session::CachedSftp;
 use crate::sftp::ops::{
     create_directory_on_session, create_file_on_session,
@@ -368,6 +369,11 @@ async fn run_terminal_shell(
                             chmod_path_on_session(&sftp, &path, mode).await
                         });
                     }
+                    TerminalControl::DiscardPartialFiles { files, responder } => {
+                        cached_sftp.spawn(responder, true, move |sftp| async move {
+                            Ok(discard_remote_files(&sftp, files).await)
+                        });
+                    }
                     TerminalControl::DeletePaths {
                         request,
                         cancellation,
@@ -385,29 +391,23 @@ async fn run_terminal_shell(
                             registry.finish_delete(&task_id);
                         });
                     }
-                    TerminalControl::StartUpload {
-                        request,
-                        cancellation,
-                    } => {
+                    TerminalControl::StartUpload { request, stop } => {
                         let app = app.clone();
                         let session = Arc::clone(&session);
                         let task_id = request.task_id.clone();
                         let transfer_cancellations = Arc::clone(&registry.transfer_cancellations);
                         tauri::async_runtime::spawn(async move {
-                            run_upload_transfer(app, session, request, cancellation).await;
+                            run_upload_transfer(app, session, request, stop).await;
                             remove_transfer_cancellation(&transfer_cancellations, &task_id);
                         });
                     }
-                    TerminalControl::StartDownload {
-                        request,
-                        cancellation,
-                    } => {
+                    TerminalControl::StartDownload { request, stop } => {
                         let app = app.clone();
                         let session = Arc::clone(&session);
                         let task_id = request.task_id.clone();
                         let transfer_cancellations = Arc::clone(&registry.transfer_cancellations);
                         tauri::async_runtime::spawn(async move {
-                            run_download_transfer(app, session, request, cancellation).await;
+                            run_download_transfer(app, session, request, stop).await;
                             remove_transfer_cancellation(&transfer_cancellations, &task_id);
                         });
                     }

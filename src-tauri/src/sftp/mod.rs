@@ -1,6 +1,7 @@
 pub(crate) mod delete;
 pub(crate) mod error;
 pub(crate) mod ops;
+pub(crate) mod partials;
 pub(crate) mod path;
 mod remote_digest;
 pub(crate) mod session;

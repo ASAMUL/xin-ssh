@@ -221,6 +221,14 @@ export function cancelTransfer(taskId) {
   return invoke("cancel_transfer", { taskId });
 }
 
+export function pauseTransfer(taskId) {
+  return invoke("pause_transfer", { taskId });
+}
+
+export function discardPartialFiles(request) {
+  return invoke("discard_partial_files", { request });
+}
+
 export function measureSessionLatency(request) {
   return invoke("measure_session_latency", { request });
 }

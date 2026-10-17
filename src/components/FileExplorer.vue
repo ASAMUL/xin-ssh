@@ -1279,7 +1279,7 @@ async function uploadToTerminal(localPaths) {
     const stop = watch(() => transferStore.findTask(taskId)?.status, (status) => {
       const task = transferStore.findTask(taskId);
       if (status === "failed" && isTransferConflictError(task?.error)) return;
-      if (status && !["completed", "failed", "canceled"].includes(status)) return;
+      if (status && !["completed", "failed", "canceled", "paused"].includes(status)) return;
       stop();
       if (status === "completed" && task.conflictPolicy !== "rename") {
         emit("insert-terminal-text", formatPathsForShell(remotePaths), session.id);

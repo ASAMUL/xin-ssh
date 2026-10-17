@@ -10,13 +10,20 @@ import { useSettingsStore } from "./settingsStore";
 import { useUiStore } from "./uiStore";
 import {
   cancelTransfer,
+  discardPartialFiles,
+  pauseTransfer,
   startDownloadTransfer,
   startUploadTransfer,
 } from "../services/workspaceApi";
 
 const TRANSFER_EVENT_NAME = "transfer-event";
-const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
-const ACTIVE_STATUSES = new Set(["queued", "planning", "running", "canceling"]);
+// paused 也算结束：后端任务已经停了，只是半成品留着等续传
+const FINISHED_STATUSES = new Set(["completed", "failed", "canceled", "paused"]);
+// 「清空已结束」和超量淘汰不动暂停的记录：用户明确打算接着传
+const CLEARABLE_STATUSES = new Set(["completed", "failed", "canceled"]);
+const ACTIVE_STATUSES = new Set(["queued", "planning", "running", "canceling", "pausing"]);
+const PAUSABLE_STATUSES = new Set(["queued", "planning", "running"]);
+const STOPPING_STATUSES = new Set(["canceling", "pausing"]);
 const speedSamples = new Map();
 // 已结束任务保留的条数上限：面板兼作跨会话的传输历史，放宽到 100 条
 const MAX_FINISHED_TASKS = 100;
@@ -37,7 +44,7 @@ export const useTransferStore = defineStore("transfers", {
   }),
   getters: {
     hasTasks: (state) => state.tasks.length > 0,
-    hasFinishedTasks: (state) => state.tasks.some((task) => FINISHED_STATUSES.has(task.status)),
+    hasFinishedTasks: (state) => state.tasks.some((task) => CLEARABLE_STATUSES.has(task.status)),
     summary: (state) => ({
       activeCount: state.tasks.filter((task) => !FINISHED_STATUSES.has(task.status)).length,
       totalCount: state.tasks.length,
@@ -145,6 +152,7 @@ export const useTransferStore = defineStore("transfers", {
         remoteDir,
         conflictPolicy: options.conflictPolicy ?? null,
         conflictPrompted: Boolean(options.conflictPolicy),
+        partialFiles: options.partialFiles ?? [],
         error: null,
         currentPath: null,
       });
@@ -156,10 +164,11 @@ export const useTransferStore = defineStore("transfers", {
           localPaths,
           remoteDir,
           conflictPolicy: options.conflictPolicy ?? null,
+          partialFiles: options.partialFiles ?? [],
         });
         const current = this.findTask(taskId);
-        if (current?.backendTaskId === backendTaskId && current.status === "canceling") {
-          await this.requestTaskCancellation(taskId, backendTaskId);
+        if (current?.backendTaskId === backendTaskId && STOPPING_STATUSES.has(current.status)) {
+          await this.requestTaskStop(taskId, backendTaskId, "running", current.status === "pausing");
         }
       } catch (error) {
         this.failTask(taskId, backendTaskId, error);
@@ -204,6 +213,7 @@ export const useTransferStore = defineStore("transfers", {
         localDir,
         conflictPolicy: options.conflictPolicy ?? null,
         conflictPrompted: Boolean(options.conflictPolicy),
+        partialFiles: options.partialFiles ?? [],
         error: null,
         currentPath: null,
       });
@@ -220,10 +230,11 @@ export const useTransferStore = defineStore("transfers", {
             size: entry.size,
           })),
           conflictPolicy: options.conflictPolicy ?? null,
+          partialFiles: options.partialFiles ?? [],
         });
         const current = this.findTask(taskId);
-        if (current?.backendTaskId === backendTaskId && current.status === "canceling") {
-          await this.requestTaskCancellation(taskId, backendTaskId);
+        if (current?.backendTaskId === backendTaskId && STOPPING_STATUSES.has(current.status)) {
+          await this.requestTaskStop(taskId, backendTaskId, "running", current.status === "pausing");
         }
       } catch (error) {
         this.failTask(taskId, backendTaskId, error);
@@ -241,7 +252,8 @@ export const useTransferStore = defineStore("transfers", {
       this.retryingTasks[taskId] = true;
       try {
         const session = this.findResumeSession(task);
-        const options = { taskId: task.id, conflictPolicy };
+        // 之前几次留下的半成品交给后端：这次取消时一并删掉，失败时继续记着
+        const options = { taskId: task.id, conflictPolicy, partialFiles: task.partialFiles ?? [] };
         if (task.direction === "upload") {
           return await this.uploadPaths(session, task.localPaths, task.remoteDir, options);
         }
@@ -256,6 +268,12 @@ export const useTransferStore = defineStore("transfers", {
     },
     async cancelTask(taskId) {
       const task = this.findTask(taskId);
+      // 暂停的任务后端已经停了，取消就是不要了：直接清掉留着的半成品
+      if (task?.status === "paused") {
+        this.upsertTask({ ...task, status: "canceled", error: null, updatedAt: Date.now() });
+        await this.discardPartials(this.findTask(taskId));
+        return;
+      }
       if (!task || FINISHED_STATUSES.has(task.status) || task.status === "canceling") return;
 
       this.upsertTask({
@@ -265,14 +283,29 @@ export const useTransferStore = defineStore("transfers", {
         updatedAt: Date.now(),
       });
 
-      await this.requestTaskCancellation(taskId, task.backendTaskId, task.status);
+      await this.requestTaskStop(taskId, task.backendTaskId, task.status, false);
     },
-    async requestTaskCancellation(taskId, backendTaskId, fallbackStatus = "running") {
+    // 暂停 = 停下但留着半成品，之后点续传接着传
+    async pauseTask(taskId) {
+      const task = this.findTask(taskId);
+      if (!this.canPauseTask(task)) return;
+
+      this.upsertTask({
+        ...task,
+        status: "pausing",
+        error: null,
+        updatedAt: Date.now(),
+      });
+
+      await this.requestTaskStop(taskId, task.backendTaskId, task.status, true);
+    },
+    async requestTaskStop(taskId, backendTaskId, fallbackStatus = "running", pause = false) {
+      const stopping = pause ? "pausing" : "canceling";
       try {
-        await cancelTransfer(backendTaskId);
+        await (pause ? pauseTransfer : cancelTransfer)(backendTaskId);
       } catch (error) {
         const current = this.findTask(taskId);
-        if (current?.backendTaskId === backendTaskId && current.status === "canceling") {
+        if (current?.backendTaskId === backendTaskId && current.status === stopping) {
           // 取消请求失败不代表传输结束，必须继续接收真实进度并允许再次取消。
           this.upsertTask({ ...current, status: fallbackStatus, error: toAppError(error) });
           useUiStore().setError(error);
@@ -289,6 +322,8 @@ export const useTransferStore = defineStore("transfers", {
         error: null,
         updatedAt: Date.now(),
       });
+      // 冲突时选了取消就是不要了，之前失败留下的半成品也不再续传
+      this.discardPartials(this.findTask(taskId));
     },
     markConflictPrompted(taskId) {
       const task = this.findTask(taskId);
@@ -312,8 +347,8 @@ export const useTransferStore = defineStore("transfers", {
         id: task.id,
         sessionId: event.sessionId,
         direction: event.direction,
-        status: task.status === "canceling" && !FINISHED_STATUSES.has(eventStatus(event.kind))
-          ? "canceling" : eventStatus(event.kind),
+        status: STOPPING_STATUSES.has(task.status) && !FINISHED_STATUSES.has(eventStatus(event.kind))
+          ? task.status : eventStatus(event.kind),
         phase: event.kind,
         label,
         rootLabel,
@@ -323,10 +358,17 @@ export const useTransferStore = defineStore("transfers", {
         filesDone: event.filesDone ?? task?.filesDone ?? 0,
         filesTotal: event.filesTotal ?? task?.filesTotal ?? 0,
         error: event.error ?? null,
+        // 只有结束事件带这份清单；没带说明后端没走到收尾，沿用记录里的旧值
+        partialFiles: event.partialFiles ?? task.partialFiles ?? [],
         speedBytesPerSecond,
         createdAt: task?.createdAt ?? now,
         updatedAt: now,
       });
+
+      // 还没开始传就被取消时后端没机会收尾，之前留下的半成品由这里清理
+      if (event.kind === "canceled" && !event.partialFiles) {
+        this.discardPartials(this.findTask(task.id));
+      }
 
       // 下载刚完成且面板处于关闭状态时，交给 App 层弹出“打开文件夹”快捷提示
       const justCompleted = event.kind === "completed" && task?.status !== "completed";
@@ -368,18 +410,18 @@ export const useTransferStore = defineStore("transfers", {
     },
     pruneFinishedTasks() {
       const finishedCount = this.tasks.reduce(
-        (count, task) => count + (FINISHED_STATUSES.has(task.status) ? 1 : 0),
+        (count, task) => count + (CLEARABLE_STATUSES.has(task.status) ? 1 : 0),
         0,
       );
       if (finishedCount <= MAX_FINISHED_TASKS) return;
 
       // 长任务和旧记录的重试也可能刚刚结束，按最近更新时间淘汰，不能按最初入队位置删除。
       const recentFinishedIds = new Set(this.tasks
-        .filter((task) => FINISHED_STATUSES.has(task.status))
+        .filter((task) => CLEARABLE_STATUSES.has(task.status))
         .sort((left, right) => (right.updatedAt ?? right.createdAt ?? 0) - (left.updatedAt ?? left.createdAt ?? 0))
         .slice(0, MAX_FINISHED_TASKS)
         .map((task) => task.id));
-      this.tasks = this.tasks.filter((task) => !FINISHED_STATUSES.has(task.status)
+      this.tasks = this.tasks.filter((task) => !CLEARABLE_STATUSES.has(task.status)
         || this.retryingTasks[task.id] || recentFinishedIds.has(task.id));
     },
     failTask(taskId, backendTaskId, error) {
@@ -400,12 +442,48 @@ export const useTransferStore = defineStore("transfers", {
       const task = this.findTask(taskId);
       if (!task || !FINISHED_STATUSES.has(task.status) || this.retryingTasks[taskId]) return;
 
+      // 记录一删就没法续传了，它留下的半成品也跟着清掉
+      this.discardPartials(task);
       this.tasks = this.tasks.filter((item) => item.id !== taskId);
       this.persistHistory();
     },
     clearFinished() {
-      this.tasks = this.tasks.filter((task) => !FINISHED_STATUSES.has(task.status) || this.retryingTasks[task.id]);
+      const removable = (task) => CLEARABLE_STATUSES.has(task.status) && !this.retryingTasks[task.id];
+      this.tasks.filter(removable).forEach((task) => this.discardPartials(task));
+      this.tasks = this.tasks.filter((task) => !removable(task));
       this.persistHistory();
+    },
+    // 尽力而为：清理失败只提示，不拦着删记录。上传的半成品在服务器上，要有一个连着的会话。
+    async discardPartials(task) {
+      const files = task?.partialFiles ?? [];
+      if (!files.length) return;
+      const params = { count: files.length, path: files[0].path, name: task.sessionName || task.connection?.host || "" };
+      let left = files;
+      try {
+        if (task.direction === "download") {
+          left = await discardPartialFiles({ direction: "download", sessionId: null, files });
+        } else {
+          const session = this.findResumeSession(task);
+          if (!session) {
+            useUiStore().setError({ code: "transfer.partialsNeedConnection", message: "", params });
+            return;
+          }
+          left = await discardPartialFiles({ direction: "upload", sessionId: session.id, files });
+        }
+        if (left.length) {
+          useUiStore().setError({
+            code: "transfer.partialsKept",
+            message: "",
+            params: { ...params, count: left.length, path: left[0].path },
+          });
+        }
+      } catch (error) {
+        useUiStore().setError(error);
+      } finally {
+        // 取消后的记录还留在面板上：记下没删掉的，之后删记录时还能再试
+        const current = this.findTask(task.id);
+        if (current) this.upsertTask({ ...current, partialFiles: left });
+      }
     },
     async persistHistory() {
       if (!this.historyLoaded) return false;
@@ -422,11 +500,16 @@ export const useTransferStore = defineStore("transfers", {
     retryHistoryStorage() {
       return this.historyLoaded ? this.persistHistory() : this.loadHistory();
     },
+    // 暂停的任务也能取消：那时取消的意思是不要了，删掉留着的半成品
     canCancelTask(task) {
-      return ACTIVE_STATUSES.has(task?.status);
+      return ACTIVE_STATUSES.has(task?.status) || task?.status === "paused";
     },
+    canPauseTask(task) {
+      return PAUSABLE_STATUSES.has(task?.status);
+    },
+    // 取消就是不要了，半成品已删；暂停和出错（含退出时中断）的记录才能续传
     isResumeCandidate(task) {
-      return Boolean(task && ["failed", "canceled"].includes(task.status));
+      return task?.status === "failed" || task?.status === "paused";
     },
     canResumeTask(task) {
       return this.isResumeCandidate(task) && !this.resumeBlockReason(task);
@@ -465,6 +548,7 @@ function eventStatus(kind) {
   if (kind === "completed") return "completed";
   if (kind === "failed") return "failed";
   if (kind === "canceled") return "canceled";
+  if (kind === "paused") return "paused";
 
   return "running";
 }

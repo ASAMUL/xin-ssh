@@ -25,10 +25,11 @@ use crate::error::{
     codes, io_error, lock_poisoned, required, AppError,
 };
 use crate::models::{
-    RemoteDownloadRequest, RemoteTransferEntry, RemoteUploadRequest, TransferEventPayload,
+    PartialFile, RemoteDownloadRequest, RemoteTransferEntry, RemoteUploadRequest, TransferEventPayload,
 };
 use crate::sftp::error::{remote_io_error, sftp_error};
 use crate::sftp::open_sftp_session;
+use crate::sftp::partials::PartialFiles;
 use crate::sftp::remote_digest::RemoteDigest;
 use crate::sftp::path::{
     join_remote_path, local_file_name, normalize_remote_path, remote_basename, remote_parent_path,
@@ -79,7 +80,39 @@ pub fn cancel_transfer(
         return Err(required("taskId"));
     }
 
-    registry.cancel_transfer(&task_id)
+    registry.stop_transfer(&task_id, false)
+}
+
+#[tauri::command]
+pub fn pause_transfer(
+    registry: State<'_, TerminalRegistry>,
+    task_id: String,
+) -> Result<(), AppError> {
+    if task_id.trim().is_empty() {
+        return Err(required("taskId"));
+    }
+
+    registry.stop_transfer(&task_id, true)
+}
+
+// 暂停和取消都先让传输停下来；pause 决定停下后半成品留着续传，还是当作不要了删掉。
+#[derive(Clone, Default)]
+pub(crate) struct TransferStop {
+    cancellation: Arc<AtomicBool>,
+    pause: Arc<AtomicBool>,
+}
+
+impl TransferStop {
+    pub(crate) fn request(&self, pause: bool) {
+        // 先定好停下后怎么处理半成品再发停止信号，传输读到停止时一定看得到 pause；
+        // 暂停途中又点取消，以最后一次为准
+        self.pause.store(pause, Ordering::SeqCst);
+        self.cancellation.store(true, Ordering::SeqCst);
+    }
+
+    fn paused(&self) -> bool {
+        self.pause.load(Ordering::SeqCst)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -96,18 +129,12 @@ pub(crate) async fn run_upload_transfer(
     app: AppHandle,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteUploadRequest,
-    cancellation: Arc<AtomicBool>,
+    stop: TransferStop,
 ) {
-    if let Err(error) = upload_transfer(&app, session, request.clone(), cancellation).await {
+    if let Err(error) = upload_transfer(&app, session, request.clone(), &stop).await {
         emit_transfer_event(
             &app,
-            transfer_event(
-                &request.task_id,
-                &request.session_id,
-                "upload",
-                transfer_error_kind(&error),
-            )
-            .with_error(error),
+            early_end_event(&request.task_id, &request.session_id, "upload", error, &stop),
         );
     }
 }
@@ -115,18 +142,12 @@ pub(crate) async fn run_download_transfer(
     app: AppHandle,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteDownloadRequest,
-    cancellation: Arc<AtomicBool>,
+    stop: TransferStop,
 ) {
-    if let Err(error) = download_transfer(&app, session, request.clone(), cancellation).await {
+    if let Err(error) = download_transfer(&app, session, request.clone(), &stop).await {
         emit_transfer_event(
             &app,
-            transfer_event(
-                &request.task_id,
-                &request.session_id,
-                "download",
-                transfer_error_kind(&error),
-            )
-            .with_error(error),
+            early_end_event(&request.task_id, &request.session_id, "download", error, &stop),
         );
     }
 }
@@ -136,8 +157,9 @@ async fn upload_transfer(
     app: &AppHandle,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteUploadRequest,
-    cancellation: Arc<AtomicBool>,
+    stop: &TransferStop,
 ) -> Result<(), AppError> {
+    let cancellation = Arc::clone(&stop.cancellation);
     let progress = Mutex::new(TransferProgress::new(
         &request.task_id, &request.session_id, "upload", 0, 0,
         transfer_label_from_local_paths(&request.local_paths),
@@ -145,10 +167,14 @@ async fn upload_transfer(
     with_progress(&progress, |p| p.emit(app, "planning", None, true))?;
     ensure_transfer_active(&cancellation)?;
     let remote_digest = RemoteDigest::new(Arc::clone(&session));
+    let partials = PartialFiles::new(&request.partial_files);
     let sftp = open_sftp_session(session).await?;
-    let result = upload_transfer_with_sftp(app, &sftp, &remote_digest, &request, &cancellation, &progress).await;
+    let result = upload_transfer_with_sftp(app, &sftp, &remote_digest, &partials, &request, &cancellation, &progress).await;
+    let outcome = transfer_outcome(stop, result);
+    // 用户取消就是不要了：删掉没传完的；暂停和出错都留着续传，交给前端记下
+    let partial_files = partials.settle_remote(&sftp, matches!(outcome, TransferOutcome::Canceled)).await;
     let _ = sftp.close().await;
-    report_transfer_result(app, &progress, result)
+    finish_transfer(app, &progress, outcome, partial_files)
 }
 
 // 先确定冲突策略再写入；父目录时间延后恢复，子项失败保留半成品供续传。
@@ -156,10 +182,11 @@ async fn upload_transfer_with_sftp(
     app: &AppHandle,
     sftp: &SftpSession,
     remote_digest: &RemoteDigest,
+    partials: &PartialFiles,
     request: &RemoteUploadRequest,
     cancellation: &Arc<AtomicBool>,
     progress: &Mutex<TransferProgress>,
-) -> Result<(), AppError> {
+) -> Result<Vec<FileResult>, AppError> {
     let planning = TransferPlanning { app, progress, cancellation };
     planning.check()?;
     let mut plan = plan_local_upload(&request.local_paths, &request.remote_dir, &planning).await?;
@@ -181,8 +208,7 @@ async fn upload_transfer_with_sftp(
 
     for directory in &plan.directories {
         if is_transfer_canceled(cancellation) {
-            with_progress(progress, |p| p.cancel(app))?;
-            return Ok(());
+            return Err(transfer_canceled_error());
         }
 
         if ensure_remote_directory(sftp, &directory.remote_path).await? {
@@ -194,16 +220,16 @@ async fn upload_transfer_with_sftp(
     }
 
     let files = std::mem::take(&mut plan.files);
-    let mut file_results: Vec<Result<(), (String, AppError)>> = stream::iter(files)
+    let mut file_results: Vec<FileResult> = stream::iter(files)
         .map(|file| async move {
             let result = async {
                 ensure_transfer_active(cancellation)?;
                 with_progress(progress, |p| p.label = file.label.clone())?;
-                upload_file(sftp, remote_digest, &file, app, progress, cancellation).await
+                upload_file(sftp, remote_digest, partials, &file, app, progress, cancellation).await
             }
             .await;
 
-            // 失败/取消保留远端半成品，之后可用 resume 策略续传
+            // 半成品由 partials 统一收尾：取消时删掉，失败时留给续传
             if let Err(error) = result {
                 return Err((file.label.clone(), error));
             }
@@ -225,7 +251,7 @@ async fn upload_transfer_with_sftp(
             }
         }
     }
-    finish_transfer(app, progress, cancellation, file_results)
+    Ok(file_results)
 }
 
 // 出错时用当前进度发终态，保留已确认的传输信息用于历史与续传。
@@ -233,8 +259,9 @@ async fn download_transfer(
     app: &AppHandle,
     session: Arc<AsyncMutex<client::Handle<ConnectionTestClient>>>,
     request: RemoteDownloadRequest,
-    cancellation: Arc<AtomicBool>,
+    stop: &TransferStop,
 ) -> Result<(), AppError> {
+    let cancellation = Arc::clone(&stop.cancellation);
     let progress = Mutex::new(TransferProgress::new(
         &request.task_id, &request.session_id, "download", 0, 0,
         transfer_label_from_remote_entries(&request.remote_entries),
@@ -242,10 +269,13 @@ async fn download_transfer(
     with_progress(&progress, |p| p.emit(app, "planning", None, true))?;
     ensure_transfer_active(&cancellation)?;
     let remote_digest = RemoteDigest::new(Arc::clone(&session));
+    let partials = PartialFiles::new(&request.partial_files);
     let sftp = open_sftp_session(session).await?;
-    let result = download_transfer_with_sftp(app, &sftp, &remote_digest, &request, &cancellation, &progress).await;
+    let result = download_transfer_with_sftp(app, &sftp, &remote_digest, &partials, &request, &cancellation, &progress).await;
     let _ = sftp.close().await;
-    report_transfer_result(app, &progress, result)
+    let outcome = transfer_outcome(stop, result);
+    let partial_files = partials.settle_local(matches!(outcome, TransferOutcome::Canceled)).await;
+    finish_transfer(app, &progress, outcome, partial_files)
 }
 
 // 文件写入和目录时间恢复分阶段执行，防止后续创建子项再次改掉父目录 mtime。
@@ -253,10 +283,11 @@ async fn download_transfer_with_sftp(
     app: &AppHandle,
     sftp: &SftpSession,
     remote_digest: &RemoteDigest,
+    partials: &PartialFiles,
     request: &RemoteDownloadRequest,
     cancellation: &Arc<AtomicBool>,
     progress: &Mutex<TransferProgress>,
-) -> Result<(), AppError> {
+) -> Result<Vec<FileResult>, AppError> {
     let planning = TransferPlanning { app, progress, cancellation };
     planning.check()?;
     let mut plan = plan_remote_download(sftp, &request.remote_entries, &request.local_dir, &planning).await?;
@@ -276,8 +307,7 @@ async fn download_transfer_with_sftp(
 
     for directory in &plan.directories {
         if is_transfer_canceled(cancellation) {
-            with_progress(progress, |p| p.cancel(app))?;
-            return Ok(());
+            return Err(transfer_canceled_error());
         }
 
         async_fs::create_dir_all(&directory.local_path)
@@ -286,16 +316,16 @@ async fn download_transfer_with_sftp(
     }
 
     let files = std::mem::take(&mut plan.files);
-    let mut file_results: Vec<Result<(), (String, AppError)>> = stream::iter(files)
+    let mut file_results: Vec<FileResult> = stream::iter(files)
         .map(|file| async move {
             let result = async {
                 ensure_transfer_active(cancellation)?;
                 with_progress(progress, |p| p.label = file.label.clone())?;
-                download_file(sftp, remote_digest, &file, app, progress, cancellation).await
+                download_file(sftp, remote_digest, partials, &file, app, progress, cancellation).await
             }
             .await;
 
-            // 失败/取消保留本地半成品，之后可用 resume 策略续传
+            // 半成品由 partials 统一收尾：取消时删掉，失败时留给续传
             if let Err(error) = result {
                 return Err((file.label.clone(), error));
             }
@@ -314,23 +344,51 @@ async fn download_transfer_with_sftp(
             }
         }
     }
-    finish_transfer(app, progress, cancellation, file_results)
+    Ok(file_results)
 }
 
-// 规划、建目录和元数据阶段失败也保留已知进度，不能用全零的兜底事件覆盖面板。
-fn report_transfer_result(app: &AppHandle, progress: &Mutex<TransferProgress>, result: Result<(), AppError>) -> Result<(), AppError> {
-    if let Err(error) = result {
-        with_progress(progress, |p| {
-            if error.is(codes::TRANSFER_CANCELED) { p.cancel(app); }
-            else { p.fail(app, error); }
-        })?;
+type FileResult = Result<(), (String, AppError)>;
+
+enum TransferOutcome {
+    Completed,
+    Canceled,
+    Paused,
+    Failed(AppError),
+}
+
+// 规划、建目录阶段的错误和逐文件结果统一归成一个终态，收尾半成品前就要知道是不是取消。
+fn transfer_outcome(stop: &TransferStop, result: Result<Vec<FileResult>, AppError>) -> TransferOutcome {
+    let stopped = || if stop.paused() { TransferOutcome::Paused } else { TransferOutcome::Canceled };
+    let file_results = match result {
+        Ok(file_results) => file_results,
+        Err(error) if error.is(codes::TRANSFER_CANCELED) => return stopped(),
+        Err(error) => return TransferOutcome::Failed(error),
+    };
+    let mut canceled = false;
+    let mut errors = Vec::new();
+    for file_result in file_results {
+        if let Err((label, error)) = file_result {
+            if error.is(codes::TRANSFER_CANCELED) {
+                canceled = true;
+            } else {
+                errors.push((label, error));
+            }
+        }
     }
-    Ok(())
+
+    if canceled || is_transfer_canceled(&stop.cancellation) {
+        stopped()
+    } else if !errors.is_empty() {
+        TransferOutcome::Failed(summarize_entry_errors(errors))
+    } else {
+        TransferOutcome::Completed
+    }
 }
 
 async fn upload_file(
     sftp: &SftpSession,
     remote_digest: &RemoteDigest,
+    partials: &PartialFiles,
     file: &UploadFilePlan,
     app: &AppHandle,
     progress: &Mutex<TransferProgress>,
@@ -374,6 +432,9 @@ async fn upload_file(
     let mut digest = verify_resume_prefix(
         &mut local_file, &mut remote_file, remote_digest, file.offset, &file.remote_path, cancellation,
     ).await?;
+    // 从这里开始往目标里写，它就是我们的半成品了。续传要等前缀核对通过才算：
+    // 对不上的可能是用户自己的文件，不能因为取消或删记录被我们删掉
+    partials.touch(&file.remote_path, file.size);
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
     let mut remaining = file.size - file.offset;
     while remaining > 0 {
@@ -409,6 +470,7 @@ async fn upload_file(
     remote_file.shutdown()
         .await
         .map_err(|error| remote_io_error(error, &file.remote_path))?;
+    partials.finish(&file.remote_path);
     with_progress(progress, |p| {
         p.files_done += 1;
         // 不强制发送：海量小文件时靠节流合并，最终计数由 completed 事件兜底
@@ -420,6 +482,7 @@ async fn upload_file(
 async fn download_file(
     sftp: &SftpSession,
     remote_digest: &RemoteDigest,
+    partials: &PartialFiles,
     file: &DownloadFilePlan,
     app: &AppHandle,
     progress: &Mutex<TransferProgress>,
@@ -458,49 +521,61 @@ async fn download_file(
             .await
             .map_err(io_error)?
     };
-    if file.resume_existing {
-        with_progress(progress, |p| p.emit(app, "verifying", Some(file.remote_path.clone()), true))?;
-        let metadata = local_file.metadata().await.map_err(io_error)?;
-        if !metadata.is_file() || metadata.len() != file.offset {
-            return Err(resume_mismatch(&path_to_string(&file.local_path)));
+    let local_key = path_to_string(&file.local_path);
+    let written = async {
+        if file.resume_existing {
+            with_progress(progress, |p| p.emit(app, "verifying", Some(file.remote_path.clone()), true))?;
+            let metadata = local_file.metadata().await.map_err(io_error)?;
+            if !metadata.is_file() || metadata.len() != file.offset {
+                return Err(resume_mismatch(&path_to_string(&file.local_path)));
+            }
         }
-    }
-    let mut digest = verify_resume_prefix(
-        &mut local_file, &mut remote_file, remote_digest, file.offset, &file.remote_path, cancellation,
-    ).await?;
-    let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
-    let mut remaining = file.size - file.offset;
-    while remaining > 0 {
-        ensure_transfer_active(cancellation)?;
-        let count = remaining.min(TRANSFER_BUFFER_SIZE as u64) as usize;
-        let read = remote_file.read(&mut buffer[..count])
-            .await
-            .map_err(|error| remote_io_error(error, &file.remote_path))?;
-        if read == 0 {
-            return Err(source_changed(&file.remote_path));
+        let mut digest = verify_resume_prefix(
+            &mut local_file, &mut remote_file, remote_digest, file.offset, &file.remote_path, cancellation,
+        ).await?;
+        // 同上传：续传前缀核对通过后才算我们的半成品
+        partials.touch(&local_key, file.size);
+        let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
+        let mut remaining = file.size - file.offset;
+        while remaining > 0 {
+            ensure_transfer_active(cancellation)?;
+            let count = remaining.min(TRANSFER_BUFFER_SIZE as u64) as usize;
+            let read = remote_file.read(&mut buffer[..count])
+                .await
+                .map_err(|error| remote_io_error(error, &file.remote_path))?;
+            if read == 0 {
+                return Err(source_changed(&file.remote_path));
+            }
+            digest.update(&buffer[..read]);
+            local_file
+                .write_all(&buffer[..read])
+                .await
+                .map_err(io_error)?;
+            remaining -= read as u64;
+            with_progress(progress, |p| {
+                p.bytes_transferred += read as u64;
+                p.emit(app, "progress", Some(file.remote_path.clone()), false);
+            })?;
         }
-        digest.update(&buffer[..read]);
-        local_file
-            .write_all(&buffer[..read])
-            .await
-            .map_err(io_error)?;
-        remaining -= read as u64;
-        with_progress(progress, |p| {
-            p.bytes_transferred += read as u64;
-            p.emit(app, "progress", Some(file.remote_path.clone()), false);
-        })?;
-    }
 
-    local_file.flush().await.map_err(io_error)?;
-    with_progress(progress, |p| p.emit(app, "verifying", Some(file.remote_path.clone()), true))?;
-    let digest = digest.finish();
-    verify_remote_contents(&mut remote_file, remote_digest, file.size, &digest, &file.remote_path, cancellation).await?;
-    validate_remote_source(&remote_file.metadata().await.map_err(|error| sftp_error(error, &file.remote_path))?, file)?;
-    if file.resume_existing {
-        verify_contents(&mut local_file, file.size, &digest, &path_to_string(&file.local_path), cancellation, io_error).await?;
+        local_file.flush().await.map_err(io_error)?;
+        with_progress(progress, |p| p.emit(app, "verifying", Some(file.remote_path.clone()), true))?;
+        let digest = digest.finish();
+        verify_remote_contents(&mut remote_file, remote_digest, file.size, &digest, &file.remote_path, cancellation).await?;
+        validate_remote_source(&remote_file.metadata().await.map_err(|error| sftp_error(error, &file.remote_path))?, file)?;
+        if file.resume_existing {
+            verify_contents(&mut local_file, file.size, &digest, &path_to_string(&file.local_path), cancellation, io_error).await?;
+        }
+        ensure_transfer_active(cancellation)
     }
-    ensure_transfer_active(cancellation)?;
+    .await;
+    if let Err(error) = written {
+        // tokio 的文件写在后台线程里落盘，等它写完句柄才会随 drop 关闭；Windows 上句柄不关就删不掉半成品
+        let _ = local_file.flush().await;
+        return Err(error);
+    }
     set_local_file_modified(local_file, &file.local_path, file.modified).await?;
+    partials.finish(&local_key);
     remote_file.shutdown()
         .await
         .map_err(|error| remote_io_error(error, &file.remote_path))?;
@@ -534,38 +609,22 @@ fn validate_remote_source(metadata: &FileAttributes, file: &DownloadFilePlan) ->
     Ok(())
 }
 
+// 终态事件带上收尾后仍留着的半成品，前端据此决定能否续传、删记录时清理什么。
 fn finish_transfer(
     app: &AppHandle,
     progress: &Mutex<TransferProgress>,
-    cancellation: &Arc<AtomicBool>,
-    file_results: Vec<Result<(), (String, AppError)>>,
+    outcome: TransferOutcome,
+    partial_files: Vec<PartialFile>,
 ) -> Result<(), AppError> {
-    let mut canceled = false;
-    let mut errors = Vec::new();
-
-    for file_result in file_results {
-        if let Err((label, error)) = file_result {
-            if error.is(codes::TRANSFER_CANCELED) {
-                canceled = true;
-            } else {
-                errors.push((label, error));
-            }
+    with_progress(progress, |p| {
+        p.partial_files = Some(partial_files);
+        match outcome {
+            TransferOutcome::Completed => p.emit(app, "completed", None, true),
+            TransferOutcome::Canceled => p.cancel(app),
+            TransferOutcome::Paused => p.emit(app, "paused", None, true),
+            TransferOutcome::Failed(error) => p.fail(app, error),
         }
-    }
-
-    if canceled || is_transfer_canceled(cancellation) {
-        with_progress(progress, |p| p.cancel(app))?;
-        return Ok(());
-    }
-
-    if !errors.is_empty() {
-        let summary = summarize_entry_errors(errors);
-        with_progress(progress, |p| p.fail(app, summary))?;
-        return Ok(());
-    }
-
-    with_progress(progress, |p| p.emit(app, "completed", None, true))?;
-    Ok(())
+    })
 }
 
 fn with_progress<T>(
@@ -1316,6 +1375,7 @@ struct TransferProgress {
     files_done: u64,
     files_total: u64,
     last_emit_at: Instant,
+    partial_files: Option<Vec<PartialFile>>,
 }
 
 impl TransferProgress {
@@ -1337,6 +1397,7 @@ impl TransferProgress {
             files_done: 0,
             files_total,
             last_emit_at: Instant::now(),
+            partial_files: None,
         }
     }
 
@@ -1360,6 +1421,7 @@ impl TransferProgress {
                 files_done: self.files_done,
                 files_total: self.files_total,
                 error: None,
+                partial_files: self.partial_files.clone(),
             },
         );
     }
@@ -1379,6 +1441,7 @@ impl TransferProgress {
                 files_done: self.files_done,
                 files_total: self.files_total,
                 error: Some(error),
+                partial_files: self.partial_files.clone(),
             },
         );
     }
@@ -1398,6 +1461,7 @@ impl TransferProgress {
                 files_done: self.files_done,
                 files_total: self.files_total,
                 error: Some(transfer_canceled_error()),
+                partial_files: self.partial_files.clone(),
             },
         );
     }
@@ -1508,16 +1572,25 @@ fn ensure_transfer_active(cancellation: &Arc<AtomicBool>) -> Result<(), AppError
     }
 }
 
-fn transfer_error_kind(error: &AppError) -> &'static str {
-    if error.is(codes::TRANSFER_CANCELED) {
-        "canceled"
-    } else {
-        "failed"
+// 建 SFTP 子通道之前就停下或出错的结束事件；暂停不算错误，不带 error
+fn early_end_event(
+    task_id: &str,
+    session_id: &str,
+    direction: &str,
+    error: AppError,
+    stop: &TransferStop,
+) -> TransferEventPayload {
+    if !error.is(codes::TRANSFER_CANCELED) {
+        return transfer_event(task_id, session_id, direction, "failed").with_error(error);
     }
+    if stop.paused() {
+        return transfer_event(task_id, session_id, direction, "paused");
+    }
+    transfer_event(task_id, session_id, direction, "canceled").with_error(error)
 }
 
 pub(crate) fn remove_transfer_cancellation(
-    cancellations: &Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    cancellations: &Arc<Mutex<HashMap<String, TransferStop>>>,
     task_id: &str,
 ) {
     if let Ok(mut cancellations) = cancellations.lock() {
@@ -1543,6 +1616,8 @@ fn transfer_event(
         files_done: 0,
         files_total: 0,
         error: None,
+        // 没走到收尾就失败或取消：后端不清楚半成品，前端沿用记录里的旧值
+        partial_files: None,
     }
 }
 

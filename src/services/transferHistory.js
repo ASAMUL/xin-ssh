@@ -8,8 +8,8 @@ const HISTORY_KEY = "tasks";
 const LEGACY_KEY = "xin-terminal/transfer-history";
 const HISTORY_VERSION = 2;
 const enqueueHistoryWrite = createSerialQueue();
-const FINISHED_STATUSES = new Set(["completed", "failed", "canceled"]);
-const ACTIVE_STATUSES = new Set(["queued", "planning", "running", "canceling"]);
+const FINISHED_STATUSES = new Set(["completed", "failed", "canceled", "paused"]);
+const ACTIVE_STATUSES = new Set(["queued", "planning", "running", "canceling", "pausing"]);
 
 // 旧格式没有连接标识，也无法证明 20 条路径是否被截断，只迁移展示数据，不猜测续传目标。
 export async function loadTransferHistory() {
@@ -32,8 +32,9 @@ export async function loadTransferHistory() {
       && (FINISHED_STATUSES.has(task.status) || ACTIVE_STATUSES.has(task.status)))
     .map((task) => ({
       ...task,
-      // 重启只恢复可手动续传的记录，绝不自动执行磁盘或远端写入。
-      status: ACTIVE_STATUSES.has(task.status) ? "canceled" : task.status,
+      // 重启只恢复可手动续传的记录，绝不自动执行磁盘或远端写入。中断不是用户取消，
+      // 记成失败才能续传；旧版本把中断记成了 canceled，一并改过来。
+      status: ACTIVE_STATUSES.has(task.status) || isLegacyInterruption(task) ? "failed" : task.status,
       error: ACTIVE_STATUSES.has(task.status)
         ? { code: "transfer.interrupted", message: "Transfer interrupted by application exit" }
         : task.error,
@@ -42,6 +43,10 @@ export async function loadTransferHistory() {
       currentPath: null,
       conflictPrompted: true,
     }));
+}
+
+function isLegacyInterruption(task) {
+  return task.status === "canceled" && task.error?.code === "transfer.interrupted";
 }
 
 // 只缩减运行态字段，完整保存原始选择；请求和响应按顺序落盘，避免晚完成的旧写入覆盖新历史。
@@ -82,5 +87,6 @@ function serializeTask(task) {
       isDirectory: entry.isDirectory,
       size: entry.size ?? null,
     })) : [],
+    partialFiles: Array.isArray(task.partialFiles) ? task.partialFiles.map((file) => ({ ...file })) : [],
   };
 }
