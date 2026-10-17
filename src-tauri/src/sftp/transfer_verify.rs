@@ -5,6 +5,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt};
 
 use crate::error::{codes, io_error, AppError};
 use crate::sftp::error::remote_io_error;
+use crate::sftp::remote_digest::{DigestRange, RemoteDigest};
 
 const VERIFY_BUFFER_BYTES: usize = 256 * 1024;
 
@@ -26,8 +27,62 @@ fn check_active(cancellation: &Arc<AtomicBool>) -> Result<(), AppError> {
     }
 }
 
-// 任意旧文件都可能被选作续传目标，逐字节验证前缀后才允许追加；内存与文件大小无关。
-pub(super) async fn verify_prefix<L, R>(
+fn local_prefix_error(error: std::io::Error, path: &str) -> AppError {
+    if error.kind() == std::io::ErrorKind::UnexpectedEof { resume_mismatch(path) }
+    else { io_error(error).with("path", path) }
+}
+
+// 任意旧文件都可能被选作续传目标，核对过已有前缀才允许接着写。先让服务器自己算前缀摘要，
+// 只回传几十字节；服务器算不了或对不上，再退回逐块读回来比，绝不在不一致的文件后面追加。
+pub(super) async fn verify_resume_prefix<L, R>(
+    local: &mut L,
+    remote: &mut R,
+    remote_digest: &RemoteDigest,
+    length: u64,
+    path: &str,
+    cancellation: &Arc<AtomicBool>,
+) -> Result<Context, AppError>
+where
+    L: AsyncRead + AsyncSeek + Unpin,
+    R: AsyncRead + AsyncSeek + Unpin,
+{
+    if remote_digest.applies_to(length) {
+        let digest = digest_prefix(local, length, path, cancellation).await?;
+        let expected = digest.clone().finish();
+        if remote_digest.matches(path, DigestRange::Prefix(length), expected.as_ref(), cancellation).await? {
+            remote.seek(SeekFrom::Start(length)).await.map_err(|error| remote_io_error(error, path))?;
+            return Ok(digest);
+        }
+        local.seek(SeekFrom::Start(0)).await.map_err(|error| io_error(error).with("path", path))?;
+    }
+    verify_prefix(local, remote, length, path, cancellation).await
+}
+
+// 本地读前缀只走磁盘，读完句柄正好停在续传位置。
+async fn digest_prefix<L>(
+    local: &mut L,
+    length: u64,
+    path: &str,
+    cancellation: &Arc<AtomicBool>,
+) -> Result<Context, AppError>
+where
+    L: AsyncRead + Unpin,
+{
+    let mut digest = Context::new(&SHA256);
+    let mut bytes = vec![0; VERIFY_BUFFER_BYTES];
+    let mut remaining = length;
+    while remaining > 0 {
+        check_active(cancellation)?;
+        let count = remaining.min(VERIFY_BUFFER_BYTES as u64) as usize;
+        local.read_exact(&mut bytes[..count]).await.map_err(|error| local_prefix_error(error, path))?;
+        digest.update(&bytes[..count]);
+        remaining -= count as u64;
+    }
+    Ok(digest)
+}
+
+// 逐字节比对两端前缀；内存与文件大小无关。
+async fn verify_prefix<L, R>(
     local: &mut L,
     remote: &mut R,
     length: u64,
@@ -45,10 +100,7 @@ where
     while remaining > 0 {
         check_active(cancellation)?;
         let count = remaining.min(VERIFY_BUFFER_BYTES as u64) as usize;
-        local.read_exact(&mut local_bytes[..count]).await.map_err(|error| {
-            if error.kind() == std::io::ErrorKind::UnexpectedEof { resume_mismatch(path) }
-            else { io_error(error).with("path", path) }
-        })?;
+        local.read_exact(&mut local_bytes[..count]).await.map_err(|error| local_prefix_error(error, path))?;
         remote.read_exact(&mut remote_bytes[..count]).await.map_err(|error| {
             if error.kind() == std::io::ErrorKind::UnexpectedEof { resume_mismatch(path) }
             else { remote_io_error(error, path) }
@@ -60,6 +112,24 @@ where
         remaining -= count as u64;
     }
     Ok(digest)
+}
+
+// 远端那份先让服务器自己算摘要；算不了或对不上，再整份读回来核对，结论以读回来的为准。
+pub(super) async fn verify_remote_contents<R>(
+    remote: &mut R,
+    remote_digest: &RemoteDigest,
+    size: u64,
+    expected: &Digest,
+    path: &str,
+    cancellation: &Arc<AtomicBool>,
+) -> Result<(), AppError>
+where
+    R: AsyncRead + AsyncSeek + Unpin,
+{
+    if remote_digest.matches(path, DigestRange::Whole(size), expected.as_ref(), cancellation).await? {
+        return Ok(());
+    }
+    verify_contents(remote, size, expected, path, cancellation, |error| remote_io_error(error, path)).await
 }
 
 // mtime 可能只有秒级精度，再读一遍内容摘要，避免同大小改写或传输中变化被标为成功。

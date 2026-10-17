@@ -29,6 +29,7 @@ use crate::models::{
 };
 use crate::sftp::error::{remote_io_error, sftp_error};
 use crate::sftp::open_sftp_session;
+use crate::sftp::remote_digest::RemoteDigest;
 use crate::sftp::path::{
     join_remote_path, local_file_name, normalize_remote_path, remote_basename, remote_parent_path,
     safe_local_name,
@@ -36,7 +37,9 @@ use crate::sftp::path::{
 use crate::sftp::transfer_metadata::{
     metadata_error, set_local_file_modified, set_local_path_modified, upload_attributes,
 };
-use crate::sftp::transfer_verify::{resume_mismatch, source_changed, verify_contents, verify_prefix};
+use crate::sftp::transfer_verify::{
+    resume_mismatch, source_changed, verify_contents, verify_remote_contents, verify_resume_prefix,
+};
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
 use crate::util::{path_to_string, summarize_entry_errors};
@@ -141,8 +144,9 @@ async fn upload_transfer(
     ));
     with_progress(&progress, |p| p.emit(app, "planning", None, true))?;
     ensure_transfer_active(&cancellation)?;
+    let remote_digest = RemoteDigest::new(Arc::clone(&session));
     let sftp = open_sftp_session(session).await?;
-    let result = upload_transfer_with_sftp(app, &sftp, &request, &cancellation, &progress).await;
+    let result = upload_transfer_with_sftp(app, &sftp, &remote_digest, &request, &cancellation, &progress).await;
     let _ = sftp.close().await;
     report_transfer_result(app, &progress, result)
 }
@@ -151,6 +155,7 @@ async fn upload_transfer(
 async fn upload_transfer_with_sftp(
     app: &AppHandle,
     sftp: &SftpSession,
+    remote_digest: &RemoteDigest,
     request: &RemoteUploadRequest,
     cancellation: &Arc<AtomicBool>,
     progress: &Mutex<TransferProgress>,
@@ -194,7 +199,7 @@ async fn upload_transfer_with_sftp(
             let result = async {
                 ensure_transfer_active(cancellation)?;
                 with_progress(progress, |p| p.label = file.label.clone())?;
-                upload_file(sftp, &file, app, progress, cancellation).await
+                upload_file(sftp, remote_digest, &file, app, progress, cancellation).await
             }
             .await;
 
@@ -236,8 +241,9 @@ async fn download_transfer(
     ));
     with_progress(&progress, |p| p.emit(app, "planning", None, true))?;
     ensure_transfer_active(&cancellation)?;
+    let remote_digest = RemoteDigest::new(Arc::clone(&session));
     let sftp = open_sftp_session(session).await?;
-    let result = download_transfer_with_sftp(app, &sftp, &request, &cancellation, &progress).await;
+    let result = download_transfer_with_sftp(app, &sftp, &remote_digest, &request, &cancellation, &progress).await;
     let _ = sftp.close().await;
     report_transfer_result(app, &progress, result)
 }
@@ -246,6 +252,7 @@ async fn download_transfer(
 async fn download_transfer_with_sftp(
     app: &AppHandle,
     sftp: &SftpSession,
+    remote_digest: &RemoteDigest,
     request: &RemoteDownloadRequest,
     cancellation: &Arc<AtomicBool>,
     progress: &Mutex<TransferProgress>,
@@ -284,7 +291,7 @@ async fn download_transfer_with_sftp(
             let result = async {
                 ensure_transfer_active(cancellation)?;
                 with_progress(progress, |p| p.label = file.label.clone())?;
-                download_file(sftp, &file, app, progress, cancellation).await
+                download_file(sftp, remote_digest, &file, app, progress, cancellation).await
             }
             .await;
 
@@ -323,6 +330,7 @@ fn report_transfer_result(app: &AppHandle, progress: &Mutex<TransferProgress>, r
 
 async fn upload_file(
     sftp: &SftpSession,
+    remote_digest: &RemoteDigest,
     file: &UploadFilePlan,
     app: &AppHandle,
     progress: &Mutex<TransferProgress>,
@@ -363,7 +371,9 @@ async fn upload_file(
             return Err(resume_mismatch(&file.remote_path));
         }
     }
-    let mut digest = verify_prefix(&mut local_file, &mut remote_file, file.offset, &file.remote_path, cancellation).await?;
+    let mut digest = verify_resume_prefix(
+        &mut local_file, &mut remote_file, remote_digest, file.offset, &file.remote_path, cancellation,
+    ).await?;
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
     let mut remaining = file.size - file.offset;
     while remaining > 0 {
@@ -391,8 +401,7 @@ async fn upload_file(
     verify_contents(&mut local_file, file.size, &digest, &path_to_string(&file.local_path), cancellation, io_error).await?;
     validate_local_source(&local_file.metadata().await.map_err(io_error)?, file)?;
     if file.resume_existing {
-        verify_contents(&mut remote_file, file.size, &digest, &file.remote_path, cancellation,
-            |error| remote_io_error(error, &file.remote_path)).await?;
+        verify_remote_contents(&mut remote_file, remote_digest, file.size, &digest, &file.remote_path, cancellation).await?;
     }
     ensure_transfer_active(cancellation)?;
     remote_file.set_metadata(file.attributes.clone()).await
@@ -410,6 +419,7 @@ async fn upload_file(
 
 async fn download_file(
     sftp: &SftpSession,
+    remote_digest: &RemoteDigest,
     file: &DownloadFilePlan,
     app: &AppHandle,
     progress: &Mutex<TransferProgress>,
@@ -455,7 +465,9 @@ async fn download_file(
             return Err(resume_mismatch(&path_to_string(&file.local_path)));
         }
     }
-    let mut digest = verify_prefix(&mut local_file, &mut remote_file, file.offset, &file.remote_path, cancellation).await?;
+    let mut digest = verify_resume_prefix(
+        &mut local_file, &mut remote_file, remote_digest, file.offset, &file.remote_path, cancellation,
+    ).await?;
     let mut buffer = vec![0_u8; TRANSFER_BUFFER_SIZE];
     let mut remaining = file.size - file.offset;
     while remaining > 0 {
@@ -482,8 +494,7 @@ async fn download_file(
     local_file.flush().await.map_err(io_error)?;
     with_progress(progress, |p| p.emit(app, "verifying", Some(file.remote_path.clone()), true))?;
     let digest = digest.finish();
-    verify_contents(&mut remote_file, file.size, &digest, &file.remote_path, cancellation,
-        |error| remote_io_error(error, &file.remote_path)).await?;
+    verify_remote_contents(&mut remote_file, remote_digest, file.size, &digest, &file.remote_path, cancellation).await?;
     validate_remote_source(&remote_file.metadata().await.map_err(|error| sftp_error(error, &file.remote_path))?, file)?;
     if file.resume_existing {
         verify_contents(&mut local_file, file.size, &digest, &path_to_string(&file.local_path), cancellation, io_error).await?;

@@ -73,7 +73,7 @@ Everything above happens on the client. No agent to install, no edits to `.bashr
 - Auth: password, private key (ed25519 / RSA / ECDSA, passphrases supported), your local SSH agent, and keyboard-interactive / 2FA
 - Host fingerprints are recorded on first connect. If one changes later, the connection is refused
 - Saved passwords and keys are encrypted with ChaCha20-Poly1305 and never leave your computer
-- Before resuming, existing data is compared block by block. After the transfer, a SHA-256 check confirms it
+- Before resuming, the part already transferred is checked. After a download or a resumed upload, the whole file is checked with SHA-256, computed on the server when it has `sha256sum`, so the file doesn't cross the network twice
 - Config files are written atomically, so an untimely crash can't leave them half-written
 
 > Every transfer ends with a SHA-256 check. It's nothing personal against your network. We don't trust any network.
