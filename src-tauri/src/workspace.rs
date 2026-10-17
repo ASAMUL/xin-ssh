@@ -135,6 +135,7 @@ pub async fn export_profiles(
 }
 
 // 只导入连接身份字段，避免把 Include、ProxyCommand 等本机 shell 语义带入应用配置。
+// ProxyJump / ProxyCommand 只记下来：直连连不上这类主机，前端据此跳过并告诉用户。
 fn parse_ssh_config(content: &str) -> Result<Vec<SshConfigEntry>, AppError> {
     let mut global = SshConfigDraft::default();
     let mut blocks: Vec<(Vec<String>, SshConfigDraft)> = Vec::new();
@@ -187,6 +188,15 @@ fn parse_ssh_config(content: &str) -> Result<Vec<SshConfigEntry>, AppError> {
             }
             continue;
         }
+        if key.eq_ignore_ascii_case("match") {
+            // Match 的条件要到连接时才能判断；里面的配置不能算到上一个 Host 头上
+            if let Some(aliases) = current_aliases.take() {
+                blocks.push((aliases, current));
+            }
+            current = SshConfigDraft::default();
+            ignored_block = true;
+            continue;
+        }
 
         if !ignored_block {
             let draft = if current_aliases.is_some() { &mut current } else { &mut global };
@@ -203,12 +213,19 @@ fn parse_ssh_config(content: &str) -> Result<Vec<SshConfigEntry>, AppError> {
         .into_iter()
         .flat_map(|(aliases, draft)| {
             let home = &home;
+            // 末尾 Host * 里的代理对前面每台主机都生效；none 表示明确直连
+            let proxy = draft
+                .proxy
+                .clone()
+                .or_else(|| global.proxy.clone())
+                .filter(|value| !value.eq_ignore_ascii_case("none"));
             aliases.into_iter().map(move |alias| SshConfigEntry {
                 host: draft.host.clone().unwrap_or_else(|| alias.clone()),
                 alias,
                 username: draft.username.clone().unwrap_or_else(default_ssh_username),
                 port: draft.port.unwrap_or(22),
                 private_key_path: draft.identity_file.as_deref().map(|path| expand_home(path, home)),
+                proxy: proxy.clone(),
             })
         })
         .filter(|entry| !entry.host.trim().is_empty())
@@ -222,6 +239,7 @@ struct SshConfigDraft {
     username: Option<String>,
     port: Option<u16>,
     identity_file: Option<String>,
+    proxy: Option<String>,
 }
 
 fn split_ssh_config_line(line: &str) -> (String, Option<String>) {
@@ -248,6 +266,8 @@ fn apply_ssh_config_option(draft: &mut SshConfigDraft, key: &str, value: &str) {
         "user" => draft.username = Some(value.to_string()),
         "port" => draft.port = value.parse::<u16>().ok().filter(|port| *port > 0),
         "identityfile" if draft.identity_file.is_none() => draft.identity_file = Some(value.to_string()),
+        // 和 ssh 一样先出现的生效，包括 none
+        "proxyjump" | "proxycommand" if draft.proxy.is_none() => draft.proxy = Some(value.to_string()),
         _ => {}
     }
 }
@@ -1059,4 +1079,40 @@ fn default_profiles_file() -> ProfilesFile {
 
 fn default_group_id() -> String {
     "group-default".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_ssh_config;
+
+    #[test]
+    fn marks_hosts_behind_a_jump_host() {
+        let entries = parse_ssh_config(
+            "Host bastion\n  HostName 10.0.0.1\n  User ops\n\nHost app\n  HostName 10.0.0.2\n  User ops\n  ProxyJump bastion\n",
+        )
+        .unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].proxy, None);
+        assert_eq!(entries[1].proxy.as_deref(), Some("bastion"));
+    }
+
+    #[test]
+    fn trailing_wildcard_proxy_applies_unless_a_host_opts_out() {
+        let entries = parse_ssh_config(
+            "Host direct\n  User ops\n  ProxyJump none\n\nHost inner\n  User ops\n\nHost *\n  ProxyCommand ssh -W %h:%p gate\n",
+        )
+        .unwrap();
+        assert_eq!(entries[0].proxy, None);
+        assert_eq!(entries[1].proxy.as_deref(), Some("ssh -W %h:%p gate"));
+    }
+
+    #[test]
+    fn match_blocks_do_not_leak_into_the_previous_host() {
+        let entries = parse_ssh_config(
+            "Host web\n  HostName 10.0.0.3\n  User ops\n\nMatch host 10.0.0.*\n  User someone-else\n  ProxyJump gate\n",
+        )
+        .unwrap();
+        assert_eq!(entries[0].username, "ops");
+        assert_eq!(entries[0].proxy, None);
+    }
 }

@@ -96,7 +96,7 @@ A host overview in the sidebar: distro, CPU history, memory, disk, upload and do
 ### And a few more things
 
 - SSH tunnels (local port forwarding)
-- Import from `~/.ssh/config`, export your connections
+- Import from `~/.ssh/config` (hosts behind a jump host are skipped for now), export your connections
 - Multiple terminals on the same connection
 - Groups, favourites, recents and drag-to-reorder for connections, with distro icons detected automatically
 - Automatic reconnect when the connection drops

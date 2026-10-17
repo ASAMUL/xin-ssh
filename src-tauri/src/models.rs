@@ -372,6 +372,8 @@ pub struct SshConfigEntry {
     pub username: String,
     pub port: u16,
     pub private_key_path: Option<String>,
+    // 原样保留 ProxyJump / ProxyCommand：现在用来在导入时跳过，以后支持跳板机时可以直接接上
+    pub proxy: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

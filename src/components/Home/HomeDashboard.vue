@@ -318,11 +318,20 @@ async function importSshConfig() {
       toast.add({ title: t("home.sshConfigEmpty"), color: "warning" });
       return;
     }
-    const imported = await profileStore.importSshConfigEntries(entries);
+    // 还不支持跳板机，导进来也只会连接超时，不如跳过并点名告诉用户
+    const direct = entries.filter((entry) => !entry.proxy);
+    const skipped = entries.filter((entry) => entry.proxy).map((entry) => entry.alias);
+    const imported = direct.length ? await profileStore.importSshConfigEntries(direct) : 0;
     toast.add({
       title: t("home.sshConfigImported", { count: imported }),
-      icon: "i-lucide-check",
-      color: "success",
+      description: skipped.length
+        ? t("home.sshConfigSkippedProxy", {
+            count: skipped.length,
+            hosts: skipped.slice(0, 5).join(", ") + (skipped.length > 5 ? " …" : ""),
+          })
+        : undefined,
+      icon: skipped.length ? "i-lucide-triangle-alert" : "i-lucide-check",
+      color: skipped.length ? "warning" : "success",
     });
   } catch (error) {
     toast.add({
