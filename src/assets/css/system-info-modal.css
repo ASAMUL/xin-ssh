@@ -1,0 +1,394 @@
+/* 系统信息窗口（SystemInfoModal.vue 专用，scoped 引入）。
+   骨架和设置窗口是同一套：左导航 + 右内容在全局的 nav-window.css，每一页的分组卡片在 form-list.css，
+   外壳玻璃来自 vite.config.js 给 Modal 挂的 .liquid-sheet。这里只管这扇窗口自己的东西：
+   导航顶上的主机身份、概览的三张指标卡、进程/网卡的双数值行、挂载点行、实时速率。 */
+
+/* —— 导航顶部：这台机器是谁（代替设置窗口的大标题）；底部：数据是几点采的 —— */
+.host-identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 6px 16px;
+}
+
+.host-identity div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.host-identity strong,
+.host-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-identity strong {
+  color: var(--xin-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.host-identity small {
+  color: var(--xin-text-muted);
+  font-size: 11.5px;
+}
+
+.nav-updated {
+  margin: auto 10px 0;
+  color: var(--xin-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* —— 液柱色：内存樱色、磁盘藕荷，和概览栏一致；>80% 琥珀、>90% 红 —— */
+.rose {
+  --bar-from: #f4a8c5;
+  --bar-to: var(--xin-accent);
+  --bar-glow: rgb(var(--xin-accent-rgb) / 0.35);
+}
+
+.violet {
+  --bar-from: #c9bff5;
+  --bar-to: #8b7fd8;
+  --bar-glow: rgb(139 127 216 / 0.35);
+}
+
+.high {
+  --bar-from: #f6d08a;
+  --bar-to: var(--xin-warning-strong);
+  --bar-glow: rgb(var(--xin-warning-rgb) / 0.4);
+}
+
+.critical {
+  --bar-from: #ff9a9f;
+  --bar-to: var(--xin-danger);
+  --bar-glow: rgb(var(--xin-danger-rgb) / 0.4);
+}
+
+/* 占用条（UProgressGroup）：内凹玻璃槽 + 带顶部高光的渐变液柱，段间 2px 缝 */
+.usage-bar :deep(.bar-track) {
+  height: 8px;
+  gap: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(var(--xin-ink-rgb) / 0.07);
+  box-shadow: inset 0 1px 2px rgb(var(--xin-shadow-rgb) / 0.1);
+}
+
+.usage-bar :deep(.bar-segment) {
+  transition: width 600ms var(--lg-spring);
+}
+
+.usage-bar :deep(.bar-fill) {
+  border-radius: 999px;
+}
+
+.usage-bar :deep(.bar-fill.used) {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.45) 0%, rgb(255 255 255 / 0) 55%),
+    linear-gradient(90deg, var(--bar-from), var(--bar-to));
+  box-shadow: 0 0 10px var(--bar-glow);
+}
+
+.usage-bar :deep(.bar-fill.cache) {
+  background: color-mix(in oklab, var(--bar-to) 32%, transparent);
+}
+
+.usage-bar :deep(.bar-fill.free) {
+  background: transparent;
+}
+
+/* —— 概览：三张指标卡，读法是「标签 → 大数字 → 走势/占用 → 一句注脚」 —— */
+.overview-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.overview-tile {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px 11px;
+  border: 1px solid var(--xin-card-border);
+  border-radius: var(--xin-radius);
+  background: var(--xin-card);
+}
+
+.overview-tile header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--xin-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.overview-tile header svg {
+  width: 14px;
+  height: 14px;
+}
+
+.overview-tile header em {
+  margin-left: auto;
+  font-style: normal;
+  font-weight: 560;
+}
+
+.overview-tile > strong {
+  color: var(--xin-text);
+  font-size: 24px;
+  font-weight: 720;
+  letter-spacing: -0.4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-tile.high > strong {
+  color: var(--xin-warning-strong);
+}
+
+.overview-tile.critical > strong {
+  color: var(--xin-danger-strong);
+}
+
+/* 走势图和占用条高矮不一，统一放进同高的格子并贴底，三张卡的注脚才落在同一条线上 */
+.tile-visual {
+  height: 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  margin-block: 2px 4px;
+}
+
+.overview-tile small {
+  overflow: hidden;
+  color: var(--xin-text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 分组卡片里「标签 … 值」行的值：次要色、靠右、过长省略 */
+.row-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--xin-text-muted);
+  font-size: 12.5px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* —— 页内工具条：左分段 / 计数，右搜索 —— */
+.pane-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: -6px;
+}
+
+.pane-search {
+  width: 220px;
+}
+
+.pane-count {
+  color: var(--xin-text-muted);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+/* 排序分段：和设置页的明暗切换同一种样子（浅灰轨道 + 樱色水滴） */
+.sort-switch {
+  width: 168px;
+}
+
+.sort-switch :deep([data-slot="list"]) {
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgb(var(--xin-ink-rgb) / 0.06);
+}
+
+.sort-switch :deep([data-slot="trigger"]) {
+  height: 26px;
+  padding: 0 10px;
+  color: var(--xin-text-secondary);
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 560;
+}
+
+.sort-switch :deep([data-slot="trigger"][data-state="active"]) {
+  color: var(--xin-accent-strong);
+}
+
+.sort-switch :deep([data-slot="indicator"]) {
+  border-radius: 8px;
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
+}
+
+/* —— 进程 / 网卡：左边名字 + 一行说明，右边两列数值；列宽由卡片统一，所有行的数字上下对齐 —— */
+.metric-list {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 20px;
+}
+
+.metric-row {
+  min-height: 52px;
+  padding: 7px var(--form-row-inset);
+}
+
+.metric-row-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.metric-row-main strong,
+.metric-row-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-row-main strong {
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.metric-row-main small {
+  color: var(--xin-text-muted);
+  font-size: 11.5px;
+}
+
+.metric-value {
+  min-width: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  color: var(--xin-text-muted);
+  font-size: 12.5px;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 当前按哪列排，哪列的数字就是主角 */
+.metric-value.active {
+  color: var(--xin-text);
+  font-weight: 680;
+}
+
+.metric-value svg {
+  width: 12px;
+  height: 12px;
+}
+
+.send svg {
+  color: var(--xin-accent);
+}
+
+.receive svg {
+  color: #8b7fd8;
+}
+
+/* —— 服务：绿点 + 名字在左，描述靠右 —— */
+.service-name {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* UChip 本是头像角标，standalone 也照样往右上挪半个身位（Tailwind v4 的 translate 属性），归位才和文字居中 */
+.service-name :deep(.service-dot) {
+  translate: none;
+  background: var(--xin-success);
+  box-shadow: 0 0 6px rgb(var(--xin-success-rgb) / 0.6);
+}
+
+/* —— 存储：路径 + 百分比 / 占用条 / 文件系统 + 可用量，三层读下来 —— */
+.disk-row {
+  display: grid;
+  gap: 7px;
+}
+
+.disk-row-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.disk-row-line strong {
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.disk-row-line span {
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+}
+
+.disk-row.high .disk-row-line span {
+  color: var(--xin-warning-strong);
+}
+
+.disk-row.critical .disk-row-line span {
+  color: var(--xin-danger-strong);
+}
+
+.disk-row-line.muted small {
+  color: var(--xin-text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* —— 网络：上面两个大读数，下面一条大一号的走势 —— */
+.rate-row {
+  display: grid;
+  gap: 10px;
+}
+
+.rate-values {
+  display: flex;
+  gap: 28px;
+}
+
+.rate-values span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--xin-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rate-values strong {
+  margin-left: 4px;
+  color: var(--xin-text);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .usage-bar :deep(.bar-segment) {
+    transition: none;
+  }
+}

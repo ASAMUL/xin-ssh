@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import MetricSparkline from "../Monitor/MetricSparkline.vue";
 import MonitorMeter from "../Monitor/MonitorMeter.vue";
-import SystemInfoDrawer from "../Monitor/SystemInfoDrawer.vue";
+import SystemInfoModal from "../Monitor/SystemInfoModal.vue";
 import OsIconTile from "../ConnectionManager/OsIconTile.vue";
 import { useProfileStore } from "../../stores/profileStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -15,6 +15,9 @@ import {
   formatGibibytes,
   formatPercent,
   formatUptimeShort,
+  processName,
+  splitMemory,
+  usageLevel,
 } from "../../utils/formatMetrics";
 
 const PROCESS_ROW_LIMIT = 3;
@@ -27,7 +30,8 @@ const sessionStore = useSessionStore();
 const settingsStore = useSettingsStore();
 const { refresh: refreshSystemInfo } = useSystemInfoPolling(sessionStore, settingsStore);
 
-const isDrawerOpen = ref(false);
+const isDetailsOpen = ref(false);
+const detailsTab = ref("overview");
 const activeTab = ref("processes");
 
 const session = computed(() => sessionStore.activeSession);
@@ -59,21 +63,20 @@ const cpuCaption = computed(() => {
   if (load === undefined) return "";
   return t("monitor.loadCaption", { load: load.toFixed(2), cores: cores ?? "--" });
 });
-const cpuLevel = computed(() => (cpuPercent.value >= 90 ? "critical" : cpuPercent.value >= 80 ? "high" : "normal"));
+const cpuLevel = computed(() => usageLevel(cpuPercent.value));
 
 const memory = computed(() => systemInfo.value?.memory ?? null);
 const memoryCaption = computed(() => (memory.value?.totalBytes
   ? `${formatGibibytes(memory.value.usedBytes)} / ${formatGibibytes(memory.value.totalBytes)} GiB`
   : ""));
-// 已用 + 缓存 + 空闲正好等于总量（后端按 available 拆的），分段条能严丝合缝铺满；
-// 拿不到缓存（/proc/meminfo 缺 MemFree）就退回单段 + 文字说明
+// 拿不到缓存时 splitMemory 返回 null，MonitorMeter 退回单段 + 文字说明
 const memorySegments = computed(() => {
-  const { totalBytes, usedBytes, cacheBytes } = memory.value ?? {};
-  if (!totalBytes || usedBytes == null || cacheBytes == null) return null;
+  const parts = splitMemory(memory.value);
+  if (!parts) return null;
   return [
-    { key: "used", label: t("monitor.memoryUsed"), value: usedBytes },
-    { key: "cache", label: t("monitor.memoryCache"), value: cacheBytes },
-    { key: "free", label: t("monitor.memoryFree"), value: Math.max(totalBytes - usedBytes - cacheBytes, 0) },
+    { key: "used", label: t("monitor.memoryUsed"), value: parts.used },
+    { key: "cache", label: t("monitor.memoryCache"), value: parts.cache },
+    { key: "free", label: t("monitor.memoryFree"), value: parts.free },
   ].map((segment) => ({ ...segment, display: `${formatGibibytes(segment.value)} GiB` }));
 });
 
@@ -123,9 +126,9 @@ const menuItems = computed(() => [
   [
     {
       label: t("monitor.systemDetails"),
-      icon: "i-lucide-panel-right-open",
+      icon: "i-lucide-app-window",
       disabled: !isConnected.value,
-      onSelect: openDrawer,
+      onSelect: () => openDetails("overview"),
     },
     {
       label: t("monitor.refreshNow"),
@@ -152,20 +155,15 @@ const menuItems = computed(() => [
   ],
 ]);
 
-// 首页只隐藏工作区，传送到 body 的详情抽屉要随会话目标变化主动收起
+// 首页只隐藏工作区，传送到 body 的详情弹窗要随会话目标变化主动收起
 watch(() => [session.value?.id, session.value?.currentAttemptId], () => {
-  isDrawerOpen.value = false;
+  isDetailsOpen.value = false;
 });
 
-function openDrawer() {
-  isDrawerOpen.value = true;
+function openDetails(tab) {
+  detailsTab.value = tab;
+  isDetailsOpen.value = true;
   if (!systemInfo.value) refreshSystemInfo();
-}
-
-// ps 的 args 带完整路径和参数；概览只要一眼认出是谁，取可执行文件名
-function processName(command = "") {
-  const executable = command.trim().split(/\s+/)[0] ?? "";
-  return executable.split("/").pop() || command || "--";
 }
 </script>
 
@@ -286,26 +284,51 @@ function processName(command = "") {
             <ul v-if="processRows.length" class="monitor-rows">
               <li v-for="process in processRows" :key="process.id" :title="process.command">
                 <span class="monitor-row-name">{{ process.name }}</span>
-                <span class="monitor-row-bar"><i :style="{ transform: `scaleX(${process.ratio})` }"></i></span>
+                <UProgress
+                  :model-value="process.ratio * 100"
+                  size="xs"
+                  :ui="{ base: 'monitor-row-track', indicator: 'monitor-row-fill' }"
+                />
                 <strong>{{ process.value }}</strong>
               </li>
             </ul>
-            <p v-else class="monitor-empty">{{ t("monitor.noData") }}</p>
+            <UEmpty
+              v-else
+              size="xs"
+              variant="naked"
+              icon="i-lucide-activity"
+              :description="t('monitor.noData')"
+              :ui="{ root: 'monitor-empty' }"
+            />
           </template>
 
           <template v-else>
-            <p v-if="services === null" class="monitor-empty">{{ t("monitor.servicesUnsupported") }}</p>
+            <UEmpty
+              v-if="services === null"
+              size="xs"
+              variant="naked"
+              icon="i-lucide-server-off"
+              :description="t('monitor.servicesUnsupported')"
+              :ui="{ root: 'monitor-empty' }"
+            />
             <template v-else>
               <small class="monitor-activity-caption">
                 {{ t("monitor.runningServices", { count: services?.length ?? 0 }) }}
               </small>
               <ul v-if="serviceRows.length" class="monitor-rows services">
                 <li v-for="service in serviceRows" :key="service.name" :title="service.description">
-                  <i class="monitor-service-dot"></i>
+                  <UChip standalone color="success" size="sm" :ui="{ base: 'monitor-service-dot' }" />
                   <span class="monitor-row-name">{{ service.name }}</span>
                 </li>
               </ul>
-              <p v-else class="monitor-empty">{{ t("monitor.noServices") }}</p>
+              <UEmpty
+                v-else
+                size="xs"
+                variant="naked"
+                icon="i-lucide-circle-pause"
+                :description="t('monitor.noServices')"
+                :ui="{ root: 'monitor-empty' }"
+              />
             </template>
           </template>
 
@@ -316,7 +339,7 @@ function processName(command = "") {
             size="sm"
             trailing-icon="i-lucide-chevron-right"
             :label="t('monitor.viewAll')"
-            @click="openDrawer"
+            @click="openDetails(activeTab)"
           />
         </section>
       </template>
@@ -327,7 +350,7 @@ function processName(command = "") {
     </div>
   </aside>
 
-  <SystemInfoDrawer v-model:open="isDrawerOpen" :session="session" />
+  <SystemInfoModal v-model:open="isDetailsOpen" v-model:tab="detailsTab" :session="session" :os-icon="osIcon" />
 </template>
 
 <style scoped src="../../assets/css/host-monitor.css"></style>

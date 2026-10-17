@@ -6,6 +6,22 @@ export function clampPercent(value) {
   return Math.min(Math.max(Number(value) || 0, 0), 100);
 }
 
+// 超过 80% 转琥珀、90% 转红：占用高才需要注意，平时保持品牌色不喧宾夺主
+export function usageLevel(percent) {
+  const value = Number(percent);
+  if (value >= 90) return "critical";
+  if (value >= 80) return "high";
+  return "normal";
+}
+
+// 已用 + 缓存 + 空闲正好等于总量（后端按 available 拆的），分段条能严丝合缝铺满；
+// 拿不到缓存（/proc/meminfo 缺 MemFree）返回 null，调用方退回单段
+export function splitMemory(memory) {
+  const { totalBytes, usedBytes, cacheBytes } = memory ?? {};
+  if (!totalBytes || usedBytes == null || cacheBytes == null) return null;
+  return { used: usedBytes, cache: cacheBytes, free: Math.max(totalBytes - usedBytes - cacheBytes, 0) };
+}
+
 export function formatPercent(value) {
   if (value === null || value === undefined) return "--";
 
@@ -60,6 +76,21 @@ export function formatDateTime(value) {
     + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+// 只要时分秒：采样都是当天的事，日期是噪音
+export function formatClock(value, locale) {
+  if (!value) return "--";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+
+  return new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
+
 // 精确到分钟：详情抽屉里用
 export function formatUptime(seconds, t) {
   if (!seconds) return "--";
@@ -82,4 +113,13 @@ export function formatUptimeShort(seconds, t) {
   if (days > 0) return t("monitor.uptimeShortDays", { days, hours });
   if (hours > 0) return t("monitor.uptimeShortHours", { hours, minutes });
   return t("monitor.uptimeMinutes", { minutes });
+}
+
+// ps 的 args 带完整路径和参数；列表里只要一眼认出是谁，取可执行文件名
+export function processName(command = "") {
+  const trimmed = command.trim();
+  // 内核线程的 args 是方括号包着的名字（[kworker/R-kstrp]），里面的斜杠不是路径分隔
+  if (trimmed.startsWith("[")) return trimmed.replace(/^\[|\]$/g, "") || "--";
+  const executable = trimmed.split(/\s+/)[0] ?? "";
+  return executable.split("/").pop() || trimmed || "--";
 }

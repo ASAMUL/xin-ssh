@@ -8,6 +8,7 @@ import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { scaleOrdinal } from "@tanstack/charts/scales/ordinal";
 import { scalePoint } from "@tanstack/charts/scales/point";
 import { chartCurves } from "@nuxt/ui/utils/chart";
+import { formatClock } from "../../utils/formatMetrics";
 
 const props = defineProps({
   // metricHistory 的采样行（按 capturedAt 先后排好）
@@ -25,12 +26,6 @@ const TONE_COLORS = { rose: "var(--spark-rose)", violet: "var(--spark-violet)" }
 const AREA_GRADIENT = "spark-area";
 
 const { locale } = useI18n();
-const timeFormat = computed(() => new Intl.DateTimeFormat(locale.value, {
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-}));
 
 const colors = computed(() => props.categories.map(({ tone }) => TONE_COLORS[tone] ?? TONE_COLORS.rose));
 const ariaLabel = computed(() => props.categories.map(({ label }) => label).join(" / "));
@@ -117,10 +112,6 @@ function tooltipRows(points) {
     .map((category) => ({ category, point: points.find((point) => point.datum?.category === category.key) }))
     .filter(({ point }) => point);
 }
-
-function formatTime(value) {
-  return Number.isFinite(value) ? timeFormat.value.format(value) : "";
-}
 </script>
 
 <template>
@@ -133,7 +124,7 @@ function formatTime(value) {
     :ui="{ tooltip: 'spark-tooltip' }"
   >
     <template #tooltip="{ points }">
-      <p class="spark-tooltip-time">{{ formatTime(points[0]?.datum?.x) }}</p>
+      <p class="spark-tooltip-time">{{ formatClock(points[0]?.datum?.x, locale) }}</p>
       <div v-for="{ category, point } in tooltipRows(points)" :key="category.key" class="spark-tooltip-row">
         <i :style="{ backgroundColor: point.color }"></i>
         <span>{{ category.label }}</span>

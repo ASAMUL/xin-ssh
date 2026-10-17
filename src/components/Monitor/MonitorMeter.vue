@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import { clampPercent, formatPercent } from "../../utils/formatMetrics";
+import { clampPercent, formatPercent, usageLevel } from "../../utils/formatMetrics";
 
 const props = defineProps({
   label: { type: String, required: true },
@@ -24,13 +24,7 @@ const items = computed(() => (props.segments
   }))
   : [{ value: props.percent === null ? 0 : clampPercent(props.percent), ui: { indicator: "monitor-meter-fill used" } }]));
 
-// 超过 80% 转琥珀、90% 转红：占用高才需要注意，平时保持品牌色不喧宾夺主
-const level = computed(() => {
-  const value = Number(props.percent);
-  if (value >= 90) return "critical";
-  if (value >= 80) return "high";
-  return "normal";
-});
+const level = computed(() => usageLevel(props.percent));
 </script>
 
 <template>

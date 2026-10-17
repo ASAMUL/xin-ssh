@@ -250,19 +250,14 @@
   white-space: nowrap;
 }
 
-.monitor-row-bar {
+/* 行内条是 UProgress：轨道换成浅玻璃槽，填充沿用樱色渐变，弹簧缓动跟着读数伸缩 */
+.monitor-rows :deep(.monitor-row-track) {
   height: 5px;
-  overflow: hidden;
-  border-radius: 999px;
   background: rgb(var(--xin-ink-rgb) / 0.07);
 }
 
-.monitor-row-bar i {
-  height: 100%;
-  display: block;
-  border-radius: inherit;
+.monitor-rows :deep(.monitor-row-fill) {
   background: linear-gradient(90deg, #f4a8c5, var(--xin-accent));
-  transform-origin: left center;
   transition: transform 500ms var(--lg-spring);
 }
 
@@ -273,10 +268,10 @@
   text-align: right;
 }
 
-.monitor-service-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+/* UChip 默认带一圈底色描边，这里换成绿光：运行中的服务是「亮着的」。
+   它本是头像角标，standalone 也照样往右上挪半个身位（Tailwind v4 的 translate 属性），归位才和文字居中 */
+.monitor-rows :deep(.monitor-service-dot) {
+  translate: none;
   background: var(--xin-success);
   box-shadow: 0 0 6px rgb(var(--xin-success-rgb) / 0.6);
 }
@@ -316,10 +311,10 @@
   border-radius: var(--xin-radius);
 }
 
+/* UEmpty 默认的大内边距是给整页空状态的，栏里收紧 */
 .monitor-empty {
-  margin: 0;
-  color: var(--xin-text-muted);
-  font-size: 12px;
+  gap: 8px;
+  padding: 10px 0;
 }
 
 .monitor-error {
@@ -327,7 +322,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .monitor-row-bar i {
+  .monitor-rows :deep(.monitor-row-fill) {
     transition: none;
   }
 }
