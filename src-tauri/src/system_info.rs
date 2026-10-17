@@ -222,10 +222,13 @@ else
 fi
 
 section PS
+# CPU、内存各取前 15 再去重：详情弹窗的进程表能按任一列排序，两种排法的前排都得是真实排名。
+# 内存按 RSS 排而不是 %MEM：小机器上一大片进程的 %MEM 都是 0.0，并列时会随手捞进一堆内核线程；
+# 既不占 CPU 也没有 RSS 的（闲着的 kworker 之类）直接跳过
 {
-  ps -eo pid=,user=,pcpu=,pmem=,rss=,comm=,args= 2>/dev/null | sort -k3 -nr | head -n 6
-  ps -eo pid=,user=,pcpu=,pmem=,rss=,comm=,args= 2>/dev/null | sort -k4 -nr | head -n 6
-} | awk '!seen[$1]++' | head -n 10 || true
+  ps -eo pid=,user=,pcpu=,pmem=,rss=,comm=,args= 2>/dev/null | sort -k3 -nr | head -n 15
+  ps -eo pid=,user=,pcpu=,pmem=,rss=,comm=,args= 2>/dev/null | sort -k5 -nr | head -n 15
+} | awk '($3 > 0 || $5 > 0) && !seen[$1]++' | head -n 30 || true
 "#;
 
     // 非 login shell：避免每次采样都 source 远端 profile（nvm/conda 等会显著拖慢），PATH 在脚本内自补
