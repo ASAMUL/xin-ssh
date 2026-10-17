@@ -96,24 +96,24 @@ async function openWorkspaceDir() {
     <section class="settings-window liquid-sheet" :aria-label="t('settings.title')">
       <UTabs
         v-model="activeSection"
-        class="settings-tabs"
+        class="nav-window-tabs"
         orientation="vertical"
         variant="pill"
         :items="sectionItems"
         :ui="{
           root: 'items-stretch gap-0',
-          list: 'settings-nav',
-          trigger: 'settings-nav-item',
-          indicator: 'settings-nav-indicator',
-          content: 'settings-pane',
+          list: 'nav-window-nav',
+          trigger: 'nav-window-item',
+          indicator: 'nav-window-indicator',
+          content: 'nav-window-pane',
         }"
       >
         <template #list-leading>
-          <h2 class="settings-title">{{ t("settings.title") }}</h2>
+          <h2 class="nav-window-title">{{ t("settings.title") }}</h2>
         </template>
 
         <template #appearance>
-          <h3 class="settings-pane-title">{{ t("settings.appearance") }}</h3>
+          <h3 class="nav-window-pane-title">{{ t("settings.appearance") }}</h3>
           <section class="form-section">
             <div class="form-list">
               <div class="form-row form-row-split">
@@ -136,7 +136,7 @@ async function openWorkspaceDir() {
         </template>
 
         <template #terminal>
-          <h3 class="settings-pane-title">{{ t("settings.terminal") }}</h3>
+          <h3 class="nav-window-pane-title">{{ t("settings.terminal") }}</h3>
           <section class="form-section">
             <div class="form-list">
               <label class="form-row form-row-split">
@@ -177,7 +177,7 @@ async function openWorkspaceDir() {
         </template>
 
         <template #general>
-          <h3 class="settings-pane-title">{{ t("settings.general") }}</h3>
+          <h3 class="nav-window-pane-title">{{ t("settings.general") }}</h3>
           <section class="form-section">
             <div class="form-list">
               <div class="form-row form-row-split">
@@ -209,7 +209,7 @@ async function openWorkspaceDir() {
       </UTabs>
 
       <UButton
-        class="settings-close"
+        class="nav-window-close"
         color="neutral"
         variant="ghost"
         square

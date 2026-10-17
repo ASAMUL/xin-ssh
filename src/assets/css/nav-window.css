@@ -1,0 +1,104 @@
+/* ————————————————————————————————————————————————————————————
+   左导航窗口（macOS 系统设置的结构）
+   左边一列分类、右边当前分类的内容，由竖排的 UTabs 渲染。设置窗口和系统信息弹窗共用这一套，
+   两扇窗口看起来是同一个 App 里的；右边每一页用 form-list.css 的分组卡片。
+   写成全局样式（main.css 引入）：导航和内容区都是 UTabs 的内部元素，各组件的 scoped 样式够不着。
+
+   结构（类名经 UTabs 的 ui / class 挂上去）：
+     .nav-window-tabs           UTabs 根
+       .nav-window-nav          左列；#list-leading 里放 .nav-window-title
+         .nav-window-item       导航项   .nav-window-indicator 选中水滴
+       .nav-window-pane         右侧内容区，页首是 .nav-window-pane-title
+     .nav-window-close          右上角关闭按钮（放在窗口外壳里，不随内容滚动）
+   ———————————————————————————————————————————————————————————— */
+
+.nav-window-tabs {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+/* —— 左侧导航：比内容区略深的一条，选中项是樱色玻璃水滴（和顶栏、首页筛选一样） —— */
+.nav-window-nav {
+  width: 196px;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: 2px;
+  padding: 18px 10px;
+  border-right: 1px solid var(--xin-border-soft);
+  border-radius: 0;
+  background: rgb(var(--xin-ink-rgb) / 0.035);
+}
+
+.nav-window-title {
+  margin: 4px 10px 14px;
+  color: var(--xin-text);
+  font-size: 19px;
+  font-weight: 720;
+  letter-spacing: -0.2px;
+}
+
+.nav-window-item {
+  height: 34px;
+  /* pill 变体给每一项加了 grow：横排时是等分，竖排时会把每一项拉高到铺满整列 */
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 10px;
+  color: var(--xin-text-secondary);
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 560;
+}
+
+.nav-window-item:hover:not([data-state="active"]) {
+  color: var(--xin-text);
+  background: rgb(var(--xin-ink-rgb) / 0.05);
+}
+
+.nav-window-item[data-state="active"] {
+  color: var(--xin-accent-strong);
+}
+
+.nav-window-item [data-slot="leadingIcon"] {
+  width: 16px;
+  height: 16px;
+}
+
+.nav-window-indicator {
+  right: 10px;
+  left: 10px;
+  width: auto;
+  border-radius: 9px;
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
+}
+
+/* —— 右侧内容区：自己滚动，导航不动 —— */
+.nav-window-pane {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  padding: 22px 26px 26px;
+}
+
+.nav-window-pane-title {
+  margin: 0;
+  /* 右上角是关闭按钮，标题不能伸到它底下 */
+  padding-right: 40px;
+  color: var(--xin-text);
+  font-size: 20px;
+  font-weight: 720;
+  letter-spacing: -0.2px;
+}
+
+.nav-window-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+}
