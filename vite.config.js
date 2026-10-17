@@ -58,6 +58,13 @@ export default defineConfig(async () => ({
   osIconCollection(),
   ],
 
+  // main.js 用 addCollection 往 @iconify/vue 里注册整套离线图标，Nuxt UI 的 UIcon 又从它自己解析到的那份取图标。
+  // 两边版本一错开（升 Nuxt UI 时就发生过），pnpm 会装出两份、图标仓库各自独立：dev 下预构建按包名合成一份看不出来，
+  // 正式包里 UIcon 找不到图标就去请求 Iconify API，又被 CSP 拦下，图标整片空白。这里强制全项目只用根目录那一份
+  resolve: {
+    dedupe: ["@iconify/vue"],
+  },
+
   // 把体积大的三方库拆出主 chunk，避免 ~1MB 单文件（xterm / UI 库 / 其余依赖各一份）
   build: {
     rollupOptions: {
