@@ -65,6 +65,17 @@ const memory = computed(() => systemInfo.value?.memory ?? null);
 const memoryCaption = computed(() => (memory.value?.totalBytes
   ? `${formatGibibytes(memory.value.usedBytes)} / ${formatGibibytes(memory.value.totalBytes)} GiB`
   : ""));
+// 已用 + 缓存 + 空闲正好等于总量（后端按 available 拆的），分段条能严丝合缝铺满；
+// 拿不到缓存（/proc/meminfo 缺 MemFree）就退回单段 + 文字说明
+const memorySegments = computed(() => {
+  const { totalBytes, usedBytes, cacheBytes } = memory.value ?? {};
+  if (!totalBytes || usedBytes == null || cacheBytes == null) return null;
+  return [
+    { key: "used", label: t("monitor.memoryUsed"), value: usedBytes },
+    { key: "cache", label: t("monitor.memoryCache"), value: cacheBytes },
+    { key: "free", label: t("monitor.memoryFree"), value: Math.max(totalBytes - usedBytes - cacheBytes, 0) },
+  ].map((segment) => ({ ...segment, display: `${formatGibibytes(segment.value)} GiB` }));
+});
 
 // 概览只看根分区：它满了整台机器都会出问题，其余挂载点放在详情抽屉里
 const rootDisk = computed(() => {
@@ -218,7 +229,9 @@ function processName(command = "") {
         <MonitorMeter
           :label="t('monitor.memory')"
           :percent="memory?.usagePercent ?? null"
-          :caption="memoryCaption"
+          :segments="memorySegments"
+          :max="memory?.totalBytes"
+          :caption="memorySegments ? '' : memoryCaption"
           tone="rose"
         />
 

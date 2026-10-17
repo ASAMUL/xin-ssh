@@ -387,14 +387,24 @@ fn parse_meminfo(lines: &[String]) -> HashMap<String, u64> {
 
 fn parse_memory_info(meminfo: &HashMap<String, u64>) -> RemoteMemoryInfo {
     let total = meminfo.get("MemTotal").copied();
+    let free = meminfo.get("MemFree").copied();
     let available = meminfo.get("MemAvailable").copied().or_else(|| {
         Some(
-            meminfo.get("MemFree").copied().unwrap_or(0)
+            free.unwrap_or(0)
                 + meminfo.get("Buffers").copied().unwrap_or(0)
                 + meminfo.get("Cached").copied().unwrap_or(0),
         )
     });
-    memory_info_from_total_available(total, available)
+    // 缓存取 available - MemFree，而不是 free 命令的 buff/cache：后者含 shmem 等回收不了的页，
+    // 和 total - available 算出的「已用」叠起来会超过总量，分段条就对不上了
+    let cache = available
+        .zip(free)
+        .map(|(available, free)| available.saturating_sub(free));
+
+    RemoteMemoryInfo {
+        cache_bytes: cache,
+        ..memory_info_from_total_available(total, available)
+    }
 }
 
 fn parse_swap_info(meminfo: &HashMap<String, u64>) -> RemoteMemoryInfo {
@@ -419,6 +429,7 @@ fn memory_info_from_total_available(
         usage_percent: used
             .zip(total)
             .and_then(|(used, total)| percent_from_parts(used, total)),
+        cache_bytes: None,
     }
 }
 

@@ -760,6 +760,8 @@ pub struct RemoteMemoryInfo {
     pub used_bytes: Option<u64>,
     pub available_bytes: Option<u64>,
     pub usage_percent: Option<f64>,
+    // 概览的内存分段条要「已用 / 缓存 / 空闲」三段；交换分区没有缓存一说，恒为 None
+    pub cache_bytes: Option<u64>,
 }
 
 #[derive(Clone, Serialize)]

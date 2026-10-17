@@ -10,7 +10,19 @@ const props = defineProps({
   caption: { type: String, default: "" },
   // rose = 内存，violet = 磁盘；同一栏里两种颜色，扫一眼就能分开
   tone: { type: String, default: "rose" },
+  // 分段明细 [{ key: "used" | "cache" | "free", label, value, display }]，value 与 max 同单位；
+  // 不传就只画一段，长度取 percent
+  segments: { type: Array, default: null },
+  max: { type: Number, default: 100 },
 });
+
+// key 落到 class 上，由 CSS 决定每段的液柱材质；不传 color，免得 ProgressGroup 写内联背景色压掉渐变
+const items = computed(() => (props.segments
+  ? props.segments.map((segment) => ({
+    ...segment,
+    ui: { indicator: `monitor-meter-fill ${segment.key}`, itemLeadingDot: `monitor-meter-dot ${segment.key}` },
+  }))
+  : [{ value: props.percent === null ? 0 : clampPercent(props.percent), ui: { indicator: "monitor-meter-fill used" } }]));
 
 // 超过 80% 转琥珀、90% 转红：占用高才需要注意，平时保持品牌色不喧宾夺主
 const level = computed(() => {
@@ -30,11 +42,20 @@ const level = computed(() => {
       </span>
       <strong>{{ formatPercent(percent) }}</strong>
     </header>
-    <UProgress
-      :model-value="percent === null ? 0 : clampPercent(percent)"
-      size="sm"
-      :ui="{ root: 'monitor-meter-root', base: 'monitor-meter-track', indicator: 'monitor-meter-fill' }"
-    />
+    <UProgressGroup
+      :items="items"
+      :max="segments ? max : 100"
+      :ui="{
+        base: 'monitor-meter-track',
+        segment: 'monitor-meter-segment',
+        list: 'monitor-meter-legend',
+        itemLabel: 'monitor-meter-legend-label',
+        itemTrailing: 'monitor-meter-legend-value',
+      }"
+    >
+      <!-- 插槽只在分段时给：ProgressGroup 一见到 item 插槽就渲染图例，单段的磁盘条用不着 -->
+      <template v-if="segments" #item-trailing="{ item }">{{ item.display }}</template>
+    </UProgressGroup>
     <small v-if="caption">{{ caption }}</small>
   </section>
 </template>
