@@ -52,7 +52,7 @@ const uptimeLabel = computed(() => (systemInfo.value?.uptimeSeconds
   : ""));
 
 const cpuPercent = computed(() => systemInfo.value?.cpu?.usagePercent ?? null);
-const cpuSeries = computed(() => [{ tone: "rose", values: history.value.map((sample) => sample.cpuPercent) }]);
+const cpuCategories = computed(() => [{ key: "cpuPercent", label: t("monitor.cpu"), tone: "rose" }]);
 const cpuCaption = computed(() => {
   const load = systemInfo.value?.loadAverage?.[0];
   const cores = systemInfo.value?.cpu?.coreCount;
@@ -80,9 +80,9 @@ const diskCaption = computed(() => (rootDisk.value?.totalBytes
 
 const primaryNetwork = computed(() => systemInfo.value?.networks?.[0] ?? null);
 const latestSample = computed(() => history.value.at(-1) ?? null);
-const networkSeries = computed(() => [
-  { tone: "rose", values: history.value.map((sample) => sample.txBytesPerSecond) },
-  { tone: "violet", values: history.value.map((sample) => sample.rxBytesPerSecond) },
+const networkCategories = computed(() => [
+  { key: "txBytesPerSecond", label: t("monitor.send"), tone: "rose" },
+  { key: "rxBytesPerSecond", label: t("monitor.receive"), tone: "violet" },
 ]);
 
 const tabItems = computed(() => [
@@ -205,7 +205,13 @@ function processName(command = "") {
             <span>{{ t("monitor.cpu") }}</span>
             <strong>{{ formatPercent(cpuPercent) }}</strong>
           </header>
-          <MetricSparkline :series="cpuSeries" :max="100" :height="46" />
+          <MetricSparkline
+            :samples="history"
+            :categories="cpuCategories"
+            :max="100"
+            :height="46"
+            :format="formatPercent"
+          />
           <small v-if="cpuCaption">{{ cpuCaption }}</small>
         </section>
 
@@ -242,7 +248,12 @@ function processName(command = "") {
             </span>
             <strong>{{ formatBytesPerSecond(latestSample?.rxBytesPerSecond) }}</strong>
           </div>
-          <MetricSparkline :series="networkSeries" :height="30" />
+          <MetricSparkline
+            :samples="history"
+            :categories="networkCategories"
+            :height="30"
+            :format="formatBytesPerSecond"
+          />
         </section>
 
         <section class="monitor-activity">

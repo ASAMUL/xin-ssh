@@ -1,86 +1,46 @@
 /* 概览里的走势图：樱色主线 + 渐隐面积，第二条（网络接收）用藕荷色细线，
-   末端一颗带光晕的点标出「现在」。 */
+   末端一颗带光晕的点标出「现在」。色值经 UChart 的 colors 映射成 --ts-chart-N 交给 TanStack Charts。 */
 .metric-sparkline {
   --spark-rose: var(--xin-accent);
   --spark-violet: #8b7fd8;
-  position: relative;
-  width: 100%;
+  --spark-guide: rgb(var(--xin-ink-rgb) / 0.08);
+  --spark-guide-strong: rgb(var(--xin-ink-rgb) / 0.22);
 }
 
 .dark .metric-sparkline {
   --spark-violet: #a99cf0;
 }
 
-.metric-sparkline svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-  overflow: visible;
+/* 全局的 liquid-tooltip 是单行胶囊；这里要放时间 + 多行读数，圆角收小才不会切到文字 */
+.metric-sparkline :deep(.spark-tooltip) {
+  padding: 7px 10px;
+  border-radius: 12px;
+  font-size: 11.5px;
 }
 
-.baseline {
-  stroke: rgb(var(--xin-ink-rgb) / 0.08);
-  stroke-width: 1;
-  stroke-dasharray: 2 3;
-  vector-effect: non-scaling-stroke;
+.spark-tooltip-time {
+  color: var(--xin-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.line {
-  fill: none;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
+.spark-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--xin-text-muted);
 }
 
-.line.rose {
-  stroke: var(--spark-rose);
-}
-
-.line.violet {
-  stroke: var(--spark-violet);
-  stroke-width: 1.4;
-}
-
-.stop-top.rose {
-  stop-color: var(--spark-rose);
-  stop-opacity: 0.3;
-}
-
-.stop-top.violet {
-  stop-color: var(--spark-violet);
-  stop-opacity: 0.26;
-}
-
-.stop-bottom {
-  stop-color: var(--spark-rose);
-  stop-opacity: 0;
-}
-
-.last-dot {
-  position: absolute;
+.spark-tooltip-row i {
   width: 7px;
   height: 7px;
-  border: 1.5px solid var(--xin-canvas-raised);
+  flex-shrink: 0;
   border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition:
-    top 400ms var(--lg-spring),
-    left 400ms var(--lg-spring);
 }
 
-.last-dot.rose {
-  background: var(--spark-rose);
-  box-shadow: 0 0 0 3px rgb(var(--xin-accent-rgb) / 0.18), 0 0 10px rgb(var(--xin-accent-rgb) / 0.5);
-}
-
-.last-dot.violet {
-  background: var(--spark-violet);
-  box-shadow: 0 0 8px rgb(139 127 216 / 0.5);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .last-dot {
-    transition: none;
-  }
+.spark-tooltip-row strong {
+  margin-left: auto;
+  padding-left: 14px;
+  color: var(--xin-text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }

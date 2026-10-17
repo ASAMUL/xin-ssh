@@ -1,89 +1,146 @@
 <script setup>
-import { computed, useId } from "vue";
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { areaY, defineChart, dot, lineY, ruleY } from "@tanstack/charts";
+import { crosshair } from "@tanstack/charts/crosshair";
+import { decorative } from "@tanstack/charts/mark/decorative";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { scaleOrdinal } from "@tanstack/charts/scales/ordinal";
+import { scalePoint } from "@tanstack/charts/scales/point";
+import { chartCurves } from "@nuxt/ui/utils/chart";
 
 const props = defineProps({
-  // [{ values: number[], tone: "rose" | "violet" }]；第一条画面积，其余只画线
-  series: { type: Array, required: true },
+  // metricHistory 的采样行（按 capturedAt 先后排好）
+  samples: { type: Array, required: true },
+  // [{ key, label, tone: "rose" | "violet" }]；第一条画渐隐面积，其余只画线
+  categories: { type: Array, required: true },
   // 纵轴上限；不传就按数据自适应（网络速率没有固定上限）
   max: { type: Number, default: null },
   height: { type: Number, default: 44 },
+  // 悬停提示里读数的格式
+  format: { type: Function, default: (value) => String(value) },
 });
 
-// viewBox 横向固定 100，preserveAspectRatio="none" 让它随栏宽拉伸；线宽用 non-scaling-stroke 保持不变
-const WIDTH = 100;
-const PADDING_TOP = 4;
-const gradientId = `spark-${useId()}`;
+const TONE_COLORS = { rose: "var(--spark-rose)", violet: "var(--spark-violet)" };
+const AREA_GRADIENT = "spark-area";
 
+const { locale } = useI18n();
+const timeFormat = computed(() => new Intl.DateTimeFormat(locale.value, {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+}));
+
+const colors = computed(() => props.categories.map(({ tone }) => TONE_COLORS[tone] ?? TONE_COLORS.rose));
+const ariaLabel = computed(() => props.categories.map(({ label }) => label).join(" / "));
+
+const series = computed(() => props.categories.map(({ key }) => props.samples
+  .filter((sample) => Number.isFinite(sample[key]))
+  .map((sample) => ({ x: sample.capturedAt, y: sample[key], category: key }))));
+
+// 上限自己算、不交给 scaleLinear 推断：CPU 要钉死 0–100，否则 3% 的读数也会顶满整张图；
+// 网络留 20% 头部空间，全 0 时退成 1，免得值域塌成一个点
 const ceiling = computed(() => {
   if (props.max) return props.max;
-  const peak = Math.max(0, ...props.series.flatMap(({ values }) => values.filter(Number.isFinite)));
+  const peak = Math.max(0, ...series.value.flat().map(({ y }) => y));
   return peak > 0 ? peak * 1.2 : 1;
 });
 
-const paths = computed(() => props.series.map(({ values, tone }, index) => {
-  const points = toPoints(values);
-  const line = smoothPath(points);
-  const area = index === 0 && points.length > 1
-    ? `${line} L ${points.at(-1).x} ${props.height} L ${points[0].x} ${props.height} Z`
-    : "";
-  return { tone, line, area, last: points.at(-1) ?? null };
-}));
+const definition = computed(() => {
+  const keys = props.categories.map(({ key }) => key);
+  const latest = series.value.map((rows) => rows.at(-1)).filter(Boolean);
+  const curve = chartCurves.monotone;
 
-function toPoints(values) {
-  const finite = values.map((value) => (Number.isFinite(value) ? value : null));
-  const step = WIDTH / Math.max(finite.length - 1, 1);
-  const usable = props.height - PADDING_TOP;
-  return finite
-    .map((value, index) => (value === null ? null : {
-      x: Number((index * step).toFixed(2)),
-      y: Number((props.height - Math.min(value / ceiling.value, 1) * usable).toFixed(2)),
-    }))
-    .filter(Boolean);
+  return defineChart({
+    marks: [
+      ruleY([0], { stroke: "var(--spark-guide)", strokeDasharray: "2 3" }),
+      ...series.value.flatMap((rows, index) => [
+        ...(index === 0
+          ? [decorative(areaY(rows, {
+            x: "x",
+            y1: 0,
+            y2: "y",
+            z: "category",
+            color: "category",
+            curve,
+            fill: `url(#${AREA_GRADIENT})`,
+            fillOpacity: 1,
+          }))]
+          : []),
+        lineY(rows, { x: "x", y: "y", z: "category", color: "category", curve, strokeWidth: index === 0 ? 1.8 : 1.4 }),
+      ]),
+      // 末端标出「现在」：外圈半透明光晕 + 实心点，描边取卡片底色，把点从线上抠出来
+      decorative(dot(latest, { x: "x", y: "y", color: "category", r: 6, fillOpacity: 0.18, strokeWidth: 0 })),
+      decorative(dot(latest, {
+        x: "x",
+        y: "y",
+        color: "category",
+        r: 3.5,
+        stroke: "var(--xin-canvas-raised)",
+        strokeWidth: 1.5,
+      })),
+      crosshair({ x: { stroke: "var(--spark-guide-strong)", strokeDasharray: "2 3" }, y: false }),
+    ],
+    guides: false,
+    // 上、右留出光晕半径：顶格的读数和最新那颗点，否则会被 SVG 边界切掉一半
+    margin: { top: 6, right: 6, bottom: 1, left: 1 },
+    scales: {
+      x: { scale: () => scalePoint().padding(0) },
+      y: { scale: scaleLinear().domain([0, ceiling.value]) },
+    },
+    color: {
+      scale: scaleOrdinal().domain(keys).range(keys.map((_, index) => `var(--ts-chart-${index + 1})`)),
+    },
+    gradients: [{
+      id: AREA_GRADIENT,
+      x1: 0,
+      y1: 0,
+      x2: 0,
+      y2: 1,
+      stops: [
+        { offset: 0, color: "var(--ts-chart-1)", opacity: 0.3 },
+        { offset: 1, color: "var(--ts-chart-1)", opacity: 0 },
+      ],
+    }],
+    focus: "group-x",
+    // 刚连上只有两三个采样时点距很大，默认 48px 的捕捉范围会在点之间留出悬停死区
+    maxFocusDistance: Number.POSITIVE_INFINITY,
+    // 每轮采样整条线左移一格，开动画才是「流过去」，而不是一帧一帧地跳
+    svgAnimation: { duration: 400, easing: "ease-out", respectReducedMotion: true },
+  });
+});
+
+// 按 categories 的顺序排：发送在上、接收在下，和上方读数的顺序一致
+function tooltipRows(points) {
+  return props.categories
+    .map((category) => ({ category, point: points.find((point) => point.datum?.category === category.key) }))
+    .filter(({ point }) => point);
 }
 
-// Catmull-Rom 转三次贝塞尔：折线在 5 秒一个点的密度下太「机械」，平滑后更像读数在流动
-function smoothPath(points) {
-  if (!points.length) return "";
-  if (points.length === 1) return `M 0 ${points[0].y} L ${WIDTH} ${points[0].y}`;
-
-  let path = `M ${points[0].x} ${points[0].y}`;
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const previous = points[index - 1] ?? points[index];
-    const current = points[index];
-    const next = points[index + 1];
-    const after = points[index + 2] ?? next;
-    const control1 = { x: current.x + (next.x - previous.x) / 6, y: current.y + (next.y - previous.y) / 6 };
-    const control2 = { x: next.x - (after.x - current.x) / 6, y: next.y - (after.y - current.y) / 6 };
-    path += ` C ${control1.x.toFixed(2)} ${control1.y.toFixed(2)}, ${control2.x.toFixed(2)} ${control2.y.toFixed(2)}, ${next.x} ${next.y}`;
-  }
-  return path;
+function formatTime(value) {
+  return Number.isFinite(value) ? timeFormat.value.format(value) : "";
 }
 </script>
 
 <template>
-  <div class="metric-sparkline" :style="{ height: `${height}px` }" aria-hidden="true">
-    <svg :viewBox="`0 0 ${WIDTH} ${height}`" preserveAspectRatio="none">
-      <defs>
-        <linearGradient :id="gradientId" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" class="stop-top" :class="paths[0]?.tone" />
-          <stop offset="100%" class="stop-bottom" :class="paths[0]?.tone" />
-        </linearGradient>
-      </defs>
-      <line class="baseline" x1="0" :y1="height - 0.5" :x2="WIDTH" :y2="height - 0.5" />
-      <template v-for="(path, index) in paths" :key="index">
-        <path v-if="path.area" class="area" :d="path.area" :fill="`url(#${gradientId})`" />
-        <path v-if="path.line" class="line" :class="path.tone" :d="path.line" />
-      </template>
-    </svg>
-    <!-- 末端的发光点用 HTML 画：SVG 被横向拉伸后圆会变成椭圆 -->
-    <span
-      v-for="(path, index) in paths.filter((item) => item.last)"
-      :key="`dot-${index}`"
-      class="last-dot"
-      :class="path.tone"
-      :style="{ left: `${path.last.x}%`, top: `${path.last.y}px` }"
-    ></span>
-  </div>
+  <UChart
+    class="metric-sparkline"
+    :definition="definition"
+    :colors="colors"
+    :height="height"
+    :aria-label="ariaLabel"
+    :ui="{ tooltip: 'spark-tooltip' }"
+  >
+    <template #tooltip="{ points }">
+      <p class="spark-tooltip-time">{{ formatTime(points[0]?.datum?.x) }}</p>
+      <div v-for="{ category, point } in tooltipRows(points)" :key="category.key" class="spark-tooltip-row">
+        <i :style="{ backgroundColor: point.color }"></i>
+        <span>{{ category.label }}</span>
+        <strong>{{ format(point.datum.y) }}</strong>
+      </div>
+    </template>
+  </UChart>
 </template>
 
 <style scoped src="../../assets/css/metric-sparkline.css"></style>
