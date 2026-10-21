@@ -65,20 +65,11 @@ export default defineConfig(async () => ({
     dedupe: ["@iconify/vue"],
   },
 
-  // 把体积大的三方库拆出主 chunk，避免 ~1MB 单文件（xterm / UI 库 / 其余依赖各一份）
+  // 不再用 manualChunks 手动拆包：按包名硬拆会让 ui / vendor 两个 chunk 互相 import，
+  // 入口先加载 vendor 时 ui 抢在 vendor 初始化前执行，触发 TDZ 报错整页白屏（0.1.1 就是这么挂的）。
+  // Rollup 自动分包能保证执行顺序；Tauri 从本地磁盘加载，单个大 chunk 没有网络成本，拆了也是启动时全量预加载。
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return undefined;
-          if (id.includes("@xterm")) return "xterm";
-          if (id.includes("@nuxt/ui") || id.includes("reka-ui") || id.includes("tailwind")) {
-            return "ui";
-          }
-          return "vendor";
-        },
-      },
-    },
+    chunkSizeWarningLimit: 5000,
     target: 'es2021',
   },
 
