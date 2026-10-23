@@ -255,6 +255,11 @@
   background: rgb(var(--xin-fill-rgb) / 0.4);
 }
 
+/* 可聚焦只是为了点空白处后 Ctrl+V 认得出焦点在文件面板里，不需要焦点框 */
+.file-workbench:focus {
+  outline: none;
+}
+
 /* 占用分析的状态条插在表头上面，多占一行 */
 .file-workbench.analyzing {
   grid-template-rows: auto auto minmax(0, 1fr);

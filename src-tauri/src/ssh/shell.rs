@@ -20,7 +20,7 @@ use crate::sftp::ops::{
     create_directory_on_session, create_file_on_session,
     chmod_path_on_session, copy_path_on_session, list_directory_on_session, read_file_text_on_session, rename_path_on_session,
     resolve_home_on_session, stat_path_on_session,
-    stream_directory_on_session, write_file_text_on_session,
+    stream_directory_on_session, write_file_bytes_on_session, write_file_text_on_session,
 };
 use crate::sftp::transfer::{
     remove_transfer_cancellation, run_download_transfer, run_upload_transfer,
@@ -346,6 +346,16 @@ async fn run_terminal_shell(
                     } => {
                         cached_sftp.spawn(responder, true, |sftp| async move {
                             write_file_text_on_session(sftp, &path, &content, &expected_version, &backup_path).await
+                        });
+                    }
+                    TerminalControl::WriteFileBytes {
+                        path,
+                        content,
+                        overwrite,
+                        responder,
+                    } => {
+                        cached_sftp.spawn(responder, true, move |sftp| async move {
+                            write_file_bytes_on_session(&sftp, &path, &content, overwrite).await
                         });
                     }
                     TerminalControl::RenamePath {

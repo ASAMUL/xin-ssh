@@ -8,6 +8,7 @@ import {
   listRemoteDirectory,
   renameRemotePath,
   streamRemoteDirectory,
+  writeRemoteFileBytes,
 } from "../services/workspaceApi";
 import {
   DEFAULT_REMOTE_PATH,
@@ -267,6 +268,15 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
         sessionId: session.id,
         path: filePath,
       });
+      if (!this.isCurrentState(session.id, state)) return;
+      await this.refreshDirectory(session);
+    },
+    // 剪贴板粘贴：截图、文字直接写成远程文件
+    async writeFileBytes(session, filePath, bytes, overwrite) {
+      const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
+
+      await writeRemoteFileBytes({ sessionId: session.id, path: filePath, bytes, overwrite });
       if (!this.isCurrentState(session.id, state)) return;
       await this.refreshDirectory(session);
     },

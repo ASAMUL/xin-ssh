@@ -181,6 +181,26 @@ export function startDiskUsage(request) {
   return invoke("start_disk_usage", { request });
 }
 
+export function readClipboard() {
+  return invoke("read_clipboard");
+}
+
+// 原始字节：前 8 字节是宽高，后面是 RGBA 像素
+export function readClipboardImage() {
+  return invoke("read_clipboard_image");
+}
+
+// 内容按原始字节传；请求头只能放 ASCII，会话和路径都编码一下
+export function writeRemoteFileBytes({ sessionId, path, bytes, overwrite }) {
+  return invoke("write_remote_file_bytes", bytes, {
+    headers: {
+      "x-session-id": encodeURIComponent(sessionId),
+      "x-remote-path": encodeURIComponent(path),
+      "x-overwrite": overwrite ? "1" : "0",
+    },
+  });
+}
+
 export function startRemoteCompress(request) {
   return invoke("start_remote_compress", { request });
 }

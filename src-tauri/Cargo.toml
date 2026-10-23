@@ -36,6 +36,11 @@ tokio = { version = "1.52.3", features = ["fs", "io-util", "macros", "net", "syn
 tokio-util = { version = "0.7", features = ["rt"] }
 ring = "0.17.14"
 tauri-plugin-clipboard-manager = "2.3.2"
+# 文件面板 Ctrl+V：读剪贴板里复制的文件列表和截图（clipboard-manager 插件只给文字和图片，不给文件列表）。
+# 插件本身就依赖它，不额外下载
+arboard = "3.6"
+# 粘贴存文件时远程路径经请求头传，前端 encodeURIComponent，这里解码
+percent-encoding = "2"
 
 [profile.release]
 codegen-units = 4

@@ -1,4 +1,5 @@
 mod background;
+mod clipboard;
 mod credentials;
 mod error;
 mod models;
@@ -83,6 +84,9 @@ pub fn run() {
             ssh::agent::list_agent_identities,
             ssh::interactive::respond_authentication,
             sftp::ops::write_remote_file_text,
+            sftp::ops::write_remote_file_bytes,
+            clipboard::read_clipboard,
+            clipboard::read_clipboard_image,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

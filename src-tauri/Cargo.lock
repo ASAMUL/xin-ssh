@@ -6631,8 +6631,10 @@ checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 name = "xin-ssh"
 version = "0.1.2"
 dependencies = [
+ "arboard",
  "filetime",
  "futures",
+ "percent-encoding",
  "ring",
  "russh",
  "russh-sftp",

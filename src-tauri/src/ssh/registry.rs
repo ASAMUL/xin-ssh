@@ -89,6 +89,12 @@ pub(crate) enum TerminalControl {
         backup_path: String,
         responder: oneshot::Sender<Result<String, AppError>>,
     },
+    WriteFileBytes {
+        path: String,
+        content: Vec<u8>,
+        overwrite: bool,
+        responder: oneshot::Sender<Result<(), AppError>>,
+    },
     RenamePath {
         from_path: String,
         to_path: String,
@@ -403,6 +409,23 @@ impl TerminalRegistry {
                 backup_path,
                 responder,
             })
+            .map_err(|_| not_accepting("file"))?;
+
+        receiver.await.map_err(|_| request_canceled("writeFile"))?
+    }
+
+    pub(crate) async fn write_file_bytes(
+        &self,
+        session_id: &str,
+        path: String,
+        content: Vec<u8>,
+        overwrite: bool,
+    ) -> Result<(), AppError> {
+        let sender = self.sender_for(session_id)?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::WriteFileBytes { path, content, overwrite, responder })
             .map_err(|_| not_accepting("file"))?;
 
         receiver.await.map_err(|_| request_canceled("writeFile"))?

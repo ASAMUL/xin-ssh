@@ -4,9 +4,11 @@ use std::sync::{
 };
 use std::io::SeekFrom;
 
+use percent_encoding::percent_decode_str;
 use russh::client;
 use russh_sftp::client::{error::Error as SftpError, RawSftpSession, SftpSession};
-use russh_sftp::protocol::{OpenFlags, StatusCode};
+use russh_sftp::protocol::{FileAttributes, OpenFlags, StatusCode};
+use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Mutex as AsyncMutex;
@@ -32,6 +34,8 @@ const DIRECTORY_EVENT: &str = "directory-event";
 const MAX_EDITABLE_FILE_BYTES: u64 = 5 * 1024 * 1024;
 // 与 transfer.rs 的传输缓冲一致，分块写避免单次 SFTP 包过大
 const EDITOR_WRITE_CHUNK_BYTES: usize = 256 * 1024;
+// 剪贴板粘贴的内容整份在内存和 IPC 里走一趟，4K 截图也就几兆，再大就该走传输
+const MAX_PASTED_FILE_BYTES: usize = 64 * 1024 * 1024;
 
 fn editable_file_too_large_error() -> AppError {
     let limit_mb = MAX_EDITABLE_FILE_BYTES / (1024 * 1024);
@@ -182,6 +186,41 @@ pub async fn write_remote_file_text(
             error
         }
     })
+}
+
+// 剪贴板里的截图、文字直接存成远程文件。内容按原始字节传，不落本地临时文件；
+// 会话和路径放在请求头里（路径经 encodeURIComponent，请求头只能放 ASCII）
+#[tauri::command]
+pub async fn write_remote_file_bytes(
+    registry: State<'_, TerminalRegistry>,
+    request: Request<'_>,
+) -> Result<(), AppError> {
+    let InvokeBody::Raw(content) = request.body() else {
+        return Err(required("content"));
+    };
+    let header = |name: &str| -> Option<String> {
+        let value = request.headers().get(name)?.to_str().ok()?;
+        Some(percent_decode_str(value).decode_utf8().ok()?.into_owned())
+    };
+    let session_id = header("x-session-id")
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| required("sessionId"))?;
+    let path = header("x-remote-path")
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| required("remotePath"))?;
+    let overwrite = header("x-overwrite").as_deref() == Some("1");
+    if content.len() > MAX_PASTED_FILE_BYTES {
+        let limit_mb = MAX_PASTED_FILE_BYTES / (1024 * 1024);
+        return Err(AppError::new(codes::FILE_TOO_LARGE, format!("Content is too large (limit {limit_mb} MB)"))
+            .with("limitMb", limit_mb));
+    }
+
+    timeout(
+        Duration::from_secs(60),
+        registry.write_file_bytes(&session_id, normalize_remote_path(&path), content.clone(), overwrite),
+    )
+    .await
+    .map_err(|_| modification_timeout("writeFile", 60))?
 }
 
 #[tauri::command]
@@ -599,6 +638,46 @@ async fn write_editor_bytes(file: &mut russh_sftp::client::fs::File, path: &str,
     file.sync_all()
         .await
         .map_err(|error| sftp_error(error, path))
+}
+
+// 新文件独占创建，绝不静默覆盖；用户确认覆盖时也只覆盖普通文件，lstat 不顺着软链接写到别处
+pub(crate) async fn write_file_bytes_on_session(
+    sftp: &SftpSession,
+    path: &str,
+    content: &[u8],
+    overwrite: bool,
+) -> Result<(), AppError> {
+    let path = normalize_remote_path(path);
+    if path == "/" {
+        return Err(root_forbidden("writeFile"));
+    }
+
+    let existing = match sftp.symlink_metadata(path.clone()).await {
+        Ok(metadata) => Some(metadata),
+        Err(SftpError::Status(status)) if status.status_code == StatusCode::NoSuchFile => None,
+        Err(error) => return Err(sftp_error(error, &path)),
+    };
+    let flags = match existing {
+        None => OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
+        Some(_) if !overwrite => return Err(remote_target_exists(&path)),
+        Some(metadata) if !metadata.file_type().is_file() => {
+            return Err(AppError::new(codes::REMOTE_NOT_REGULAR_FILE, "Only regular files can be overwritten")
+                .with("path", &path))
+        }
+        Some(_) => OpenFlags::TRUNCATE | OpenFlags::WRITE,
+    };
+    // 和上传一致：新文件 644
+    let mut attributes = FileAttributes::empty();
+    attributes.permissions = Some(0o644);
+    let mut file = sftp
+        .open_with_flags_and_attributes(path.clone(), flags, attributes)
+        .await
+        .map_err(|error| sftp_error(error, &path))?;
+
+    for chunk in content.chunks(EDITOR_WRITE_CHUNK_BYTES) {
+        file.write_all(chunk).await.map_err(|error| remote_io_error(error, &path))?;
+    }
+    file.shutdown().await.map_err(|error| remote_io_error(error, &path))
 }
 
 // metadata 跟随软链接：指向目录的软链接按目录处理

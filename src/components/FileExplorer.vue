@@ -5,7 +5,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useVirtualizer } from "@tanstack/vue-virtual";
 import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
+import { useToast } from "@nuxt/ui/composables";
 import FilePermissionsEditor from "./FilePermissionsEditor.vue";
+import ClipboardPasteDialog from "./FileExplorer/ClipboardPasteDialog.vue";
 import DiskUsageSummary from "./FileExplorer/DiskUsageSummary.vue";
 import { useDiskUsageStore } from "../stores/diskUsageStore";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
@@ -15,6 +17,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
 import { useSessionStore } from "../stores/sessionStore";
+import { readClipboard } from "../services/workspaceApi";
 import { TRANSFER_CONFLICT_CODES, hasErrorCode, localizeError } from "../utils/appError";
 import { formatPathsForShell, joinRemotePath, parentRemotePath, quoteRemotePathForShell } from "../utils/remotePath";
 import { TERMINAL_CWD_STATUS } from "../utils/terminalCwd";
@@ -37,6 +40,7 @@ const props = defineProps({
 const emit = defineEmits(["insert-terminal-text"]);
 
 const { t, locale } = useI18n();
+const toast = useToast();
 const fileExplorerStore = useFileExplorerStore();
 const diskUsageStore = useDiskUsageStore();
 const fileOperationStore = useFileOperationStore();
@@ -81,6 +85,12 @@ const remoteOperationDialog = reactive({
   isSubmitting: false,
 });
 let showOperationsAfterDelete = false;
+// Ctrl+V 粘贴截图 / 文字时的保存弹窗；复制的文件不进弹窗，直接上传
+const pasteDialog = reactive({
+  open: false,
+  content: null,
+  directory: "/",
+});
 const conflictDialog = reactive({
   open: false,
   taskId: null,
@@ -343,6 +353,12 @@ const contextMenuItems = computed(() => {
         onSelect: chooseUploadFolder,
       },
       {
+        label: t("paste.action"),
+        icon: "i-lucide-clipboard-paste",
+        disabled: !canTransfer.value,
+        onSelect: pasteFromClipboard,
+      },
+      {
         label: t("files.newFolder"),
         icon: "i-lucide-folder-plus",
         disabled: !canTransfer.value,
@@ -569,6 +585,7 @@ watch(() => [props.activeSession?.id, props.activeSession?.currentAttemptId], ()
   deleteDialog.open = false;
   closeRemoteOperationDialog(true);
   conflictDialog.open = false;
+  pasteDialog.open = false;
   contextMenuEntry.value = null;
   treeContextNode.value = null;
   isDragOver.value = false;
@@ -865,6 +882,35 @@ async function downloadEntries(entries) {
     if (!localDir) return;
 
     await transferStore.downloadEntries(props.activeSession, remoteEntries, localDir);
+  } catch (error) {
+    uiStore.setError(error);
+  }
+}
+
+// 剪贴板里是复制的文件就直接上传；是截图或文字就弹窗起个名字，存成远程文件
+async function pasteFromClipboard() {
+  closeContextMenu();
+  if (!canTransfer.value) return;
+
+  try {
+    const content = await readClipboard();
+    if (content.files.length) {
+      await startUploadPaths(content.files);
+      return;
+    }
+    if (!content.text && !content.hasImage) {
+      toast.add({
+        title: t("paste.emptyTitle"),
+        description: t("paste.empty"),
+        icon: "i-lucide-clipboard-x",
+        color: "neutral",
+        duration: 3000,
+      });
+      return;
+    }
+    pasteDialog.content = content;
+    pasteDialog.directory = currentPath.value;
+    pasteDialog.open = true;
   } catch (error) {
     uiStore.setError(error);
   }
@@ -1335,6 +1381,13 @@ function handleWindowKeydown(event) {
   }
 
   if (isEditableElement(event.target)) return;
+
+  // 只认焦点真在文件面板里的 Ctrl+V：复制的文件会立刻开始上传，不能被别处的粘贴误触发
+  if (isCommand && key === "v" && fileExplorerRoot.value?.contains(document.activeElement)) {
+    event.preventDefault();
+    pasteFromClipboard();
+    return;
+  }
 
   if (event.key === "F2" && canRename.value) {
     event.preventDefault();
@@ -1856,6 +1909,7 @@ function sortAriaLabel(key) {
           <div
             class="file-workbench"
             :class="{ 'drag-over': isDragOver, analyzing: diskUsage }"
+            tabindex="-1"
             @contextmenu="prepareContextMenu"
             @wheel.passive="scrollTableFromChrome"
           >
@@ -2119,6 +2173,13 @@ function sortAriaLabel(key) {
         />
       </template>
     </UModal>
+
+    <ClipboardPasteDialog
+      v-model:open="pasteDialog.open"
+      :session="activeSession"
+      :directory="pasteDialog.directory"
+      :content="pasteDialog.content"
+    />
 
     <UModal
       v-model:open="conflictDialog.open"
