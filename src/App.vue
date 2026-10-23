@@ -19,6 +19,7 @@ import { useTunnelStore } from "./stores/tunnelStore";
 import { useUiStore } from "./stores/uiStore";
 import { useProfileStore } from "./stores/profileStore";
 import { localizeError } from "./utils/appError";
+import { parentRemotePath } from "./utils/remotePath";
 
 const { t, locale } = useI18n();
 const toast = useToast();
@@ -97,6 +98,40 @@ function showCredentialCleanupToast(error = null) {
 watch(
   () => profileStore.profilesAwaitingCredentialCleanup.map((profile) => profile.id).sort().join(","),
   () => showCredentialCleanupToast(),
+);
+
+// 压缩解压从右键菜单发起，没有弹窗承接结果：结束时说一声产物在哪，失败时说清原因
+watch(
+  () => fileOperationStore.finishedSignal,
+  (signal) => {
+    if (!signal) return;
+
+    fileOperationStore.consumeFinishedSignal();
+    const task = fileOperationStore.findTask(signal.taskId);
+    if (!task) return;
+
+    if (task.status === "failed") {
+      toast.add({
+        title: t(`fileOperations.failedTitle.${task.kind}`),
+        description: localizeError(task.error),
+        color: "error",
+        icon: "i-lucide-circle-alert",
+        duration: 8000,
+      });
+      return;
+    }
+
+    const resultName = task.resultPath?.split("/").pop();
+    toast.add({
+      title: t(`fileOperations.doneTitle.${task.kind}`),
+      description: resultName
+        ? t(`fileOperations.doneResult.${task.kind}`, { name: resultName })
+        : t("fileOperations.extractedHere", { path: parentRemotePath(task.paths[0]) }),
+      color: "success",
+      icon: "i-lucide-circle-check",
+      duration: 5000,
+    });
+  },
 );
 
 // 面板关闭时下载完成 → 弹快捷提示，可直接打开本地目录或查看记录

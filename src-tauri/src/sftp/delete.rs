@@ -70,6 +70,7 @@ pub(crate) async fn run_delete_task(
             current_path: None,
             completed_entries: 0,
             error: None,
+            result_path: None,
         },
         last_emit: Instant::now(),
     };

@@ -712,6 +712,31 @@ pub struct FileOperationEventPayload {
     pub current_path: Option<String>,
     pub completed_entries: u64,
     pub error: Option<AppError>,
+    // 压缩包或解压目录最终落在哪：同名时服务器上自动改了名，前端要显示实际的那个
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_path: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCompressRequest {
+    pub task_id: String,
+    pub session_id: String,
+    pub directory: String,
+    pub names: Vec<String>,
+    pub format: String,
+    // 不带扩展名；已有同名压缩包时服务器上依次改成 -2、-3
+    pub archive_name: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteExtractRequest {
+    pub task_id: String,
+    pub session_id: String,
+    pub archive_path: String,
+    // true 解压到和压缩包同名的新目录；false 解到当前目录，已有文件一律跳过不覆盖
+    pub into_folder: bool,
 }
 
 #[derive(Clone, Deserialize)]

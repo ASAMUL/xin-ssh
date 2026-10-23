@@ -34,6 +34,8 @@ pub fn run() {
             sftp::delete::start_remote_delete,
             sftp::delete::cancel_file_operation,
             remote_exec::disk_usage::start_disk_usage,
+            remote_exec::archive::start_remote_compress,
+            remote_exec::archive::start_remote_extract,
             sftp::partials::discard_partial_files,
             workspace::get_app_status,
             workspace::init_workspace,

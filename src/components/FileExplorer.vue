@@ -20,6 +20,7 @@ import { formatPathsForShell, joinRemotePath, parentRemotePath, quoteRemotePathF
 import { TERMINAL_CWD_STATUS } from "../utils/terminalCwd";
 import { compactMenuUi } from "../config/menuUi";
 import { formatBytes } from "../utils/formatMetrics";
+import { COMPRESS_FORMATS, archiveStem, defaultArchiveName, isSingleFileGzip } from "../utils/archive";
 import {
   highlightTerminalDrop,
   terminalDropTargetAt,
@@ -200,6 +201,53 @@ const contextEntries = computed(() => {
 
   return isSelected(entry) && selectedEntries.value.length ? selectedEntries.value : [entry];
 });
+// 压缩 / 解压：选中项右键直接在服务器上打包，压缩包右键直接解开
+const archiveMenuItems = computed(() => {
+  const entry = contextMenuEntry.value;
+  const entries = contextEntries.value;
+  const items = [];
+  if (!entries.length) return items;
+
+  const archiveName = defaultArchiveName(entries, currentPath.value);
+  items.push({
+    label: t("archive.compress"),
+    icon: "i-lucide-file-archive",
+    disabled: !canTransfer.value,
+    children: COMPRESS_FORMATS.map(({ format, extension }) => ({
+      label: t("archive.compressAs", { name: `${archiveName}${extension}` }),
+      onSelect: () => compressEntries(entries, format),
+    })),
+  });
+
+  const stem = entry && !entry.isDirectory && entries.length === 1 ? archiveStem(entry.name) : null;
+  if (!stem) return items;
+
+  if (isSingleFileGzip(entry.name)) {
+    items.push({
+      label: t("archive.extractGzip", { name: stem }),
+      icon: "i-lucide-package-open",
+      disabled: !canTransfer.value,
+      onSelect: () => extractEntry(entry, false),
+    });
+    return items;
+  }
+
+  items.push(
+    {
+      label: t("archive.extractToFolder", { name: stem }),
+      icon: "i-lucide-package-open",
+      disabled: !canTransfer.value,
+      onSelect: () => extractEntry(entry, true),
+    },
+    {
+      label: t("archive.extractHere"),
+      icon: "i-lucide-folder-down",
+      disabled: !canTransfer.value,
+      onSelect: () => extractEntry(entry, false),
+    },
+  );
+  return items;
+});
 const contextMenuItems = computed(() => {
   const entry = contextMenuEntry.value;
   const entries = contextEntries.value;
@@ -271,6 +319,7 @@ const contextMenuItems = computed(() => {
           ]
         : []),
     ],
+    archiveMenuItems.value,
     [
       {
         label: t("files.delete"),
@@ -312,7 +361,7 @@ const contextMenuItems = computed(() => {
         onSelect: refreshDirectory,
       },
     ],
-  ];
+  ].filter((group) => group.length);
 });
 // 目录树右键菜单（独立于文件列表菜单）
 const treeContextMenuItems = computed(() => {
@@ -1186,6 +1235,35 @@ function editContextEntry() {
   if (!entry || !canTransfer.value) return;
 
   editorStore.openFile(props.activeSession, entry);
+}
+
+// 压缩包落在被压缩项所在的目录，也就是当前目录
+async function compressEntries(entries, format) {
+  closeContextMenu();
+  if (!canTransfer.value || !entries.length) return;
+
+  try {
+    await fileOperationStore.startCompress(
+      props.activeSession,
+      currentPath.value,
+      entries,
+      format,
+      defaultArchiveName(entries, currentPath.value),
+    );
+  } catch (error) {
+    uiStore.setError(error);
+  }
+}
+
+async function extractEntry(entry, intoFolder) {
+  closeContextMenu();
+  if (!canTransfer.value || !entry) return;
+
+  try {
+    await fileOperationStore.startExtract(props.activeSession, entry, intoFolder);
+  } catch (error) {
+    uiStore.setError(error);
+  }
 }
 
 function renameContextEntry() {

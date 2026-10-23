@@ -56,6 +56,7 @@
 
 .file-operation-path,
 .file-operation-count,
+.file-operation-result,
 .file-operation-note {
   margin: 0;
   overflow-wrap: anywhere;
@@ -63,13 +64,25 @@
   color: var(--xin-text-muted);
 }
 
-.file-operation-path {
+.file-operation-path,
+.file-operation-result {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
+/* 压缩包 / 解压目录的实际位置：同名时服务器自动改过名，用户要看的就是这一行 */
+.file-operation-result {
+  color: var(--xin-text-secondary);
+  font-weight: 600;
+}
+
 .file-operation-note {
   padding: 10px 14px;
   border-top: 1px solid var(--xin-border);
+}
+
+.file-operation-note + .file-operation-note {
+  padding-top: 0;
+  border-top: 0;
 }

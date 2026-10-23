@@ -1,6 +1,7 @@
 //! 在服务器上执行一段 sh 脚本并按行读回输出：目录占用分析、压缩解压、Docker 容器列表共用。
 //! 每次开一个临时 exec 通道，用完即关，不碰用户正在用的终端。
 
+pub(crate) mod archive;
 pub(crate) mod disk_usage;
 
 use std::sync::Arc;
@@ -85,24 +86,28 @@ impl CommandOutcome {
 /// 投递到会话事件循环的后台命令任务：只有循环里拿得到这条 SSH 连接。
 pub(crate) enum CommandTask {
     DiskUsage(DiskUsageRequest),
+    Archive(archive::ArchiveTask),
 }
 
 impl CommandTask {
     pub(crate) fn task_id(&self) -> &str {
         match self {
             Self::DiskUsage(request) => &request.task_id,
+            Self::Archive(task) => &task.task_id,
         }
     }
 
     pub(crate) fn session_id(&self) -> &str {
         match self {
             Self::DiskUsage(request) => &request.session_id,
+            Self::Archive(task) => &task.session_id,
         }
     }
 
     pub(crate) async fn run(self, app: AppHandle, session: SshSession, cancellation: CancellationToken) {
         match self {
             Self::DiskUsage(request) => disk_usage::run_disk_usage(app, session, request, cancellation).await,
+            Self::Archive(task) => archive::run_archive_task(app, session, task, cancellation).await,
         }
     }
 }

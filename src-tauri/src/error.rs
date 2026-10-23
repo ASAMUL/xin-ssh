@@ -94,6 +94,8 @@ pub mod codes {
     pub const REMOTE_TASK_FAILED: &str = "remote.taskFailed";
     pub const REMOTE_TOOL_MISSING: &str = "remote.toolMissing";
     pub const REMOTE_EXEC_UNAVAILABLE: &str = "remote.execUnavailable";
+    pub const ARCHIVE_UNSUPPORTED: &str = "archive.unsupported";
+    pub const ARCHIVE_INVALID_NAME: &str = "archive.invalidName";
     pub const REMOTE_INVALID_PERMISSIONS: &str = "remote.invalidPermissions";
 
     pub const LOCAL_TARGET_EXISTS: &str = "local.targetExists";

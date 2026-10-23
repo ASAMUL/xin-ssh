@@ -181,6 +181,14 @@ export function startDiskUsage(request) {
   return invoke("start_disk_usage", { request });
 }
 
+export function startRemoteCompress(request) {
+  return invoke("start_remote_compress", { request });
+}
+
+export function startRemoteExtract(request) {
+  return invoke("start_remote_extract", { request });
+}
+
 export function streamRemoteDirectory(request) {
   return invoke("stream_remote_directory", { request });
 }

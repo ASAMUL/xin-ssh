@@ -306,7 +306,8 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       await this.refreshDirectory(session);
       if (this.isCurrentState(session.id, state)) this.refreshTreeChildren(session, parentRemotePath(path));
     },
-    async refreshAfterDeletion(session, paths) {
+    // 删除、压缩、解压结束后：刷新列表，以及受影响项目所在目录在树里的子目录
+    async refreshAfterChange(session, paths) {
       const state = this.ensureSessionState(session);
       if (!this.isCurrentState(session?.id, state)) return;
       await this.refreshDirectory(session);
