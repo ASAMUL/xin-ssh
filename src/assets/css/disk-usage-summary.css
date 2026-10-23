@@ -1,0 +1,48 @@
+/* 占用分析状态条：夹在工具栏下沿和表头之间，一行说完「算到哪了 / 一共多少 / 有多少读不了」。
+   和表头同一层底色，只用一条细分隔线区分，不另起卡片，免得把列表往下挤出一大块 */
+.disk-usage-summary {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 14px;
+  color: var(--xin-text-secondary);
+  border-bottom: 1px solid rgb(var(--xin-neutral-rgb) / 0.2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.disk-usage-icon {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  color: var(--xin-accent);
+}
+
+.disk-usage-summary.failed .disk-usage-icon {
+  color: var(--xin-danger);
+}
+
+.disk-usage-summary.canceled .disk-usage-icon {
+  color: var(--xin-text-faint);
+}
+
+.disk-usage-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.disk-usage-summary.failed .disk-usage-text {
+  color: var(--xin-danger-text);
+}
+
+.disk-usage-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}

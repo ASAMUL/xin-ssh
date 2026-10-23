@@ -12,6 +12,7 @@ use crate::models::{
     AuthMethod, TerminalEventPayload, TerminalInputRequest, TerminalResizeRequest,
     TerminalStartRequest,
 };
+use crate::remote_exec::acknowledge_then_run;
 use crate::sftp::delete::run_delete_task;
 use crate::sftp::partials::discard_remote_files;
 use crate::sftp::session::CachedSftp;
@@ -200,6 +201,8 @@ async fn run_terminal_shell(
     let cached_sftp = CachedSftp::new(Arc::clone(&session), cancellation.clone());
     // 删除独占子通道，并单独限流，不能让大目录删除占满普通操作的并发名额。
     let delete_permits = Arc::new(Semaphore::new(2));
+    // 压缩解压、占用分析这类后台命令同样单独限流，见 remote_exec::acknowledge_then_run
+    let command_permits = Arc::new(Semaphore::new(2));
     let system_info_sampler = Arc::new(AsyncMutex::new(SystemInfoSampler::default()));
     let port_forwards = PortForwards::default();
     // 这条连接上开的端口转发都挂在这个令牌下：不管循环怎么结束（包括中途出错提前 return），
@@ -388,7 +391,23 @@ async fn run_terminal_shell(
                             if responder.send(Ok(())).is_ok() {
                                 run_delete_task(app, session, request, cancellation, permits).await;
                             }
-                            registry.finish_delete(&task_id);
+                            registry.finish_file_operation(&task_id);
+                        });
+                    }
+                    TerminalControl::RunCommandTask {
+                        task,
+                        cancellation,
+                        responder,
+                    } => {
+                        let app = app.clone();
+                        let session = Arc::clone(&session);
+                        let permits = Arc::clone(&command_permits);
+                        let registry = registry.clone();
+                        let task_id = task.task_id().to_string();
+                        tauri::async_runtime::spawn(async move {
+                            let run = task.run(app, session, cancellation.clone());
+                            acknowledge_then_run(responder, permits, cancellation, run).await;
+                            registry.finish_file_operation(&task_id);
                         });
                     }
                     TerminalControl::StartUpload { request, stop } => {

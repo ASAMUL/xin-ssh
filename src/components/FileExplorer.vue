@@ -6,6 +6,8 @@ import { useVirtualizer } from "@tanstack/vue-virtual";
 import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
 import FilePermissionsEditor from "./FilePermissionsEditor.vue";
+import DiskUsageSummary from "./FileExplorer/DiskUsageSummary.vue";
+import { useDiskUsageStore } from "../stores/diskUsageStore";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
 import { useFileOperationStore } from "../stores/fileOperationStore";
 import { useEditorStore } from "../stores/editorStore";
@@ -17,6 +19,7 @@ import { TRANSFER_CONFLICT_CODES, hasErrorCode, localizeError } from "../utils/a
 import { formatPathsForShell, joinRemotePath, parentRemotePath, quoteRemotePathForShell } from "../utils/remotePath";
 import { TERMINAL_CWD_STATUS } from "../utils/terminalCwd";
 import { compactMenuUi } from "../config/menuUi";
+import { formatBytes } from "../utils/formatMetrics";
 import {
   highlightTerminalDrop,
   terminalDropTargetAt,
@@ -34,6 +37,7 @@ const emit = defineEmits(["insert-terminal-text"]);
 
 const { t, locale } = useI18n();
 const fileExplorerStore = useFileExplorerStore();
+const diskUsageStore = useDiskUsageStore();
 const fileOperationStore = useFileOperationStore();
 const editorStore = useEditorStore();
 const settingsStore = useSettingsStore();
@@ -127,6 +131,15 @@ const query = computed({
 });
 const sortKey = ref("name");
 const sortDirection = ref("asc");
+// 占用分析：开着就统计当前目录每一项占了多少盘，列表按占用排序
+const diskUsageEnabled = computed(() => diskUsageStore.isEnabled(props.activeSession?.id));
+const diskUsage = computed(() =>
+  diskUsageEnabled.value ? diskUsageStore.resultFor(props.activeSession?.id, currentPath.value) : null,
+);
+// 总数要等 du 算完才知道，算的过程中先拿已算出的部分当分母，占比会随之回落
+const diskUsageBase = computed(() => diskUsage.value?.totalBytes || diskUsage.value?.scannedBytes || 0);
+// 排序键是组件级的，切到没开分析的标签时按名称排
+const effectiveSortKey = computed(() => (sortKey.value === "usage" && !diskUsage.value ? "name" : sortKey.value));
 const entryCollator = computed(() => new Intl.Collator(locale.value, {
   numeric: true,
   sensitivity: "base",
@@ -142,7 +155,7 @@ const visibleEntries = computed(() => {
     return entry.name.toLowerCase().includes(keyword);
   });
 
-  return sortEntries(filteredEntries, sortKey.value, sortDirection.value, entryCollator.value);
+  return sortEntries(filteredEntries, effectiveSortKey.value, sortDirection.value, entryCollator.value, diskUsage.value?.sizes);
 });
 // 行高需与 file-explorer.css 中 .file-row 的 min-height 保持一致
 const FILE_ROW_HEIGHT = 32;
@@ -557,6 +570,14 @@ watch(
   },
 );
 
+// 分析模式下进入一个目录就统计这一层；算过的直接用缓存
+watch(
+  () => [props.activeSession?.id, currentPath.value, isConnected.value],
+  ([, path, connected]) => {
+    if (connected) diskUsageStore.visit(props.activeSession, path);
+  },
+);
+
 // 当前路径变化时让目录树展开到对应位置（树可见且已连接才加载）
 watch(
   () => [props.activeSession?.id, currentPath.value, isConnected.value, settingsStore.showFileTree],
@@ -676,6 +697,29 @@ function toggleFollowTerminal() {
   if (next && canFollowTerminal.value && props.activeSession) {
     fileExplorerStore.followTerminal(props.activeSession, terminalCwd.value.path);
   }
+}
+
+function toggleDiskUsage() {
+  const session = props.activeSession;
+  if (!session) return;
+
+  if (diskUsageEnabled.value) {
+    diskUsageStore.disable(session.id);
+    if (sortKey.value === "usage") {
+      sortKey.value = "name";
+      sortDirection.value = "asc";
+    }
+    return;
+  }
+
+  if (!canNavigate.value) return;
+  sortKey.value = "usage";
+  sortDirection.value = "desc";
+  diskUsageStore.enable(session, currentPath.value);
+}
+
+function rerunDiskUsage() {
+  if (canNavigate.value) diskUsageStore.analyze(props.activeSession, currentPath.value);
 }
 
 function goToParent() {
@@ -1366,6 +1410,27 @@ function formatSize(entry) {
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
+function entryUsage(entry) {
+  return diskUsage.value?.sizes[entry.name] ?? null;
+}
+
+function formatUsage(entry) {
+  const bytes = entryUsage(entry);
+  if (bytes != null) return formatBytes(bytes);
+  return diskUsage.value?.status === "running" ? "…" : "--";
+}
+
+function usagePercent(entry) {
+  const bytes = entryUsage(entry);
+  if (bytes == null || !diskUsageBase.value) return null;
+  return Math.min((bytes / diskUsageBase.value) * 100, 100);
+}
+
+function formatShare(percent) {
+  if (percent > 0 && percent < 0.1) return "<0.1%";
+  return `${percent.toFixed(percent < 10 ? 1 : 0)}%`;
+}
+
 // 虚拟滚动时每帧都要格式化可见行时间，缓存格式化器避免反复创建 Intl.DateTimeFormat
 const modifiedFormatter = computed(
   () =>
@@ -1389,13 +1454,15 @@ function fileTypeLabel(entry) {
 }
 
 // 目录始终置顶，用户切换列时仍能先定位可展开的远程路径；缺失元数据统一排在该列末尾。
-function sortEntries(entries, key, direction, collator) {
+// 按占用排时例外：要找的是「谁最大」，文件和目录混在一起比。
+function sortEntries(entries, key, direction, collator, usageSizes) {
   const multiplier = direction === "desc" ? -1 : 1;
+  const directoriesFirst = key !== "usage";
   return [...entries].sort((left, right) => {
-    if (left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1;
+    if (directoriesFirst && left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1;
 
-    const leftValue = entrySortValue(left, key);
-    const rightValue = entrySortValue(right, key);
+    const leftValue = entrySortValue(left, key, usageSizes);
+    const rightValue = entrySortValue(right, key, usageSizes);
     const leftMissing = leftValue == null;
     const rightMissing = rightValue == null;
     if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
@@ -1412,7 +1479,8 @@ function sortEntries(entries, key, direction, collator) {
   });
 }
 
-function entrySortValue(entry, key) {
+function entrySortValue(entry, key, usageSizes) {
+  if (key === "usage") return usageSizes?.[entry.name] ?? null;
   if (key === "size") {
     if (entry.size == null) return null;
     const size = Number(entry.size);
@@ -1434,22 +1502,23 @@ function toggleSort(nextKey) {
   }
 
   sortKey.value = nextKey;
-  sortDirection.value = "asc";
+  // 占用默认从大到小：点它就是想找最大的
+  sortDirection.value = nextKey === "usage" ? "desc" : "asc";
 }
 
 function sortIcon(key) {
-  if (sortKey.value !== key) return "i-lucide-arrow-up-down";
+  if (effectiveSortKey.value !== key) return "i-lucide-arrow-up-down";
   return sortDirection.value === "asc" ? "i-lucide-arrow-up" : "i-lucide-arrow-down";
 }
 
 function sortAriaSort(key) {
-  if (sortKey.value !== key) return "none";
+  if (effectiveSortKey.value !== key) return "none";
   return sortDirection.value === "asc" ? "ascending" : "descending";
 }
 
 function sortAriaLabel(key) {
-  const field = t(`files.${key === "modified" ? "modified" : key}`);
-  const direction = sortKey.value === key && sortDirection.value === "desc"
+  const field = key === "usage" ? t("diskUsage.usage") : t(`files.${key === "modified" ? "modified" : key}`);
+  const direction = effectiveSortKey.value === key && sortDirection.value === "desc"
     ? t("files.sortDescending") : t("files.sortAscending");
   return t("files.sortBy", { field, direction });
 }
@@ -1623,6 +1692,22 @@ function sortAriaLabel(key) {
         />
       </UDropdownMenu>
 
+      <UButton
+        v-liquid-glass="{ scale: 12 }"
+        class="file-analyze liquid-glass"
+        :class="{ active: diskUsageEnabled }"
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        square
+        icon="i-lucide-chart-pie"
+        :aria-pressed="diskUsageEnabled"
+        :aria-label="t('diskUsage.toggle')"
+        :title="t(diskUsageEnabled ? 'diskUsage.toggleOn' : 'diskUsage.toggle')"
+        :disabled="!canTransfer"
+        @click="toggleDiskUsage"
+      />
+
       <UDropdownMenu :items="moreMenuItems" size="sm" :content="{ align: 'end' }">
         <UButton
           v-liquid-glass="{ scale: 12 }"
@@ -1692,10 +1777,18 @@ function sortAriaLabel(key) {
         <UContextMenu :items="contextMenuItems" size="xs" :ui="compactMenuUi">
           <div
             class="file-workbench"
-            :class="{ 'drag-over': isDragOver }"
+            :class="{ 'drag-over': isDragOver, analyzing: diskUsage }"
             @contextmenu="prepareContextMenu"
             @wheel.passive="scrollTableFromChrome"
           >
+        <DiskUsageSummary
+          v-if="diskUsage"
+          :analysis="diskUsage"
+          @stop="diskUsageStore.cancel(activeSession.id, currentPath)"
+          @rerun="rerunDiskUsage"
+          @close="toggleDiskUsage"
+        />
+
         <div ref="fileTableHead" class="file-table-head">
           <div class="file-row file-heading">
             <button
@@ -1708,26 +1801,43 @@ function sortAriaLabel(key) {
               <span>{{ t("files.name") }}</span>
               <UIcon :name="sortIcon('name')" />
             </button>
-            <button
-              type="button"
-              class="file-sort-button"
-              :aria-label="sortAriaLabel('size')"
-              :aria-sort="sortAriaSort('size')"
-              @click="toggleSort('size')"
-            >
-              <span>{{ t("files.size") }}</span>
-              <UIcon :name="sortIcon('size')" />
-            </button>
-            <button
-              type="button"
-              class="file-sort-button"
-              :aria-label="sortAriaLabel('type')"
-              :aria-sort="sortAriaSort('type')"
-              @click="toggleSort('type')"
-            >
-              <span>{{ t("files.type") }}</span>
-              <UIcon :name="sortIcon('type')" />
-            </button>
+            <!-- 分析模式下「大小 / 类型」两列换成「占用 / 占比」，列宽不变 -->
+            <template v-if="diskUsage">
+              <button
+                type="button"
+                class="file-sort-button"
+                :title="t('diskUsage.usageHint')"
+                :aria-label="sortAriaLabel('usage')"
+                :aria-sort="sortAriaSort('usage')"
+                @click="toggleSort('usage')"
+              >
+                <span>{{ t("diskUsage.usage") }}</span>
+                <UIcon :name="sortIcon('usage')" />
+              </button>
+              <span>{{ t("diskUsage.share") }}</span>
+            </template>
+            <template v-else>
+              <button
+                type="button"
+                class="file-sort-button"
+                :aria-label="sortAriaLabel('size')"
+                :aria-sort="sortAriaSort('size')"
+                @click="toggleSort('size')"
+              >
+                <span>{{ t("files.size") }}</span>
+                <UIcon :name="sortIcon('size')" />
+              </button>
+              <button
+                type="button"
+                class="file-sort-button"
+                :aria-label="sortAriaLabel('type')"
+                :aria-sort="sortAriaSort('type')"
+                @click="toggleSort('type')"
+              >
+                <span>{{ t("files.type") }}</span>
+                <UIcon :name="sortIcon('type')" />
+              </button>
+            </template>
             <button
               type="button"
               class="file-sort-button"
@@ -1777,8 +1887,19 @@ function sortAriaLabel(key) {
                 </span>
                 <span class="file-name">{{ fileEntry.name }}</span>
               </span>
-              <span>{{ formatSize(fileEntry) }}</span>
-              <span>{{ fileTypeLabel(fileEntry) }}</span>
+              <template v-if="diskUsage">
+                <span class="usage-size">{{ formatUsage(fileEntry) }}</span>
+                <span class="usage-share">
+                  <template v-if="usagePercent(fileEntry) != null">
+                    <UProgress :model-value="usagePercent(fileEntry)" size="xs" class="usage-share-bar" />
+                    <span class="usage-share-label">{{ formatShare(usagePercent(fileEntry)) }}</span>
+                  </template>
+                </span>
+              </template>
+              <template v-else>
+                <span>{{ formatSize(fileEntry) }}</span>
+                <span>{{ fileTypeLabel(fileEntry) }}</span>
+              </template>
               <span>{{ formatModified(fileEntry) }}</span>
               <span>{{ fileEntry.permissions || "--" }}</span>
             </button>

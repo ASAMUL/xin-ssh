@@ -714,6 +714,35 @@ pub struct FileOperationEventPayload {
     pub error: Option<AppError>,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskUsageRequest {
+    pub task_id: String,
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskUsageEntry {
+    pub name: String,
+    pub bytes: u64,
+}
+
+// entries 只带上次事件之后新算完的子项，前端自己累加
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskUsageEventPayload {
+    pub task_id: String,
+    pub session_id: String,
+    pub path: String,
+    pub kind: String,
+    pub entries: Vec<DiskUsageEntry>,
+    pub total_bytes: Option<u64>,
+    pub unreadable: u64,
+    pub error: Option<AppError>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSystemSnapshot {

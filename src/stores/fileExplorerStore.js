@@ -14,6 +14,7 @@ import {
   normalizeRemotePath,
   parentRemotePath,
 } from "../utils/remotePath";
+import { useDiskUsageStore } from "./diskUsageStore";
 import { useEditorStore } from "./editorStore";
 import { useSessionStore } from "./sessionStore";
 import { localizeError } from "../utils/appError";
@@ -59,6 +60,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
     },
     // 重连保留浏览位置和历史，但远端内容必须重新读取，旧请求持有的状态对象随之失效。
     invalidateSessionState(sessionId, attemptId) {
+      useDiskUsageStore().disable(sessionId);
       const state = this.sessionStates[sessionId];
       if (!state) return;
       this.sessionStates[sessionId] = {
@@ -69,6 +71,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       };
     },
     removeSessionState(sessionId) {
+      useDiskUsageStore().disable(sessionId);
       delete this.sessionStates[sessionId];
     },
     isCurrentState(sessionId, state) {

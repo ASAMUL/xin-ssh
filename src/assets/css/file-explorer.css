@@ -72,6 +72,7 @@
 .file-search,
 .file-upload,
 .file-create,
+.file-analyze,
 .file-more {
   flex: 0 0 auto;
   height: 36px;
@@ -224,10 +225,18 @@
   color: var(--xin-text);
 }
 
+.file-analyze,
 .file-more {
   width: 36px;
   justify-content: center;
   color: var(--xin-text-secondary);
+}
+
+/* 占用分析开着：和目录树开关同一种樱色水滴 */
+.file-analyze.active {
+  color: var(--xin-accent-strong);
+  background: var(--lg-droplet-rose);
+  box-shadow: var(--lg-droplet-rose-shadow);
 }
 
 /* 分割条的 z-index 是 5：不把它圈在自己的层叠上下文里，它会从工具栏上面穿过去、抢走点击 */
@@ -244,6 +253,11 @@
   grid-template-rows: auto minmax(0, 1fr);
   padding-top: var(--file-toolbar-height);
   background: rgb(var(--xin-fill-rgb) / 0.4);
+}
+
+/* 占用分析的状态条插在表头上面，多占一行 */
+.file-workbench.analyzing {
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .file-workbench.drag-over {
@@ -463,6 +477,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* —— 占用分析的两列 —— */
+.usage-size {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-share {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 14px;
+}
+
+.usage-share-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.usage-share-label {
+  flex: 0 0 34px;
+  color: var(--xin-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .file-empty-state {

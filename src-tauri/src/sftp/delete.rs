@@ -45,12 +45,13 @@ pub async fn start_remote_delete(
     registry.start_delete(request).await
 }
 
+// 删除、压缩解压、占用分析共用：后台文件任务都登记在同一张取消表里
 #[tauri::command]
-pub fn cancel_remote_delete(
+pub fn cancel_file_operation(
     registry: State<'_, TerminalRegistry>,
     task_id: String,
 ) -> Result<(), AppError> {
-    registry.cancel_delete(&task_id)
+    registry.cancel_file_operation(&task_id)
 }
 
 // 删除没有总时限，单请求仍受 SFTP 超时保护；独立子通道保证大目录不阻塞编辑器和目录树。

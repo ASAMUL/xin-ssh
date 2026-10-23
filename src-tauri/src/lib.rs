@@ -2,6 +2,7 @@ mod background;
 mod credentials;
 mod error;
 mod models;
+mod remote_exec;
 mod sftp;
 mod ssh;
 mod system_info;
@@ -31,7 +32,8 @@ pub fn run() {
             workspace::delete_snippet,
             workspace::delete_tunnel_config,
             sftp::delete::start_remote_delete,
-            sftp::delete::cancel_remote_delete,
+            sftp::delete::cancel_file_operation,
+            remote_exec::disk_usage::start_disk_usage,
             sftp::partials::discard_partial_files,
             workspace::get_app_status,
             workspace::init_workspace,

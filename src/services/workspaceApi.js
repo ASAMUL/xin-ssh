@@ -172,8 +172,13 @@ export function startRemoteDelete(request) {
   return invoke("start_remote_delete", { request });
 }
 
-export function cancelRemoteDelete(taskId) {
-  return invoke("cancel_remote_delete", { taskId });
+// 删除、压缩解压、占用分析共用一个取消入口
+export function cancelFileOperation(taskId) {
+  return invoke("cancel_file_operation", { taskId });
+}
+
+export function startDiskUsage(request) {
+  return invoke("start_disk_usage", { request });
 }
 
 export function streamRemoteDirectory(request) {

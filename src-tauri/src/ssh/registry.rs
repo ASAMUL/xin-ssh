@@ -18,6 +18,7 @@ use crate::models::{
     PartialFile, RemoteChmodRequest, RemoteCopyRequest, RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent,
     RemoteFileEntry, RemoteSystemSnapshot, RemoteUploadRequest,
 };
+use crate::remote_exec::CommandTask;
 use crate::sftp::transfer::TransferStop;
 
 #[derive(Clone, Default)]
@@ -25,7 +26,8 @@ pub struct TerminalRegistry {
     sessions: Arc<Mutex<HashMap<String, TerminalHandle>>>,
     pub(crate) transfer_cancellations: Arc<Mutex<HashMap<String, TransferStop>>>,
     directory_streams: Arc<Mutex<HashMap<String, (String, Arc<AtomicBool>)>>>,
-    delete_cancellations: Arc<Mutex<HashMap<String, CancellationToken>>>,
+    // 删除、压缩解压、占用分析这些后台任务共用一张取消表，前端按任务 ID 取消
+    file_operations: Arc<Mutex<HashMap<String, CancellationToken>>>,
 }
 
 struct TerminalHandle {
@@ -105,6 +107,11 @@ pub(crate) enum TerminalControl {
     },
     DeletePaths {
         request: RemoteDeleteRequest,
+        cancellation: CancellationToken,
+        responder: oneshot::Sender<Result<(), AppError>>,
+    },
+    RunCommandTask {
+        task: CommandTask,
         cancellation: CancellationToken,
         responder: oneshot::Sender<Result<(), AppError>>,
     },
@@ -448,39 +455,53 @@ impl TerminalRegistry {
         receiver.await.map_err(|_| request_canceled("chmod"))?
     }
 
-    // 先登记任务再投递，取消、关会话和重连都能覆盖尚未启动的删除。
     pub(crate) async fn start_delete(&self, request: RemoteDeleteRequest) -> Result<(), AppError> {
+        let session_id = request.session_id.clone();
+        let task_id = request.task_id.clone();
+        self.start_file_operation(&session_id, &task_id, "delete", |cancellation, responder| {
+            TerminalControl::DeletePaths { request, cancellation, responder }
+        })
+        .await
+    }
+
+    pub(crate) async fn start_command_task(&self, task: CommandTask) -> Result<(), AppError> {
+        let session_id = task.session_id().to_string();
+        let task_id = task.task_id().to_string();
+        self.start_file_operation(&session_id, &task_id, "remoteCommand", |cancellation, responder| {
+            TerminalControl::RunCommandTask { task, cancellation, responder }
+        })
+        .await
+    }
+
+    // 先登记任务再投递，取消、关会话和重连都能覆盖尚未启动的任务。
+    async fn start_file_operation(
+        &self,
+        session_id: &str,
+        task_id: &str,
+        operation: &str,
+        control: impl FnOnce(CancellationToken, oneshot::Sender<Result<(), AppError>>) -> TerminalControl,
+    ) -> Result<(), AppError> {
         let (sender, cancellation) = {
             let sessions = self.sessions.lock().map_err(|_| lock_poisoned())?;
-            let handle = sessions
-                .get(&request.session_id)
-                .ok_or_else(session_not_running)?;
+            let handle = sessions.get(session_id).ok_or_else(session_not_running)?;
             (handle.sender.clone(), handle.cancellation.child_token())
         };
-        let task_id = request.task_id.clone();
         {
-            let mut tasks = self
-                .delete_cancellations
-                .lock()
-                .map_err(|_| lock_poisoned())?;
-            if tasks.contains_key(&task_id) {
+            let mut tasks = self.file_operations.lock().map_err(|_| lock_poisoned())?;
+            if tasks.contains_key(task_id) {
                 return Err(AppError::new(
                     codes::FILE_OPERATION_DUPLICATE,
                     "File operation is already running",
                 ));
             }
-            tasks.insert(task_id.clone(), cancellation.clone());
+            tasks.insert(task_id.to_string(), cancellation.clone());
         }
         let (responder, receiver) = oneshot::channel();
         let result = async {
             sender
-                .send(TerminalControl::DeletePaths {
-                    request,
-                    cancellation: cancellation.clone(),
-                    responder,
-                })
+                .send(control(cancellation.clone(), responder))
                 .map_err(|_| not_accepting("file"))?;
-            // 这里只限制任务接收确认，不限制删除总时长；超时后接收端消失，任务不得启动。
+            // 这里只限制任务接收确认，不限制任务总时长；超时后接收端消失，任务不得启动。
             tokio::select! {
                 biased;
                 _ = cancellation.cancelled() => Err(AppError::new(
@@ -488,21 +509,21 @@ impl TerminalRegistry {
                     "File operation was canceled",
                 )),
                 received = timeout(Duration::from_secs(12), receiver) => {
-                    received.map_err(|_| timeout_error("delete", 12))?
-                        .map_err(|_| request_canceled("delete"))?
+                    received.map_err(|_| timeout_error(operation, 12))?
+                        .map_err(|_| request_canceled(operation))?
                 }
             }
         }
         .await;
         if result.is_err() {
             cancellation.cancel();
-            self.finish_delete(&task_id);
+            self.finish_file_operation(task_id);
         }
         result
     }
 
-    pub(crate) fn cancel_delete(&self, task_id: &str) -> Result<(), AppError> {
-        let tasks = self.delete_cancellations.lock().map_err(|_| lock_poisoned())?;
+    pub(crate) fn cancel_file_operation(&self, task_id: &str) -> Result<(), AppError> {
+        let tasks = self.file_operations.lock().map_err(|_| lock_poisoned())?;
         if let Some(cancellation) = tasks.get(task_id) {
             cancellation.cancel();
         }
@@ -522,8 +543,8 @@ impl TerminalRegistry {
         receiver.await.map_err(|_| request_canceled("discardPartialFiles"))?
     }
 
-    pub(crate) fn finish_delete(&self, task_id: &str) {
-        if let Ok(mut tasks) = self.delete_cancellations.lock() {
+    pub(crate) fn finish_file_operation(&self, task_id: &str) {
+        if let Ok(mut tasks) = self.file_operations.lock() {
             tasks.remove(task_id);
         }
     }

@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { listen } from "@tauri-apps/api/event";
-import { startRemoteDelete, cancelRemoteDelete } from "../services/workspaceApi";
+import { startRemoteDelete, cancelFileOperation } from "../services/workspaceApi";
 import { useFileExplorerStore } from "./fileExplorerStore";
 import { useSessionStore } from "./sessionStore";
 import { ERROR_CODES, toAppError } from "../utils/appError";
@@ -98,7 +98,7 @@ export const useFileOperationStore = defineStore("fileOperations", {
       const previousStatus = task.status;
       task.status = "canceling";
       try {
-        await cancelRemoteDelete(taskId);
+        await cancelFileOperation(taskId);
       } catch (error) {
         if (!FINISHED_STATUSES.has(task.status)) {
           task.status = previousStatus;
