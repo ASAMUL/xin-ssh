@@ -24,6 +24,11 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  // 只读时仍能选中、复制、搜索，只是改不了
+  readOnly: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["change", "save", "language-change", "cursor-change"]);
@@ -198,6 +203,7 @@ function createEditorState(doc) {
         },
       }),
       basicSetup,
+      EditorState.readOnly.of(props.readOnly),
       syntaxHighlighting(syntaxHighlightTheme),
       languageCompartment.of([]),
       EditorView.updateListener.of((update) => {

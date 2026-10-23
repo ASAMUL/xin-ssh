@@ -15,11 +15,12 @@ const DISK_USAGE_EVENT: &str = "disk-usage-event";
 const EMIT_INTERVAL_MS: u64 = 150;
 
 // -x 不跨文件系统：从 / 开始分析时不会钻进 /proc 和挂载的网盘；-a 把当前层的文件也算上。
+// -H 只跟随命令行上给的那个路径：容器根 /proc/<PID>/root 本身是个链接，不跟进去就只量到链接自己。
 // 老版 GNU du（CentOS 6）不认 -d，只认 --max-depth
 const DISK_USAGE_SCRIPT: &str = r#"if du -d 0 /dev/null >/dev/null 2>&1; then
-  exec du -k -x -a -d 1 -- "$1"
+  exec du -k -x -a -H -d 1 -- "$1"
 fi
-exec du -k -x -a --max-depth=1 -- "$1""#;
+exec du -k -x -a -H --max-depth=1 -- "$1""#;
 
 #[tauri::command]
 pub async fn start_disk_usage(

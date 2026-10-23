@@ -8,6 +8,7 @@ import { useI18n } from "vue-i18n";
 import { useToast } from "@nuxt/ui/composables";
 import FilePermissionsEditor from "./FilePermissionsEditor.vue";
 import ClipboardPasteDialog from "./FileExplorer/ClipboardPasteDialog.vue";
+import ContainerPicker from "./FileExplorer/ContainerPicker.vue";
 import DiskUsageSummary from "./FileExplorer/DiskUsageSummary.vue";
 import { useDiskUsageStore } from "../stores/diskUsageStore";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
@@ -19,7 +20,14 @@ import { useUiStore } from "../stores/uiStore";
 import { useSessionStore } from "../stores/sessionStore";
 import { readClipboard } from "../services/workspaceApi";
 import { TRANSFER_CONFLICT_CODES, hasErrorCode, localizeError } from "../utils/appError";
-import { formatPathsForShell, joinRemotePath, parentRemotePath, quoteRemotePathForShell } from "../utils/remotePath";
+import {
+  containerInnerPath,
+  formatPathsForShell,
+  joinRemotePath,
+  parentRemotePath,
+  processRootOf,
+  quoteRemotePathForShell,
+} from "../utils/remotePath";
 import { TERMINAL_CWD_STATUS } from "../utils/terminalCwd";
 import { compactMenuUi } from "../config/menuUi";
 import { formatBytes } from "../utils/formatMetrics";
@@ -60,6 +68,7 @@ const isDragOver = ref(false);
 const lastSelectedPath = ref("");
 const contextMenuEntry = ref(null);
 const treeContextNode = ref(null);
+const containerPickerOpen = ref(false);
 const nameDialog = reactive({
   open: false,
   mode: "create",
@@ -114,6 +123,15 @@ const isConnected = computed(() => props.activeSession?.status === "connected");
 const isConnecting = computed(() => props.activeSession?.status === "connecting");
 const canNavigate = computed(() => isConnected.value && !fileState.value.isLoading);
 const canTransfer = computed(() => Boolean(props.activeSession) && isConnected.value);
+// 路径在 /proc/<PID>/root 下就是在逛容器。没经容器列表进来（手输的路径）也一样只读，名字用 PID 顶上
+const activeContainer = computed(() => {
+  const root = processRootOf(currentPath.value);
+  if (!root) return null;
+  return fileState.value.containers?.[root]
+    ?? { root, name: t("docker.unknownContainer", { pid: root.split("/")[2] }), image: "" };
+});
+// 容器里只读：可以浏览、查看、下载，不能上传、新建、改名、删除、压缩解压
+const canModify = computed(() => canTransfer.value && !activeContainer.value);
 // 拖到终端上的本地文件传到哪：终端当前所在的目录；认不出终端在哪时退回文件面板的目录
 const terminalUploadDir = computed(() => {
   const cwd = props.activeSession?.terminalCwd;
@@ -202,9 +220,9 @@ const selectedEntries = computed(() =>
   fileState.value.entries.filter((entry) => selectedPathSet.value.has(entry.path)),
 );
 const canDownload = computed(() => canTransfer.value && selectedEntries.value.length > 0);
-const canRename = computed(() => canTransfer.value && selectedEntries.value.length === 1);
-const canRemoteOperate = computed(() => canTransfer.value && selectedEntries.value.length === 1);
-const canDelete = computed(() => canTransfer.value && selectedEntries.value.length > 0);
+const canRename = computed(() => canModify.value && selectedEntries.value.length === 1);
+const canRemoteOperate = computed(() => canModify.value && selectedEntries.value.length === 1);
+const canDelete = computed(() => canModify.value && selectedEntries.value.length > 0);
 const contextEntries = computed(() => {
   const entry = contextMenuEntry.value;
   if (!entry) return selectedEntries.value;
@@ -222,7 +240,7 @@ const archiveMenuItems = computed(() => {
   items.push({
     label: t("archive.compress"),
     icon: "i-lucide-file-archive",
-    disabled: !canTransfer.value,
+    disabled: !canModify.value,
     children: COMPRESS_FORMATS.map(({ format, extension }) => ({
       label: t("archive.compressAs", { name: `${archiveName}${extension}` }),
       onSelect: () => compressEntries(entries, format),
@@ -236,7 +254,7 @@ const archiveMenuItems = computed(() => {
     items.push({
       label: t("archive.extractGzip", { name: stem }),
       icon: "i-lucide-package-open",
-      disabled: !canTransfer.value,
+      disabled: !canModify.value,
       onSelect: () => extractEntry(entry, false),
     });
     return items;
@@ -246,13 +264,13 @@ const archiveMenuItems = computed(() => {
     {
       label: t("archive.extractToFolder", { name: stem }),
       icon: "i-lucide-package-open",
-      disabled: !canTransfer.value,
+      disabled: !canModify.value,
       onSelect: () => extractEntry(entry, true),
     },
     {
       label: t("archive.extractHere"),
       icon: "i-lucide-folder-down",
-      disabled: !canTransfer.value,
+      disabled: !canModify.value,
       onSelect: () => extractEntry(entry, false),
     },
   );
@@ -282,8 +300,8 @@ const contextMenuItems = computed(() => {
       ...(entry && !entry.isDirectory
         ? [
             {
-              label: t("files.edit"),
-              icon: "i-lucide-file-pen-line",
+              label: t(activeContainer.value ? "files.view" : "files.edit"),
+              icon: activeContainer.value ? "i-lucide-file-search" : "i-lucide-file-pen-line",
               disabled: !canTransfer.value,
               onSelect: editContextEntry,
             },
@@ -305,7 +323,7 @@ const contextMenuItems = computed(() => {
             {
               label: t("files.rename"),
               icon: "i-lucide-pencil",
-              disabled: !canTransfer.value,
+              disabled: !canModify.value,
               onSelect: renameContextEntry,
             },
             {
@@ -335,7 +353,7 @@ const contextMenuItems = computed(() => {
         label: t("files.delete"),
         icon: "i-lucide-trash-2",
         color: "error",
-        disabled: !canTransfer.value || !entries.length,
+        disabled: !canModify.value || !entries.length,
         onSelect: deleteContextEntries,
       },
     ],
@@ -343,31 +361,31 @@ const contextMenuItems = computed(() => {
       {
         label: t("files.uploadFiles"),
         icon: "i-lucide-upload",
-        disabled: !canTransfer.value,
+        disabled: !canModify.value,
         onSelect: chooseUploadFiles,
       },
       {
         label: t("files.uploadFolder"),
         icon: "i-lucide-folder-up",
-        disabled: !canTransfer.value,
+        disabled: !canModify.value,
         onSelect: chooseUploadFolder,
       },
       {
         label: t("paste.action"),
         icon: "i-lucide-clipboard-paste",
-        disabled: !canTransfer.value,
+        disabled: !canModify.value,
         onSelect: pasteFromClipboard,
       },
       {
         label: t("files.newFolder"),
         icon: "i-lucide-folder-plus",
-        disabled: !canTransfer.value,
+        disabled: !canModify.value,
         onSelect: openCreateFolderDialog,
       },
       {
         label: t("files.newFile"),
         icon: "i-lucide-file-plus",
-        disabled: !canTransfer.value,
+        disabled: !canModify.value,
         onSelect: openCreateFileDialog,
       },
       {
@@ -417,7 +435,8 @@ const treeContextMenuItems = computed(() => {
 // 目录树扁平化渲染行：只含目录，跟随隐藏文件开关
 const treeRows = computed(() => {
   const nodes = fileState.value.treeNodes || {};
-  const rootNode = nodes["/"];
+  // 在容器里时树从容器根开始
+  const rootNode = nodes[activeContainer.value?.root ?? "/"];
   if (!rootNode) return [];
 
   const showHidden = settingsStore.showHiddenFiles;
@@ -462,26 +481,37 @@ const hasHistory = computed(() => historyMenuItems.value[0].length > 0);
 
 // 路径太深时只留根、省略号和最后三级，工具栏一行放得下
 const PATH_CRUMB_TAIL = 3;
+// 在容器里时第一段是容器名，后面是容器自己看到的路径
 const pathCrumbs = computed(() => {
-  const segments = currentPath.value.split("/").filter(Boolean);
+  const container = activeContainer.value;
+  const base = container?.root ?? "";
+  const segments = (container ? containerInnerPath(currentPath.value, base) : currentPath.value).split("/").filter(Boolean);
   const crumbs = segments.map((segment, index) => ({
     label: segment,
-    path: `/${segments.slice(0, index + 1).join("/")}`,
+    path: `${base}/${segments.slice(0, index + 1).join("/")}`,
   }));
   const tail = crumbs.length > PATH_CRUMB_TAIL + 1
     ? [{ label: "…", path: `ellipsis:${currentPath.value}`, ellipsis: true }, ...crumbs.slice(-PATH_CRUMB_TAIL)]
     : crumbs;
-  return [{ label: "/", path: "/" }, ...tail];
+  const rootCrumb = container
+    ? { label: container.name, path: container.root, icon: "i-lucide-container" }
+    : { label: "/", path: "/" };
+  return [rootCrumb, ...tail];
+});
+// 路径栏手输时显示的路径：容器里只显示容器内的那一段
+const editablePath = computed(() => {
+  const container = activeContainer.value;
+  return container ? containerInnerPath(currentPath.value, container.root) : currentPath.value;
 });
 
 const createMenuItems = computed(() => [[
-  { label: t("files.newFolder"), icon: "i-lucide-folder-plus", disabled: !canTransfer.value, onSelect: openCreateFolderDialog },
-  { label: t("files.newFile"), icon: "i-lucide-file-plus", disabled: !canTransfer.value, onSelect: openCreateFileDialog },
+  { label: t("files.newFolder"), icon: "i-lucide-folder-plus", disabled: !canModify.value, onSelect: openCreateFolderDialog },
+  { label: t("files.newFile"), icon: "i-lucide-file-plus", disabled: !canModify.value, onSelect: openCreateFileDialog },
 ]]);
 
 const moreMenuItems = computed(() => [
   [
-    { label: t("files.uploadFolder"), icon: "i-lucide-folder-up", disabled: !canTransfer.value, onSelect: chooseUploadFolder },
+    { label: t("files.uploadFolder"), icon: "i-lucide-folder-up", disabled: !canModify.value, onSelect: chooseUploadFolder },
     { label: t("files.download"), icon: "i-lucide-download", disabled: !canDownload.value, onSelect: downloadSelectedEntries },
     { label: t("files.rename"), icon: "i-lucide-pencil", disabled: !canRename.value, onSelect: () => openRenameDialog() },
     {
@@ -586,6 +616,7 @@ watch(() => [props.activeSession?.id, props.activeSession?.currentAttemptId], ()
   closeRemoteOperationDialog(true);
   conflictDialog.open = false;
   pasteDialog.open = false;
+  containerPickerOpen.value = false;
   contextMenuEntry.value = null;
   treeContextNode.value = null;
   isDragOver.value = false;
@@ -599,7 +630,7 @@ watch(
 
     const state = fileExplorerStore.ensureSessionState(session);
     if (!state) return;
-    pathInput.value = state.currentPath;
+    pathInput.value = editablePath.value;
 
     if (session.status === "connected" && !state.hasLoaded && !state.isLoading) {
       fileExplorerStore.loadDirectory(session, state.currentPath, { pushHistory: false });
@@ -610,8 +641,8 @@ watch(
 
 watch(
   currentPath,
-  (path) => {
-    pathInput.value = path;
+  () => {
+    pathInput.value = editablePath.value;
     rowVirtualizer.value.scrollToOffset(0);
   },
   { immediate: true },
@@ -698,7 +729,14 @@ function submitPath() {
   if (!props.activeSession || !canNavigate.value) return;
 
   isEditingPath.value = false;
-  fileExplorerStore.loadDirectory(props.activeSession, pathInput.value);
+  const container = activeContainer.value;
+  if (!container) {
+    fileExplorerStore.loadDirectory(props.activeSession, pathInput.value);
+    return;
+  }
+  // 容器里手输的路径按容器自己的根来解析，软链接也在容器里跟随
+  fileExplorerStore.openContainerPath(props.activeSession, container.root, pathInput.value)
+    .catch((error) => uiStore.setError(error));
 }
 
 function navigateToPath(path) {
@@ -715,7 +753,7 @@ function startPathEdit(event) {
 
 function cancelPathEdit() {
   isEditingPath.value = false;
-  pathInput.value = currentPath.value;
+  pathInput.value = editablePath.value;
 }
 
 function refreshDirectory() {
@@ -763,6 +801,16 @@ function toggleFollowTerminal() {
   if (next && canFollowTerminal.value && props.activeSession) {
     fileExplorerStore.followTerminal(props.activeSession, terminalCwd.value.path);
   }
+}
+
+function enterContainer(container) {
+  containerPickerOpen.value = false;
+  if (canNavigate.value) fileExplorerStore.enterContainer(props.activeSession, container);
+}
+
+function exitContainer() {
+  containerPickerOpen.value = false;
+  if (canNavigate.value) fileExplorerStore.exitContainer(props.activeSession);
 }
 
 function toggleDiskUsage() {
@@ -817,7 +865,7 @@ function openEntry(entry) {
   }
 
   closeContextMenu();
-  fileExplorerStore.openEntry(props.activeSession, entry);
+  Promise.resolve(fileExplorerStore.openEntry(props.activeSession, entry)).catch((error) => uiStore.setError(error));
 }
 
 function isSelected(entry) {
@@ -826,7 +874,7 @@ function isSelected(entry) {
 
 async function chooseUploadFiles() {
   closeContextMenu();
-  if (!canTransfer.value) return;
+  if (!canModify.value) return;
 
   try {
     const selected = await open({
@@ -843,7 +891,7 @@ async function chooseUploadFiles() {
 
 async function chooseUploadFolder() {
   closeContextMenu();
-  if (!canTransfer.value) return;
+  if (!canModify.value) return;
 
   try {
     const selected = await open({
@@ -867,7 +915,8 @@ async function downloadContextEntries() {
 }
 
 async function downloadEntries(entries) {
-  const remoteEntries = entries.filter(Boolean);
+  // 容器里的软链接会被服务器按宿主机解析，下载到的是宿主机的文件，后端也会跳过它们
+  const remoteEntries = entries.filter((entry) => entry && !(activeContainer.value && entry.isSymlink));
   closeContextMenu();
   if (!canTransfer.value || !remoteEntries.length) return;
 
@@ -890,7 +939,7 @@ async function downloadEntries(entries) {
 // 剪贴板里是复制的文件就直接上传；是截图或文字就弹窗起个名字，存成远程文件
 async function pasteFromClipboard() {
   closeContextMenu();
-  if (!canTransfer.value) return;
+  if (!canModify.value) return;
 
   try {
     const content = await readClipboard();
@@ -918,14 +967,14 @@ async function pasteFromClipboard() {
 
 async function startUploadPaths(paths) {
   const localPaths = normalizeDialogSelection(paths);
-  if (!canTransfer.value || !localPaths.length) return;
+  if (!canModify.value || !localPaths.length) return;
 
   await transferStore.uploadPaths(props.activeSession, localPaths, currentPath.value);
 }
 
 function openCreateFolderDialog() {
   closeContextMenu();
-  if (!canTransfer.value) return;
+  if (!canModify.value) return;
 
   nameDialog.open = true;
   nameDialog.mode = "create";
@@ -936,7 +985,7 @@ function openCreateFolderDialog() {
 
 function openCreateFileDialog() {
   closeContextMenu();
-  if (!canTransfer.value) return;
+  if (!canModify.value) return;
 
   nameDialog.open = true;
   nameDialog.mode = "createFile";
@@ -1022,7 +1071,7 @@ function persistTreeSize(event) {
 
 function openRenameDialog(entry = selectedEntries.value[0]) {
   closeContextMenu();
-  if (!canTransfer.value || !entry) return;
+  if (!canModify.value || !entry) return;
 
   nameDialog.open = true;
   nameDialog.mode = "rename";
@@ -1057,7 +1106,7 @@ const remoteOperationSubmitLabel = computed(() => {
 
 function openRemoteOperationDialog(mode, entry = selectedEntries.value[0]) {
   closeContextMenu();
-  if (!canTransfer.value || !entry || selectedEntries.value.length > 1) return;
+  if (!canModify.value || !entry || selectedEntries.value.length > 1) return;
 
   remoteOperationDialog.open = true;
   remoteOperationDialog.mode = mode;
@@ -1162,7 +1211,7 @@ async function submitNameDialog() {
 function openDeleteDialog(entries = selectedEntries.value) {
   const deletableEntries = entries.filter(Boolean);
   closeContextMenu();
-  if (!canTransfer.value || !deletableEntries.length) return;
+  if (!canModify.value || !deletableEntries.length) return;
 
   deleteDialog.open = true;
   deleteDialog.entries = deletableEntries;
@@ -1280,13 +1329,18 @@ function editContextEntry() {
   closeContextMenu();
   if (!entry || !canTransfer.value) return;
 
+  // 容器里走 openEntry：软链接先在容器里解析，文件只读打开
+  if (activeContainer.value) {
+    openEntry(entry);
+    return;
+  }
   editorStore.openFile(props.activeSession, entry);
 }
 
 // 压缩包落在被压缩项所在的目录，也就是当前目录
 async function compressEntries(entries, format) {
   closeContextMenu();
-  if (!canTransfer.value || !entries.length) return;
+  if (!canModify.value || !entries.length) return;
 
   try {
     await fileOperationStore.startCompress(
@@ -1303,7 +1357,7 @@ async function compressEntries(entries, format) {
 
 async function extractEntry(entry, intoFolder) {
   closeContextMenu();
-  if (!canTransfer.value || !entry) return;
+  if (!canModify.value || !entry) return;
 
   try {
     await fileOperationStore.startExtract(props.activeSession, entry, intoFolder);
@@ -1427,7 +1481,7 @@ function handleDragDropPayload(payload) {
     : null;
 
   if (payload.type === "enter" || payload.type === "over") {
-    isDragOver.value = canTransfer.value && !terminal;
+    isDragOver.value = canModify.value && !terminal;
     highlightTerminalDrop(terminal, t("files.dropUploadToTerminal", { path: terminalUploadDir.value }));
     return;
   }
@@ -1739,6 +1793,28 @@ function sortAriaLabel(key) {
           :title="followTerminalTitle"
           @click="toggleFollowTerminal"
         />
+        <UPopover v-model:open="containerPickerOpen" :content="{ align: 'start' }">
+          <UButton
+            class="file-tool"
+            :class="{ active: activeContainer }"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            square
+            icon="i-lucide-container"
+            :aria-label="t('docker.title')"
+            :title="activeContainer ? t('docker.browsing', { name: activeContainer.name }) : t('docker.title')"
+            :disabled="!canNavigate"
+          />
+          <template #content>
+            <ContainerPicker
+              :session="activeSession"
+              :active-container="activeContainer"
+              @enter="enterContainer"
+              @exit="exitContainer"
+            />
+          </template>
+        </UPopover>
       </div>
 
       <!-- 平时是可点的面包屑；点空白处 / Ctrl+L 进入输入模式，回车跳转，Esc 或失焦退出 -->
@@ -1762,19 +1838,31 @@ function sortAriaLabel(key) {
         />
         <nav v-else class="path-crumbs" :aria-label="t('files.pathCrumbs')">
           <template v-for="(crumb, index) in pathCrumbs" :key="crumb.path">
-            <span v-if="index > 1" class="path-separator" aria-hidden="true">/</span>
+            <!-- 根目录「/」自己就是分隔符；容器名后面要补一个 -->
+            <span v-if="index > 1 || (index === 1 && activeContainer)" class="path-separator" aria-hidden="true">/</span>
             <button
               type="button"
               class="path-crumb"
-              :class="{ current: crumb.path === currentPath, ellipsis: crumb.ellipsis }"
+              :class="{ current: crumb.path === currentPath, ellipsis: crumb.ellipsis, container: crumb.icon }"
               :disabled="!canNavigate || crumb.ellipsis"
-              :title="crumb.ellipsis ? currentPath : crumb.path"
+              :title="crumb.ellipsis ? editablePath : crumb.path"
               @click.stop="navigateToPath(crumb.path)"
             >
+              <UIcon v-if="crumb.icon" :name="crumb.icon" />
               {{ crumb.label }}
             </button>
           </template>
         </nav>
+        <UBadge
+          v-if="activeContainer && !isEditingPath"
+          class="path-readonly"
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-lock"
+          :label="t('docker.readOnly')"
+          :title="t('docker.readOnlyHint')"
+        />
       </form>
 
       <UInput
@@ -1805,7 +1893,7 @@ function sortAriaLabel(key) {
         icon="i-lucide-upload"
         :label="t('files.upload')"
         :title="t('files.uploadFiles')"
-        :disabled="!canTransfer"
+        :disabled="!canModify"
         @click="chooseUploadFiles"
       />
 
@@ -1819,7 +1907,7 @@ function sortAriaLabel(key) {
           icon="i-lucide-plus"
           trailing-icon="i-lucide-chevron-down"
           :label="t('files.create')"
-          :disabled="!canTransfer"
+          :disabled="!canModify"
         />
       </UDropdownMenu>
 

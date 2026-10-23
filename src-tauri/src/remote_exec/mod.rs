@@ -3,6 +3,7 @@
 
 pub(crate) mod archive;
 pub(crate) mod disk_usage;
+pub(crate) mod docker;
 
 use std::sync::Arc;
 

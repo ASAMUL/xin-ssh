@@ -161,7 +161,7 @@ function handleCursorChange(position) {
     <template #header>
       <div class="remote-editor-header">
         <span class="remote-editor-file-icon">
-          <UIcon name="i-lucide-file-pen-line" />
+          <UIcon :name="editorStore.readOnly ? 'i-lucide-file-lock' : 'i-lucide-file-pen-line'" />
         </span>
         <div class="remote-editor-heading">
           <strong class="remote-editor-name">
@@ -214,6 +214,7 @@ function handleCursorChange(position) {
           :content="editorStore.initialContent"
           :filename="editorStore.name"
           :initial-position="editorStore.initialPosition"
+          :read-only="editorStore.readOnly"
           @change="editorStore.markDirty()"
           @cursor-change="handleCursorChange"
           @language-change="handleLanguageChange"
@@ -270,6 +271,10 @@ function handleCursorChange(position) {
               {{ editorLanguageLabel }}
             </span>
             <span class="remote-editor-status-item">UTF-8</span>
+            <span v-if="editorStore.readOnly" class="remote-editor-status-item">
+              <UIcon name="i-lucide-lock" />
+              {{ t("editor.readOnly") }}
+            </span>
             <span class="remote-editor-status-item">{{ editorCursorLabel }}</span>
             <span v-if="editorCursor.selectionLength" class="remote-editor-status-item">
               {{ editorSelectionLabel }}
@@ -291,6 +296,7 @@ function handleCursorChange(position) {
             @click="editorStore.requestClose()"
           />
           <UButton
+            v-if="!editorStore.readOnly"
             color="primary"
             icon="i-lucide-save"
             :loading="editorStore.isSaving"

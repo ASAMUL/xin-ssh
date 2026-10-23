@@ -13,6 +13,8 @@ use crate::models::{
     TerminalStartRequest,
 };
 use crate::remote_exec::acknowledge_then_run;
+use crate::remote_exec::docker::list_containers_on_session;
+use crate::sftp::scoped_path::resolve_scoped_path_on_session;
 use crate::sftp::delete::run_delete_task;
 use crate::sftp::partials::discard_remote_files;
 use crate::sftp::session::CachedSftp;
@@ -318,6 +320,23 @@ async fn run_terminal_shell(
                     TerminalControl::StatPath { path, responder } => {
                         cached_sftp.spawn(responder, false, |sftp| async move {
                             stat_path_on_session(&sftp, &path).await
+                        });
+                    }
+                    TerminalControl::ResolveScopedPath { root, path, responder } => {
+                        cached_sftp.spawn(responder, false, |sftp| async move {
+                            resolve_scoped_path_on_session(&sftp, &root, &path).await
+                        });
+                    }
+                    TerminalControl::ListContainers { mut responder } => {
+                        let session = Arc::clone(&session);
+                        let cancellation = cancellation.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let result = tokio::select! {
+                                biased;
+                                _ = responder.closed() => return,
+                                result = list_containers_on_session(&session, &cancellation) => result,
+                            };
+                            let _ = responder.send(result);
                         });
                     }
                     // 绑定端口 + 试开一次通道要等服务器回话，放到后台，不能卡住终端输入输出

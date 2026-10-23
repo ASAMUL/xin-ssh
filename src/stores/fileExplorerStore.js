@@ -7,13 +7,16 @@ import {
   chmodRemotePath,
   listRemoteDirectory,
   renameRemotePath,
+  resolveContainerPath,
   streamRemoteDirectory,
   writeRemoteFileBytes,
 } from "../services/workspaceApi";
 import {
   DEFAULT_REMOTE_PATH,
+  containerInnerPath,
   normalizeRemotePath,
   parentRemotePath,
+  processRootOf,
 } from "../utils/remotePath";
 import { useDiskUsageStore } from "./diskUsageStore";
 import { useEditorStore } from "./editorStore";
@@ -69,6 +72,7 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
         query: state.query,
         history: [...state.history],
         historyIndex: state.historyIndex,
+        containers: state.containers,
       };
     },
     removeSessionState(sessionId) {
@@ -218,10 +222,42 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
     },
     openEntry(session, entry) {
       if (!entry) return;
+      const containerRoot = processRootOf(entry.path);
+      // 容器里的软链接要在容器根下自己解析：交给服务器跟随，会跟到宿主机的文件上
+      if (containerRoot && entry.isSymlink) {
+        return this.openContainerPath(session, containerRoot, containerInnerPath(entry.path, containerRoot));
+      }
       if (entry.isDirectory) return this.loadDirectory(session, entry.path);
 
-      // 双击文件：打开内置编辑器（软链接指向目录时由编辑器回退为导航）
-      return useEditorStore().openFile(session, entry);
+      // 双击文件：打开内置编辑器（软链接指向目录时由编辑器回退为导航）；容器里只读
+      return useEditorStore().openFile(session, entry, { readOnly: Boolean(containerRoot) });
+    },
+    // 进容器：记下名字给路径栏、目录树用，记下从哪进来的，退出时回到那里
+    enterContainer(session, container) {
+      const state = this.ensureSessionState(session);
+      if (!state) return;
+      const currentRoot = processRootOf(state.currentPath);
+      // 从一个容器直接换到另一个时，退出仍回到最初进容器之前的地方
+      const returnPath = currentRoot ? state.containers[currentRoot]?.returnPath : state.currentPath;
+      state.containers[container.root] = { ...container, returnPath: returnPath ?? DEFAULT_REMOTE_PATH };
+      ensureTreeNode(state, container.root, container.name);
+      return this.loadDirectory(session, container.root);
+    },
+    exitContainer(session) {
+      const state = this.ensureSessionState(session);
+      const root = processRootOf(state?.currentPath);
+      if (!root) return;
+      return this.loadDirectory(session, state.containers[root]?.returnPath ?? DEFAULT_REMOTE_PATH);
+    },
+    // 容器里的路径（手输、点软链接）先在容器根下解析，目录就进去，文件就只读打开
+    async openContainerPath(session, root, innerPath) {
+      const state = this.ensureSessionState(session);
+      if (!this.isCurrentState(session?.id, state)) return;
+
+      const target = await resolveContainerPath(session.id, root, innerPath);
+      if (!this.isCurrentState(session.id, state)) return;
+      if (target.isDirectory) return this.loadDirectory(session, target.path);
+      return useEditorStore().openFile(session, normalizeRemoteEntry(target), { readOnly: true });
     },
     goToParent(session) {
       const state = this.ensureSessionState(session);
@@ -381,9 +417,12 @@ export const useFileExplorerStore = defineStore("fileExplorer", {
       const state = this.ensureSessionState(session);
       if (!this.isCurrentState(session?.id, state)) return;
       const path = normalizeRemotePath(targetPath);
-      const ancestorPaths = ["/"];
-      const segments = path === "/" ? [] : path.slice(1).split("/");
-      let currentPath = "";
+      // 在容器里时目录树从容器根开始，不把宿主机的 /proc 整个列出来
+      const treeRoot = processRootOf(path) ?? DEFAULT_REMOTE_PATH;
+      const ancestorPaths = [treeRoot];
+      const relativePath = treeRoot === DEFAULT_REMOTE_PATH ? path : containerInnerPath(path, treeRoot);
+      const segments = relativePath === "/" ? [] : relativePath.slice(1).split("/");
+      let currentPath = treeRoot === DEFAULT_REMOTE_PATH ? "" : treeRoot;
 
       for (const segment of segments.slice(0, -1)) {
         currentPath = `${currentPath}/${segment}`;
@@ -428,6 +467,8 @@ function createFileState(path, attemptId = null) {
     requestToken: null,
     pushHistoryOnLoad: true,
     treeNodes: {},
+    // 进过的容器：/proc/<PID>/root → { name, image, returnPath }
+    containers: {},
   };
 
   ensureTreeNode(state, DEFAULT_REMOTE_PATH);

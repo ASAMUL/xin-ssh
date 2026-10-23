@@ -37,6 +37,8 @@ pub fn run() {
             remote_exec::disk_usage::start_disk_usage,
             remote_exec::archive::start_remote_compress,
             remote_exec::archive::start_remote_extract,
+            remote_exec::docker::list_docker_containers,
+            sftp::scoped_path::resolve_container_path,
             sftp::partials::discard_partial_files,
             workspace::get_app_status,
             workspace::init_workspace,

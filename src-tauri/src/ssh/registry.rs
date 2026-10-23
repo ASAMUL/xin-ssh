@@ -15,7 +15,7 @@ use crate::error::{
     timeout as timeout_error, AppError,
 };
 use crate::models::{
-    PartialFile, RemoteChmodRequest, RemoteCopyRequest, RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent,
+    DockerContainerList, PartialFile, RemoteChmodRequest, RemoteCopyRequest, RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent,
     RemoteFileEntry, RemoteSystemSnapshot, RemoteUploadRequest,
 };
 use crate::remote_exec::CommandTask;
@@ -70,6 +70,14 @@ pub(crate) enum TerminalControl {
     StatPath {
         path: String,
         responder: oneshot::Sender<Result<RemoteFileEntry, AppError>>,
+    },
+    ResolveScopedPath {
+        root: String,
+        path: String,
+        responder: oneshot::Sender<Result<RemoteFileEntry, AppError>>,
+    },
+    ListContainers {
+        responder: oneshot::Sender<Result<DockerContainerList, AppError>>,
     },
     ForwardPort {
         remote_port: u16,
@@ -350,6 +358,35 @@ impl TerminalRegistry {
             .map_err(|_| not_accepting("file"))?;
 
         receiver.await.map_err(|_| request_canceled("statPath"))?
+    }
+
+    // 容器里的路径：在容器根下自己解析软链接，见 sftp::scoped_path
+    pub(crate) async fn resolve_scoped_path(
+        &self,
+        session_id: &str,
+        root: String,
+        path: String,
+    ) -> Result<RemoteFileEntry, AppError> {
+        let sender = self.sender_for(session_id)?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::ResolveScopedPath { root, path, responder })
+            .map_err(|_| not_accepting("file"))?;
+
+        receiver.await.map_err(|_| request_canceled("resolvePath"))?
+    }
+
+    // 命令自带时限（remote_exec::docker），这里不再套一层
+    pub(crate) async fn list_containers(&self, session_id: &str) -> Result<DockerContainerList, AppError> {
+        let sender = self.sender_for(session_id)?;
+        let (responder, receiver) = oneshot::channel();
+
+        sender
+            .send(TerminalControl::ListContainers { responder })
+            .map_err(|_| not_accepting("listContainers"))?;
+
+        receiver.await.map_err(|_| request_canceled("listContainers"))?
     }
 
     // 在终端这条 SSH 连接上把服务器的 127.0.0.1:remote_port 转发到本机，返回本机端口

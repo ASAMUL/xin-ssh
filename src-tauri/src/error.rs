@@ -98,6 +98,10 @@ pub mod codes {
     pub const ARCHIVE_INVALID_NAME: &str = "archive.invalidName";
     pub const CLIPBOARD_UNAVAILABLE: &str = "clipboard.unavailable";
     pub const CLIPBOARD_TOO_LARGE: &str = "clipboard.tooLarge";
+    pub const DOCKER_PERMISSION_DENIED: &str = "docker.permissionDenied";
+    pub const DOCKER_DAEMON_UNAVAILABLE: &str = "docker.daemonUnavailable";
+    pub const CONTAINER_ROOT_INVALID: &str = "container.rootInvalid";
+    pub const REMOTE_SYMLINK_LOOP: &str = "remote.symlinkLoop";
     pub const REMOTE_INVALID_PERMISSIONS: &str = "remote.invalidPermissions";
 
     pub const LOCAL_TARGET_EXISTS: &str = "local.targetExists";

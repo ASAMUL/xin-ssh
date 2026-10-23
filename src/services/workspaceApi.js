@@ -201,6 +201,15 @@ export function writeRemoteFileBytes({ sessionId, path, bytes, overwrite }) {
   });
 }
 
+export function listDockerContainers(sessionId) {
+  return invoke("list_docker_containers", { sessionId });
+}
+
+// root 是 /proc/<PID>/root，path 是容器里的绝对路径；返回解析掉软链接后的那一项
+export function resolveContainerPath(sessionId, root, path) {
+  return invoke("resolve_container_path", { sessionId, root, path });
+}
+
 export function startRemoteCompress(request) {
   return invoke("start_remote_compress", { request });
 }

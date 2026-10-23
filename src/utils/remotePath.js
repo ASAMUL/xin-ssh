@@ -45,3 +45,16 @@ export function formatPathsForShell(paths) {
   const words = paths.map((path) => (/^[\w@%+=:,./~-]+$/.test(path) ? path : quoteRemotePathForShell(path)));
   return words.length ? `${words.join(" ")} ` : "";
 }
+
+// /proc/<PID>/root 是容器（或任意进程）看到的根目录：这类路径只读浏览，软链接交给后端在容器根里解析。
+// 规则和 Rust 端 sftp/path.rs 的 process_root_prefix 一致；返回这段前缀，不是容器路径返回 null
+const PROCESS_ROOT_PATTERN = /^\/proc\/\d+\/root(?=\/|$)/;
+
+export function processRootOf(path) {
+  return PROCESS_ROOT_PATTERN.exec(String(path || ""))?.[0] ?? null;
+}
+
+// 容器里的路径去掉 /proc/<PID>/root 前缀，就是容器自己看到的绝对路径
+export function containerInnerPath(path, root) {
+  return String(path).slice(root.length) || DEFAULT_REMOTE_PATH;
+}

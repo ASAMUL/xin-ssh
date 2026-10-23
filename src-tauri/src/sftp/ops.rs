@@ -24,7 +24,9 @@ use crate::models::{
     RemoteReadFileRequest, RemoteRenameRequest, RemoteWriteFileRequest,
 };
 use crate::sftp::error::{remote_io_error, sftp_error};
-use crate::sftp::path::{normalize_remote_path, join_remote_path, remote_basename, remote_parent_path};
+use crate::sftp::path::{
+    is_process_root_path, join_remote_path, normalize_remote_path, remote_basename, remote_parent_path,
+};
 use crate::sftp::{open_raw_sftp_session, remote_file_entry, remote_file_entry_from_attrs};
 use crate::ssh::client::ConnectionTestClient;
 use crate::ssh::registry::TerminalRegistry;
@@ -343,13 +345,18 @@ async fn stream_directory_entries(
     requested_path: &str,
     cancellation: &Arc<AtomicBool>,
 ) -> Result<(), AppError> {
-    let listing_path = match raw.realpath(requested_path.to_string()).await {
-        Ok(name) => name
-            .files
-            .first()
-            .map(|file| file.filename.clone())
-            .unwrap_or_else(|| requested_path.to_string()),
-        Err(_) => requested_path.to_string(),
+    // 容器路径不能 realpath：服务器会把 /proc/<PID>/root 还原成宿主机的 /，列出来的就成了宿主机的目录
+    let listing_path = if is_process_root_path(requested_path) {
+        requested_path.to_string()
+    } else {
+        match raw.realpath(requested_path.to_string()).await {
+            Ok(name) => name
+                .files
+                .first()
+                .map(|file| file.filename.clone())
+                .unwrap_or_else(|| requested_path.to_string()),
+            Err(_) => requested_path.to_string(),
+        }
     };
     let listing_path = normalize_remote_path(&listing_path);
 
@@ -467,11 +474,14 @@ pub(crate) async fn read_file_text_on_session(
     path: &str,
 ) -> Result<RemoteFileContent, AppError> {
     let path = normalize_remote_path(path);
-    // metadata 跟随软链接：双击指向目录的软链接时报 isDirectory，前端据此回退为目录导航
-    let metadata = sftp
-        .metadata(path.clone())
-        .await
-        .map_err(|error| sftp_error(error, &path))?;
+    // metadata 跟随软链接：双击指向目录的软链接时报 isDirectory，前端据此回退为目录导航。
+    // 容器里的软链接会被服务器按宿主机解析，这里只认 lstat，链接一律当作不能直接打开的特殊文件
+    let metadata = if is_process_root_path(&path) {
+        sftp.symlink_metadata(path.clone()).await
+    } else {
+        sftp.metadata(path.clone()).await
+    }
+    .map_err(|error| sftp_error(error, &path))?;
 
     if metadata.file_type().is_dir() {
         return Err(AppError::new(

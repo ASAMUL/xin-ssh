@@ -32,8 +32,8 @@ use crate::sftp::open_sftp_session;
 use crate::sftp::partials::PartialFiles;
 use crate::sftp::remote_digest::RemoteDigest;
 use crate::sftp::path::{
-    join_remote_path, local_file_name, normalize_remote_path, remote_basename, remote_parent_path,
-    safe_local_name,
+    is_process_root_path, join_remote_path, local_file_name, normalize_remote_path, remote_basename,
+    remote_parent_path, safe_local_name,
 };
 use crate::sftp::transfer_metadata::{
     metadata_error, set_local_file_modified, set_local_path_modified, upload_attributes,
@@ -1192,17 +1192,23 @@ async fn plan_remote_download(
         };
         let local_name = safe_local_name(&raw_local_name);
         let local_path = local_dir.join(local_name);
+        // 容器里的软链接会被服务器按宿主机的根解析，跟过去下载到的是宿主机的文件，所以直接跳过
+        let inside_container = is_process_root_path(&remote_path);
+        let metadata = if inside_container {
+            sftp.symlink_metadata(remote_path.clone()).await
+        } else {
+            sftp.metadata(remote_path.clone()).await
+        }
+        .map_err(|error| sftp_error(error, &remote_path))?;
+        if inside_container && metadata.file_type().is_symlink() {
+            continue;
+        }
 
         if !seen_root_targets.insert(local_collision_key(&local_path)) {
             return Err(duplicate_download_target(&local_path));
         }
         ensure_unique_local_download_path(&mut seen_local_paths, &local_path)?;
         root_targets.push(local_path.clone());
-
-        let metadata = sftp
-            .metadata(remote_path.clone())
-            .await
-            .map_err(|error| sftp_error(error, &remote_path))?;
         if metadata.file_type().is_dir() {
             directories.push(DownloadDirectoryPlan {
                 local_path: local_path.clone(), modified: metadata.mtime,
@@ -1221,6 +1227,9 @@ async fn plan_remote_download(
                     let mut child_metadata = child.metadata();
                     let child_remote_path = normalize_remote_path(&child.path());
                     if child_metadata.file_type().is_symlink() {
+                        if inside_container {
+                            continue;
+                        }
                         child_metadata = sftp.metadata(child_remote_path.clone()).await
                             .map_err(|error| sftp_error(error, &child_remote_path))?;
                         // 不递归跟随目录链接，防止扫描循环或下载到选中目录以外的整棵树。

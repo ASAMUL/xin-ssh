@@ -4,6 +4,7 @@ pub(crate) mod ops;
 pub(crate) mod partials;
 pub(crate) mod path;
 mod remote_digest;
+pub(crate) mod scoped_path;
 pub(crate) mod session;
 pub(crate) mod transfer;
 mod transfer_verify;

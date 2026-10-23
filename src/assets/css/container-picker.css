@@ -1,0 +1,108 @@
+/* 容器列表弹层：和文件操作面板同一套结构（标题行 + 列表 + 底部说明），列表项是一行两段的名字 / 镜像 */
+.container-picker {
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(460px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  color: var(--xin-text);
+}
+
+.container-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 10px 10px 14px;
+  border-bottom: 1px solid var(--xin-border);
+  font-size: 14px;
+}
+
+.container-picker-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  color: var(--xin-accent-strong);
+  border-bottom: 1px solid var(--xin-border);
+  background: var(--xin-accent-soft);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.container-picker-current > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.container-picker-alert {
+  margin: 10px 10px 0;
+  width: auto;
+}
+
+.container-picker-list {
+  min-height: 0;
+  display: grid;
+  gap: 2px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.container-picker-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 18px 10px;
+  color: var(--xin-text-muted);
+  font-size: 12.5px;
+}
+
+.container-picker-item.active {
+  background: var(--xin-accent-soft);
+}
+
+.container-picker-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.container-picker-text strong,
+.container-picker-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.container-picker-text strong {
+  color: var(--xin-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.container-picker-text span {
+  color: var(--xin-text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.container-picker-pid {
+  flex: 0 0 auto;
+  color: var(--xin-text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.container-picker-note {
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--xin-text-muted);
+  border-top: 1px solid var(--xin-border);
+  font-size: 12px;
+  line-height: 1.5;
+}

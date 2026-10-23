@@ -717,6 +717,25 @@ pub struct FileOperationEventPayload {
     pub result_path: Option<String>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerContainer {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub pid: u32,
+    // /proc/<PID>/root：SFTP 走这里就是容器的根目录
+    pub root: String,
+    pub started_at: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerContainerList {
+    pub containers: Vec<DockerContainer>,
+    pub is_root: bool,
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteCompressRequest {

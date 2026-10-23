@@ -41,6 +41,8 @@ export const useEditorStore = defineStore("editor", {
     requestToken: null,
     // 打开后光标停在哪：{ line, column }，终端里点 app.js:42:7 这类链接时带进来
     initialPosition: null,
+    // 容器里的文件只读查看：经 /proc/<PID>/root 写回会绕过容器自己的挂载和权限，先不开放
+    readOnly: false,
   }),
   getters: {
     session(state) {
@@ -55,13 +57,13 @@ export const useEditorStore = defineStore("editor", {
       readEditorContent = reader;
     },
     async saveCurrentFile(options = {}) {
-      if (!this.hasDocument || this.isSaving) return false;
+      if (!this.hasDocument || this.isSaving || this.readOnly) return false;
       if (!this.isDirty) return true;
       const content = readEditorContent?.();
       if (content == null) return false;
       return this.saveFile(content, options);
     },
-    async openFile(session, entry, { line = null, column = null } = {}) {
+    async openFile(session, entry, { line = null, column = null, readOnly = false } = {}) {
       if (!session || session.status !== "connected" || !entry || entry.isDirectory) return;
 
       const token = crypto.randomUUID();
@@ -80,6 +82,7 @@ export const useEditorStore = defineStore("editor", {
       this.saveError = null;
       this.lastSavedAt = null;
       this.initialPosition = line ? { line, column } : null;
+      this.readOnly = readOnly;
 
       const guardError = quickEditGuardError(entry);
       if (guardError) {
@@ -125,10 +128,10 @@ export const useEditorStore = defineStore("editor", {
         name: this.name,
         size: this.size,
         isDirectory: false,
-      }, this.initialPosition ?? {});
+      }, { ...this.initialPosition, readOnly: this.readOnly });
     },
     async saveFile(content, options = {}) {
-      if (!this.hasDocument || this.isSaving || typeof content !== "string") return false;
+      if (!this.hasDocument || this.isSaving || this.readOnly || typeof content !== "string") return false;
 
       const session = this.session;
       if (!session || session.status !== "connected") {

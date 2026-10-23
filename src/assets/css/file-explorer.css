@@ -172,6 +172,20 @@
   cursor: default;
 }
 
+/* 容器名这一段带个容器图标，和后面容器里的路径区分开 */
+.path-crumb.container {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--xin-accent-strong);
+}
+
+/* 只读标记靠右，面包屑太长时先压缩面包屑 */
+.path-readonly {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .path-separator {
   flex: 0 0 auto;
   color: var(--xin-text-faint);

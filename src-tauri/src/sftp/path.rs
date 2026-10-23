@@ -27,6 +27,25 @@ pub(crate) fn normalize_remote_path(path: &str) -> String {
     }
 }
 
+/// /proc/<PID>/root 是这个进程（比如容器）看到的根目录。经它访问时，里面的绝对软链接按宿主机的根解析，
+/// 服务器端的 realpath 也会把它还原成宿主机路径。所以这类路径下不做 realpath、不跟随软链接，
+/// 软链接交给 scoped_path 在容器根里自己解析。返回 /proc/<PID>/root 这一段前缀。
+pub(crate) fn process_root_prefix(path: &str) -> Option<&str> {
+    let rest = path.strip_prefix("/proc/")?;
+    let (pid, tail) = rest.split_once('/')?;
+    if pid.is_empty() || !pid.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    if tail != "root" && !tail.starts_with("root/") {
+        return None;
+    }
+    Some(&path[.."/proc/".len() + pid.len() + "/root".len()])
+}
+
+pub(crate) fn is_process_root_path(path: &str) -> bool {
+    process_root_prefix(path).is_some()
+}
+
 pub(crate) fn join_remote_path(base: &str, child: &str) -> String {
     let base = normalize_remote_path(base);
     let child: String = child
@@ -127,4 +146,19 @@ fn is_windows_device_name(name: &str) -> bool {
                 matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "\u{00b9}" | "\u{00b2}" | "\u{00b3}")
             })
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognizes_process_root_paths() {
+        assert_eq!(process_root_prefix("/proc/123/root"), Some("/proc/123/root"));
+        assert_eq!(process_root_prefix("/proc/123/root/etc/nginx"), Some("/proc/123/root"));
+        assert_eq!(process_root_prefix("/proc/123/rootfs"), None);
+        assert_eq!(process_root_prefix("/proc/self/root/etc"), None);
+        assert_eq!(process_root_prefix("/proc/123/cwd"), None);
+        assert_eq!(process_root_prefix("/var/proc/1/root"), None);
+    }
 }
