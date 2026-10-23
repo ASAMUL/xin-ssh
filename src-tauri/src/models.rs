@@ -766,7 +766,7 @@ pub struct DiskUsageRequest {
     pub path: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiskUsageEntry {
     pub name: String,
