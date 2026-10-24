@@ -147,12 +147,12 @@ function createConnection() {
 /* 加号：平时安静的幽灵按钮，弹层打开时变成和选中标签同一颗透明玻璃水滴——
    两者并排在同一条玻璃胶囊里，必须是同一种材质。 */
 .quick-connect-trigger {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   justify-content: center;
   color: var(--xin-text-muted);
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 10px;
   transition:
     background 160ms ease,
     color 160ms ease,

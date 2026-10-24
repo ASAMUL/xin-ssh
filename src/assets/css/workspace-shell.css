@@ -11,13 +11,13 @@
 
 .workspace-session-bar {
   flex: 0 0 auto;
-  height: 46px;
+  height: 42px;
   min-width: 0;
   display: flex;
   align-items: center;
 }
 
-/* 标签条是一颗贴合内容宽度的玻璃胶囊，标签多了才撑满整行（再多就横向滚动） */
+/* 标签条是一块贴合内容宽度的玻璃，标签多了才撑满整行（再多就横向滚动） */
 .workspace-session-bar > * {
   flex: 0 1 auto;
   min-width: 0;

@@ -1,22 +1,25 @@
-/* 外壳是液态玻璃胶囊（WorkspaceShell 上挂 .liquid-glass + v-liquid-glass），
+/* 外壳是液态玻璃（WorkspaceShell 上挂 .liquid-glass + v-liquid-glass），
    这里只管里面的排布：会话标签 | 加号，加号紧跟最后一个标签（Chrome 模式） */
+/* 不用全圆胶囊：它下方是 16px 圆角的面板、底部是 14px 的状态栏，
+   只有它两头是半圆会像一颗浮着的泡泡，和这一列的圆角矩形对不上 */
 .session-tabs {
   min-width: 0;
   max-width: 100%;
-  height: 46px;
+  height: 42px;
   display: inline-grid;
   grid-template-columns: minmax(0, max-content) auto;
   align-items: center;
   gap: 4px;
   overflow: hidden;
   padding: 4px;
-  border-radius: 999px;
+  border-radius: 14px;
 }
 
+/* 同心圆角：外框 14px 减去 4px 内边距，内外两条弧线才平行 */
 .session-tab {
-  height: 38px;
+  height: 34px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 10px;
   background: transparent;
   box-shadow: none;
   color: var(--xin-text-muted);
