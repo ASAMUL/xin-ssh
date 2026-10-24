@@ -405,10 +405,11 @@
   scrollbar-gutter: stable;
 }
 
+/* 权限列放的是「所有者读写，其他人只读」这样的简述，比 rwxr-xr-x 宽，给到 168px */
 .file-row {
-  min-width: 760px;
+  min-width: 804px;
   display: grid;
-  grid-template-columns: minmax(260px, 1.4fr) 104px 124px 180px 124px;
+  grid-template-columns: minmax(260px, 1.4fr) 104px 124px 180px 168px;
   align-items: center;
   min-height: 32px;
   padding: 0 14px;
@@ -421,7 +422,7 @@
 
 .file-virtual-body {
   position: relative;
-  min-width: 760px;
+  min-width: 804px;
 }
 
 .file-virtual-row {
@@ -493,6 +494,14 @@
 }
 
 .file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 英文简述较长，截断后完整明细在悬停提示里 */
+.file-permissions {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

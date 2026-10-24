@@ -31,6 +31,7 @@ import {
 import { TERMINAL_CWD_STATUS } from "../utils/terminalCwd";
 import { compactMenuUi } from "../config/menuUi";
 import { formatBytes } from "../utils/formatMetrics";
+import { describePermissions, summarizePermissions } from "../utils/filePermissions";
 import { COMPRESS_FORMATS, archiveStem, defaultArchiveName, isSingleFileGzip } from "../utils/archive";
 import {
   highlightTerminalDrop,
@@ -1638,6 +1639,14 @@ function fileTypeLabel(entry) {
   return t(`files.kinds.${entry.kind || "other"}`);
 }
 
+function permissionsSummary(entry) {
+  return summarizePermissions(entry.permissionsMode, t, locale.value);
+}
+
+function permissionsDetail(entry) {
+  return describePermissions(entry.permissionsMode, entry.isDirectory, t, locale.value);
+}
+
 // 目录始终置顶，用户切换列时仍能先定位可展开的远程路径；缺失元数据统一排在该列末尾。
 // 按占用排时例外：要找的是「谁最大」，文件和目录混在一起比。
 function sortEntries(entries, key, direction, collator, usageSizes) {
@@ -2121,7 +2130,7 @@ function sortAriaLabel(key) {
                 <span>{{ fileTypeLabel(fileEntry) }}</span>
               </template>
               <span>{{ formatModified(fileEntry) }}</span>
-              <span>{{ fileEntry.permissions || "--" }}</span>
+              <span class="file-permissions" :title="permissionsDetail(fileEntry)">{{ permissionsSummary(fileEntry) }}</span>
             </button>
           </div>
         </section>
