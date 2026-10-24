@@ -78,6 +78,12 @@
   padding: 0 var(--home-gutter) 32px;
 }
 
+/* 内容多了是整块滚动，不该让子项去挤。会话卡带 overflow: hidden，
+   在 flex 里它的最小高度会退成 0，列表一超出窗口就被压成一条 */
+.home-scroll > * {
+  flex-shrink: 0;
+}
+
 /* —— 工具栏：一排各自独立的玻璃胶囊，胶囊之间是空的，内容从缝里透出来 —— */
 
 .home-toolbar {
