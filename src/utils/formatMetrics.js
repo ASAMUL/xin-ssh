@@ -121,5 +121,7 @@ export function processName(command = "") {
   // 内核线程的 args 是方括号包着的名字（[kworker/R-kstrp]），里面的斜杠不是路径分隔
   if (trimmed.startsWith("[")) return trimmed.replace(/^\[|\]$/g, "") || "--";
   const executable = trimmed.split(/\s+/)[0] ?? "";
-  return executable.split("/").pop() || trimmed || "--";
+  // 登录 shell 的 argv[0] 带前导 -（-bash），sshd 这类改写过进程标题的写成「sshd: root@pts/0」，
+  // 这些标记不属于程序名
+  return executable.split("/").pop().replace(/^-|:$/g, "") || trimmed || "--";
 }

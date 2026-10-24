@@ -44,12 +44,15 @@ const ceiling = computed(() => {
 
 const definition = computed(() => {
   const keys = props.categories.map(({ key }) => key);
-  const latest = series.value.map((rows) => rows.at(-1)).filter(Boolean);
+  // 只有一个采样时连不成线，点距又按单点居中，一颗点悬在图中央像个瑕疵；凑够两点再标「现在」
+  const latest = series.value.filter((rows) => rows.length > 1).map((rows) => rows.at(-1));
+  // 刚连上还画不出线（CPU 要两次采样才算得出），基线加深一档占住位置，不然整块图是空白
+  const warmingUp = !latest.length;
   const curve = chartCurves.monotone;
 
   return defineChart({
     marks: [
-      ruleY([0], { stroke: "var(--spark-guide)", strokeDasharray: "2 3" }),
+      ruleY([0], { stroke: warmingUp ? "var(--spark-guide-strong)" : "var(--spark-guide)", strokeDasharray: "2 3" }),
       ...series.value.flatMap((rows, index) => [
         ...(index === 0
           ? [decorative(areaY(rows, {

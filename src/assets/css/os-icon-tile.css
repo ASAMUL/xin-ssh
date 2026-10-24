@@ -29,8 +29,9 @@
   fill: currentColor;
 }
 
-/* 墨色会话卡上的底座：半透明亮面，单色标翻成浅色 */
-.os-icon-tile.ink {
+/* 墨色会话卡上的底座：半透明亮面，单色标翻成浅色。
+   深色下会话卡不再是墨块，底座跟其他卡片一样用瓷白，同一页不出现两种底座 */
+:root:not(.dark) .os-icon-tile.ink {
   color: var(--xin-on-ink);
   border-color: rgb(255 255 255 / 0.1);
   background: rgb(255 255 255 / 0.08);

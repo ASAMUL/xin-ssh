@@ -55,6 +55,22 @@
   position: relative;
 }
 
+/* 「墨块」靠浅色纸面才有反差；深色下它只是一块比玻璃卡片还实的灰板，横纹像扫描线。
+   这里换回和连接卡片同一种内容材质，层级交给通栏、大图标和樱色「继续会话」按钮 */
+.dark .home-session-card {
+  --lg-edge-light: rgb(255 255 255 / 0.2);
+  --lg-edge-soft: rgb(255 255 255 / 0.06);
+  border-color: var(--xin-card-border);
+  background: var(--xin-card);
+  box-shadow: var(--xin-specular), var(--xin-card-shadow);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+}
+
+.dark .home-session-texture {
+  display: none;
+}
+
 .home-session-copy {
   min-width: 0;
   display: flex;
