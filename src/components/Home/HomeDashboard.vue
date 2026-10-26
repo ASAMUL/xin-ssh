@@ -492,6 +492,8 @@ function showError(error) {
 
 <template>
   <section class="home-dashboard">
+    <!-- 必须排在卡片和工具栏前面：靠绘制顺序生效，原因见 .home-repaint-guard 的样式 -->
+    <div class="home-repaint-guard" aria-hidden="true"></div>
     <div class="home-sheet">
       <header class="home-header">
         <div class="home-title">
