@@ -132,6 +132,12 @@
   color: var(--xin-accent-strong);
 }
 
+/* 没有打开的会话时「工作区」是禁用的。Nuxt UI 默认只淡到 75%，看着和能点的一样，
+   点了没反应像是坏了；淡到 iOS 禁用控件那个程度，一眼看出现在点不了 */
+.window-view-switch :deep(.window-view-trigger:disabled) {
+  opacity: 0.4;
+}
+
 .window-view-switch :deep(.window-view-trigger svg) {
   width: 17px;
   height: 17px;
