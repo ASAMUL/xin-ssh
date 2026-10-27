@@ -124,6 +124,27 @@
   --lg-fill-hover: rgb(255 255 255 / 0.08);
 }
 
+/* 按住时浮起的放大镜（useLiquidLens 驱动、挂 v-liquid-glass 的 magnify；目前只有 LiquidLensTabs 用）。
+   位置和大小逐帧写在 translate / scale 上，这里只给鼓满时的尺寸（--lens-width / --lens-height，由组件按格子量好）。
+   参考图里透镜比周围略白一点：铺一层很薄的亮面，高光线也比静止的玻璃亮。平时藏着不画，不占渲染 */
+.liquid-lens {
+  --lg-fill: rgb(255 255 255 / 0.07);
+  --lg-specular-strength: 0.85;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: var(--lens-width);
+  height: var(--lens-height);
+  border-radius: 999px;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.is-lensing > .liquid-lens {
+  visibility: visible;
+}
+
 /* 高光线 + 指针柔光。高光线是 v-liquid-glass 按尺寸生成的图（贴着外沿、朝光源的圆角弧段最亮）；
    柔光圆心跟着鼠标（trackLiquidGlassPointer 写 --lg-pointer-x/y），悬停才亮。
    z-index -1 让它落在玻璃自己的底色之上、文字图标之下——.liquid-glass 自带 isolation，-1 出不了这块玻璃。

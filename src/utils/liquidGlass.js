@@ -97,7 +97,10 @@ function toDataUrl({ canvas, context, image }) {
 // - 位移图：折射用，交给 SVG feDisplacementMap（只有 Chromium 需要）；
 // - 高光图：贴着外沿的一道细光——法线朝向光源的圆角弧段最亮，直边淡出。
 //   1px 亮边是整圈一样亮的，这道光有明暗走向，看着才是「光打在玻璃上」；做成普通背景图，所有内核都能用。
-function createGlassMaps({ width, height, radius, bezel, displacement, profile }) {
+// magnifier 不为空时是一颗放大镜（按住分段控件时浮起的那颗）：整颗往中心取样把底下放大 zoom 倍，
+// 斜面那圈再额外往里借 rimShift 像素，边缘弯得更狠——iOS 26 标签栏透镜「中间放大、越靠边越弯」的样子。
+// 两份位移叠起来按 maxShift 归一化，滤镜的 scale 取它的两倍
+function createGlassMaps({ width, height, radius, bezel, displacement, profile, magnifier }) {
   const displacementMap = displacement ? mapCanvas(width, height) : null;
   const specularMap = mapCanvas(width, height);
   const snellProfile = profile === "lens" ? null : getRefractionProfile();
@@ -106,7 +109,9 @@ function createGlassMaps({ width, height, radius, bezel, displacement, profile }
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const { depth, nx, ny } = roundedRectEdge(x + 0.5 - halfWidth, y + 0.5 - halfHeight, halfWidth, halfHeight, radius);
+      const cx = x + 0.5 - halfWidth;
+      const cy = y + 0.5 - halfHeight;
+      const { depth, nx, ny } = roundedRectEdge(cx, cy, halfWidth, halfHeight, radius);
       const offset = (y * width + x) * 4;
       const onBezel = depth > 0 && depth < bezel;
 
@@ -120,6 +125,11 @@ function createGlassMaps({ width, height, radius, bezel, displacement, profile }
           // 往内侧取样：边缘像素显示的是更靠里的背景，看起来就是凸透镜把边缘放大了
           dx = -nx * magnitude;
           dy = -ny * magnitude;
+        }
+        if (magnifier && depth > 0) {
+          const zoomPull = 1 - 1 / magnifier.zoom;
+          dx = (-cx * zoomPull + dx * magnifier.rimShift) / magnifier.maxShift;
+          dy = (-cy * zoomPull + dy * magnifier.rimShift) / magnifier.maxShift;
         }
         const data = displacementMap.image.data;
         data[offset] = 128 + dx * 127;
@@ -154,8 +164,13 @@ function createGlassMaps({ width, height, radius, bezel, displacement, profile }
 const MAP_CACHE_LIMIT = 48;
 const mapCache = new Map();
 
-export function getGlassMaps({ width, height, radius, bezel, displacement = true, profile = "snell" }) {
-  const key = [width, height, radius, bezel, displacement ? 1 : 0, profile].join(":");
+export function getGlassMaps({
+  width, height, radius, bezel, displacement = true, profile = "snell", magnifier = null,
+}) {
+  const key = [
+    width, height, radius, bezel, displacement ? 1 : 0, profile,
+    magnifier ? [magnifier.zoom, magnifier.rimShift, magnifier.maxShift].join("/") : "",
+  ].join(":");
   const cached = mapCache.get(key);
   if (cached) {
     mapCache.delete(key);
@@ -163,7 +178,7 @@ export function getGlassMaps({ width, height, radius, bezel, displacement = true
     return cached;
   }
 
-  const maps = createGlassMaps({ width, height, radius, bezel, displacement, profile });
+  const maps = createGlassMaps({ width, height, radius, bezel, displacement, profile, magnifier });
   mapCache.set(key, maps);
   if (mapCache.size > MAP_CACHE_LIMIT) mapCache.delete(mapCache.keys().next().value);
   return maps;
@@ -199,7 +214,13 @@ const CHANNEL_ONLY = {
 function dispersedDisplacement({ scale, dispersion }) {
   const pass = (channel, factor) => [
     svgElement("feDisplacementMap", {
-      in: "blurred", in2: "map", scale: scale * factor, xChannelSelector: "R", yChannelSelector: "G", result: `shift${channel}`,
+      in: "blurred",
+      in2: "map",
+      scale: scale * factor,
+      "data-base-scale": scale * factor,
+      xChannelSelector: "R",
+      yChannelSelector: "G",
+      result: `shift${channel}`,
     }),
     svgElement("feColorMatrix", { in: `shift${channel}`, type: "matrix", values: CHANNEL_ONLY[channel], result: `only${channel}` }),
   ];
@@ -236,11 +257,19 @@ export function upsertLiquidGlassFilter(id, { width, height, mapUrl, scale, blur
     ...(dispersion > 0
       ? dispersedDisplacement({ scale, dispersion })
       : [svgElement("feDisplacementMap", {
-        in: "blurred", in2: "map", scale, xChannelSelector: "R", yChannelSelector: "G", result: "refracted",
+        in: "blurred", in2: "map", scale, "data-base-scale": scale, xChannelSelector: "R", yChannelSelector: "G", result: "refracted",
       })]),
     svgElement("feColorMatrix", { in: "refracted", type: "saturate", values: saturation }),
   );
   host.append(filter);
+}
+
+// 按比例调折射强度（0 = 不弯，1 = 原样），不重建滤镜：放大镜从水滴里鼓起来时，弯折跟着一起长出来，
+// 落回去时退到 0，和底下的水滴无缝衔接。位移是线性的，缩放 scale 等于把放大倍数、边缘弯折、色散一起缩
+export function setLiquidGlassStrength(id, strength) {
+  filterHost?.querySelectorAll(`#${id} feDisplacementMap`).forEach((element) => {
+    element.setAttribute("scale", String(Number(element.dataset.baseScale) * strength));
+  });
 }
 
 export function removeLiquidGlassFilter(id) {

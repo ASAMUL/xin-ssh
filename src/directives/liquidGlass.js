@@ -23,6 +23,8 @@ const DEFAULTS = {
   // 薄透镜（试行）：弯折只挤在最外一圈，配 .liquid-glass--clear 和 blur: 0 用，中心直接看穿。
   // 开了它 bezel / scale 由尺寸推出来，不再看传入的值
   lens: false,
+  // 放大倍数（> 1 开启）：整颗玻璃变成放大镜，给按住分段控件时浮起的透镜用，同样不看 bezel / scale
+  magnify: 0,
   // false = 只要高光线，不做折射，底下退回 CSS 的 backdrop 模糊。
   // 给「几乎整块都被不透明内容盖住」的大玻璃用：折射全花在看不见的地方，而里面内容一变整块滤镜都要重算
   refraction: true,
@@ -34,6 +36,10 @@ const DISPERSION_MAX_AREA = 160_000;
 // 按短边算，46px 的胶囊斜面约 5.5px、最外沿往里借 11px 的背景，大小玻璃的边看着一样厚
 const LENS_BEZEL_RATIO = 0.24;
 const LENS_SHIFT_RATIO = 2;
+// 放大镜的边比静止的玻璃厚：斜面占短边一半的 35%，边上再往里多借 1.2 倍斜面宽，
+// 胶囊的上下沿被折进透镜里，成两道弧（参考图里标签栏的边线就是这么弯进去的）
+const MAGNIFY_BEZEL_RATIO = 0.35;
+const MAGNIFY_RIM_RATIO = 1.2;
 
 let sequence = 0;
 
@@ -83,26 +89,33 @@ class LiquidGlassSurface {
     this.geometry = geometry;
     const { width, height } = geometry;
     const radius = Math.min(geometry.radius, width / 2, height / 2);
-    const { blur, saturation, lens } = this.options;
+    const { blur, saturation, lens, magnify } = this.options;
     const refraction = supportsLiquidRefraction && this.options.refraction;
     const dispersion = width * height <= DISPERSION_MAX_AREA ? this.options.dispersion : 0;
     const shortHalf = Math.min(width, height) / 2;
     let bezel;
     let scale;
+    let magnifier = null;
     // feDisplacementMap 的最大偏移是 scale 的一半
-    if (lens) {
+    if (magnify > 1) {
+      bezel = Math.max(2, shortHalf * MAGNIFY_BEZEL_RATIO);
+      const rimShift = bezel * MAGNIFY_RIM_RATIO;
+      const maxShift = (Math.max(width, height) / 2) * (1 - 1 / magnify) + rimShift;
+      magnifier = { zoom: magnify, rimShift, maxShift };
+      scale = maxShift * 2;
+    } else if (lens) {
       bezel = Math.max(2, shortHalf * LENS_BEZEL_RATIO);
       scale = bezel * LENS_SHIFT_RATIO * 2;
     } else {
       bezel = Math.max(2, Math.min(this.options.bezel ?? Math.max(radius * 0.8, 8), width / 2, height / 2));
       scale = this.options.scale;
     }
-    const profile = lens ? "lens" : "snell";
+    const profile = lens || magnifier ? "lens" : "snell";
     const signature = [width, height, radius, bezel, scale, blur, saturation, dispersion, refraction, profile].join(":");
     if (signature !== this.signature) {
       this.signature = signature;
       const { displacementUrl, specularUrl } = getGlassMaps({
-        width, height, radius, bezel, displacement: refraction, profile,
+        width, height, radius, bezel, displacement: refraction, profile, magnifier,
       });
       this.element.style.setProperty("--lg-specular", `url("${specularUrl}")`);
       if (refraction) {
@@ -230,12 +243,16 @@ const STRETCH_KEYFRAMES = [
   { scale: "1 1" },
 ];
 
+export function stretchIndicator(element) {
+  if (reducedMotion?.matches) return;
+  element.querySelector('[data-slot="indicator"]')?.animate(STRETCH_KEYFRAMES, {
+    duration: 460,
+    easing: "ease-out",
+  });
+}
+
 export const vLiquidStretch = {
   updated(element, { value, oldValue }) {
-    if (value === oldValue || reducedMotion?.matches) return;
-    element.querySelector('[data-slot="indicator"]')?.animate(STRETCH_KEYFRAMES, {
-      duration: 460,
-      easing: "ease-out",
-    });
+    if (value !== oldValue) stretchIndicator(element);
   },
 };

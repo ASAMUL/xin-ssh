@@ -1,0 +1,48 @@
+/* 分段控件 + 按住浮起的放大透镜（LiquidLensTabs.vue 专用，scoped 引入；透镜本身的样式在 liquid-glass.css 的 .liquid-lens）。
+   胶囊的玻璃垫在底下一层兄弟元素上，不挂在控件本身：带 backdrop-filter 的祖先会成为 backdrop root，
+   透镜就只看得到胶囊里的字、看不到背后的壁纸，原来的字从透镜的透明处露出来，和放大后的字叠成重影。
+   现在透镜看到的是整片不透明的壁纸，放大后的画面能把底下原样的字整块盖住。 */
+.liquid-lens-tabs {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  user-select: none;
+  /* 横向拖透镜归自己，竖向滑动照样滚列表 */
+  touch-action: pan-y;
+}
+
+.liquid-lens-tabs-glass {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.liquid-lens-tabs-control {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  border-radius: inherit;
+}
+
+/* 透镜在的时候它就是选中项：水滴随透镜鼓起淡出、随透镜落下淡回（--droplet-opacity 逐帧写）。
+   这期间水滴不走过渡，松手切换时直接到新位置，透镜落下时它已经在那里等着了 */
+.liquid-lens-tabs.is-lensing :deep([data-slot="indicator"]) {
+  opacity: var(--droplet-opacity, 1);
+  transition: none;
+}
+
+/* 透镜底下垫一层选中色的选项克隆，只露出透镜那一块：拖到哪个选项，那个选项在透镜里先变成选中色（iOS 也是这样）。
+   它画在原来的选项上面、透镜下面，透镜放大的就是这一层 */
+.liquid-lens-tabs-tint {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.liquid-lens-tabs.is-lensing .liquid-lens-tabs-tint {
+  visibility: visible;
+}

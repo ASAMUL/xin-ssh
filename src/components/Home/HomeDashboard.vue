@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useScroll } from "@vueuse/core";
 import { useToast } from "@nuxt/ui/composables";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import LiquidLensTabs from "../AppShell/LiquidLensTabs.vue";
 import ConnectionCard from "./ConnectionCard.vue";
 import ConnectionTable from "./ConnectionTable.vue";
 import DeleteConnectionDialog from "./DeleteConnectionDialog.vue";
@@ -531,14 +532,13 @@ function showError(error) {
             :placeholder="t('home.searchPlaceholder')"
           />
 
-          <UTabs
+          <!-- 按住选中项会浮起一颗放大透镜，拖到别的选项上松手就切过去 -->
+          <LiquidLensTabs
             v-model="activeNav"
-            v-liquid-glass="CLEAR_LENS"
-            v-liquid-stretch="activeNav"
-            class="home-filter liquid-glass liquid-glass--clear"
-            variant="pill"
+            class="home-filter"
             :items="navItems"
-            :content="false"
+            :glass="CLEAR_LENS"
+            clear
             :ui="{
               list: 'home-segment-list',
               indicator: 'home-segment-indicator',
