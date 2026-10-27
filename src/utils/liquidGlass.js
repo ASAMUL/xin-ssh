@@ -40,6 +40,14 @@ function getRefractionProfile() {
   return refractionProfile;
 }
 
+// 薄透镜截面（鸿蒙 AppleUI 组件的做法）：位移 = 1 - √(1 - x²)，x 从斜面内沿 0 走到外沿 1。
+// 弯折几乎全挤在最外一两个像素，斜面以内完全不动——中心看穿、只有一圈「厚边」；
+// 上面那条斯涅尔曲线又宽又缓，胶囊几乎整颗都在轻轻晃，看着像隔了层水而不是一块玻璃
+function lensMagnitude(depth, bezel) {
+  const x = 1 - depth / bezel;
+  return 1 - Math.sqrt(1 - x * x);
+}
+
 // 圆角矩形的 SDF：返回离边缘的内侧距离和指向外侧的法线
 function roundedRectEdge(px, py, halfWidth, halfHeight, radius) {
   const qx = Math.abs(px) - (halfWidth - radius);
@@ -89,10 +97,10 @@ function toDataUrl({ canvas, context, image }) {
 // - 位移图：折射用，交给 SVG feDisplacementMap（只有 Chromium 需要）；
 // - 高光图：贴着外沿的一道细光——法线朝向光源的圆角弧段最亮，直边淡出。
 //   1px 亮边是整圈一样亮的，这道光有明暗走向，看着才是「光打在玻璃上」；做成普通背景图，所有内核都能用。
-function createGlassMaps({ width, height, radius, bezel, displacement }) {
+function createGlassMaps({ width, height, radius, bezel, displacement, profile }) {
   const displacementMap = displacement ? mapCanvas(width, height) : null;
   const specularMap = mapCanvas(width, height);
-  const profile = getRefractionProfile();
+  const snellProfile = profile === "lens" ? null : getRefractionProfile();
   const halfWidth = width / 2;
   const halfHeight = height / 2;
 
@@ -106,7 +114,9 @@ function createGlassMaps({ width, height, radius, bezel, displacement }) {
         let dx = 0;
         let dy = 0;
         if (onBezel) {
-          const magnitude = profile[Math.min(PROFILE_SAMPLES - 1, Math.floor((depth / bezel) * PROFILE_SAMPLES))];
+          const magnitude = snellProfile
+            ? snellProfile[Math.min(PROFILE_SAMPLES - 1, Math.floor((depth / bezel) * PROFILE_SAMPLES))]
+            : lensMagnitude(depth, bezel);
           // 往内侧取样：边缘像素显示的是更靠里的背景，看起来就是凸透镜把边缘放大了
           dx = -nx * magnitude;
           dy = -ny * magnitude;
@@ -144,8 +154,8 @@ function createGlassMaps({ width, height, radius, bezel, displacement }) {
 const MAP_CACHE_LIMIT = 48;
 const mapCache = new Map();
 
-export function getGlassMaps({ width, height, radius, bezel, displacement = true }) {
-  const key = [width, height, radius, bezel, displacement ? 1 : 0].join(":");
+export function getGlassMaps({ width, height, radius, bezel, displacement = true, profile = "snell" }) {
+  const key = [width, height, radius, bezel, displacement ? 1 : 0, profile].join(":");
   const cached = mapCache.get(key);
   if (cached) {
     mapCache.delete(key);
@@ -153,7 +163,7 @@ export function getGlassMaps({ width, height, radius, bezel, displacement = true
     return cached;
   }
 
-  const maps = createGlassMaps({ width, height, radius, bezel, displacement });
+  const maps = createGlassMaps({ width, height, radius, bezel, displacement, profile });
   mapCache.set(key, maps);
   if (mapCache.size > MAP_CACHE_LIMIT) mapCache.delete(mapCache.keys().next().value);
   return maps;

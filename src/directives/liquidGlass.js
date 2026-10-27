@@ -20,6 +20,9 @@ const DEFAULTS = {
   // 色散强度：R / B 通道比 G 少弯 / 多弯的比例，0 关闭。
   // 曾给到 0.07，压在樱色水滴、终端彩字上时边缘析出的彩边太明显，会被当成玻璃描了一圈颜色
   dispersion: 0.03,
+  // 薄透镜（试行）：弯折只挤在最外一圈，配 .liquid-glass--clear 和 blur: 0 用，中心直接看穿。
+  // 开了它 bezel / scale 由尺寸推出来，不再看传入的值
+  lens: false,
   // false = 只要高光线，不做折射，底下退回 CSS 的 backdrop 模糊。
   // 给「几乎整块都被不透明内容盖住」的大玻璃用：折射全花在看不见的地方，而里面内容一变整块滤镜都要重算
   refraction: true,
@@ -27,6 +30,10 @@ const DEFAULTS = {
 
 // 色散要把位移做三遍，成本随面积涨；整条顶栏、大对话框底下本来也没有高对比的边缘可析出彩边，只给控件尺寸的玻璃开
 const DISPERSION_MAX_AREA = 160_000;
+// 薄透镜的比例照鸿蒙 AppleUI：斜面宽 = 短边一半的 24%，最外沿偏折 = 斜面宽的 2 倍。
+// 按短边算，46px 的胶囊斜面约 5.5px、最外沿往里借 11px 的背景，大小玻璃的边看着一样厚
+const LENS_BEZEL_RATIO = 0.24;
+const LENS_SHIFT_RATIO = 2;
 
 let sequence = 0;
 
@@ -76,15 +83,26 @@ class LiquidGlassSurface {
     this.geometry = geometry;
     const { width, height } = geometry;
     const radius = Math.min(geometry.radius, width / 2, height / 2);
-    const { scale, blur, saturation } = this.options;
+    const { blur, saturation, lens } = this.options;
     const refraction = supportsLiquidRefraction && this.options.refraction;
     const dispersion = width * height <= DISPERSION_MAX_AREA ? this.options.dispersion : 0;
-    const bezel = Math.max(2, Math.min(this.options.bezel ?? Math.max(radius * 0.8, 8), width / 2, height / 2));
-    const signature = [width, height, radius, bezel, scale, blur, saturation, dispersion, refraction].join(":");
+    const shortHalf = Math.min(width, height) / 2;
+    let bezel;
+    let scale;
+    // feDisplacementMap 的最大偏移是 scale 的一半
+    if (lens) {
+      bezel = Math.max(2, shortHalf * LENS_BEZEL_RATIO);
+      scale = bezel * LENS_SHIFT_RATIO * 2;
+    } else {
+      bezel = Math.max(2, Math.min(this.options.bezel ?? Math.max(radius * 0.8, 8), width / 2, height / 2));
+      scale = this.options.scale;
+    }
+    const profile = lens ? "lens" : "snell";
+    const signature = [width, height, radius, bezel, scale, blur, saturation, dispersion, refraction, profile].join(":");
     if (signature !== this.signature) {
       this.signature = signature;
       const { displacementUrl, specularUrl } = getGlassMaps({
-        width, height, radius, bezel, displacement: refraction,
+        width, height, radius, bezel, displacement: refraction, profile,
       });
       this.element.style.setProperty("--lg-specular", `url("${specularUrl}")`);
       if (refraction) {

@@ -115,6 +115,15 @@
     --lg-glow-alpha 280ms ease;
 }
 
+/* 透明玻璃（试行，先只用在首页工具栏）：参考鸿蒙 AppleUI 组件，不铺底色，配 v-liquid-glass 的
+   lens + blur: 0，中心直接看穿，形状只靠边缘一圈薄透镜和高光线交代。
+   底色一层白雾是现在的玻璃不够「iOS」的主要原因：背后的颜色被冲淡，边缘的折射也被雾盖住。
+   悬停补一层很淡的亮面，提示这里能点 */
+:where(.liquid-glass--clear) {
+  --lg-fill: transparent;
+  --lg-fill-hover: rgb(255 255 255 / 0.08);
+}
+
 /* 高光线 + 指针柔光。高光线是 v-liquid-glass 按尺寸生成的图（贴着外沿、朝光源的圆角弧段最亮）；
    柔光圆心跟着鼠标（trackLiquidGlassPointer 写 --lg-pointer-x/y），悬停才亮。
    z-index -1 让它落在玻璃自己的底色之上、文字图标之下——.liquid-glass 自带 isolation，-1 出不了这块玻璃。

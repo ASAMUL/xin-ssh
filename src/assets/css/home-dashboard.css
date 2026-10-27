@@ -121,16 +121,24 @@
 }
 
 /* 滚动边缘：工具栏背后一层渐隐的模糊（iOS 26 的 scroll edge effect），
-   卡片滑到胶囊底下前先被柔化，胶囊上的字不会和卡片文字打架 */
+   卡片滑到胶囊底下前先被柔化，胶囊上的字不会和卡片文字打架。
+   只在列表真的滚到工具栏底下时才出现（iOS 也是这样）：停在顶部时胶囊直接浮在壁纸上，
+   透明玻璃的中心才看得穿，不然看到的是这层糊过的壁纸 */
 .home-toolbar::before {
   content: "";
   position: absolute;
   inset: 0 calc(var(--home-gutter) * -1) -18px;
   z-index: -1;
   pointer-events: none;
+  opacity: 0;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
+  transition: opacity 200ms ease;
+}
+
+.home-scroll.is-scrolled .home-toolbar::before {
+  opacity: 1;
 }
 
 .home-toolbar > * {

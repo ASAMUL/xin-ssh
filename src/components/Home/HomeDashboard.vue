@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useScroll } from "@vueuse/core";
 import { useToast } from "@nuxt/ui/composables";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import ConnectionCard from "./ConnectionCard.vue";
@@ -21,6 +22,8 @@ import { exportProfiles, readSshConfig } from "../../services/workspaceApi";
 const DEFAULT_GROUP_ID = "group-default";
 // USelect 的值不能为空，用哨兵代表「不按分组筛选」；分组 id 是 UUID，不会撞上
 const ALL_GROUPS = "all";
+// 工具栏的透明玻璃（试行）：薄透镜、不模糊，配 .liquid-glass--clear
+const CLEAR_LENS = { lens: true, blur: 0 };
 
 const { t } = useI18n();
 const toast = useToast();
@@ -31,6 +34,9 @@ const uiStore = useUiStore();
 
 const query = ref("");
 const cardGrid = ref(null);
+const homeScroll = ref(null);
+// 滚离顶部才给工具栏垫滚动边缘的模糊，见 home-dashboard.css
+const { arrivedState } = useScroll(homeScroll);
 const groupDialogOpen = ref(false);
 const groupDialogMode = ref("create");
 const groupDialogInitialName = ref("");
@@ -511,13 +517,13 @@ function showError(error) {
         />
       </header>
 
-      <div class="home-scroll">
+      <div ref="homeScroll" class="home-scroll" :class="{ 'is-scrolled': !arrivedState.top }">
         <!-- 工具栏吸顶、浮在列表之上：卡片从玻璃底下滑过时，边缘的折射才看得见 -->
         <div class="home-toolbar">
           <UInput
             v-model="query"
-            v-liquid-glass
-            class="home-search liquid-glass"
+            v-liquid-glass="CLEAR_LENS"
+            class="home-search liquid-glass liquid-glass--clear"
             color="neutral"
             variant="none"
             size="lg"
@@ -527,9 +533,9 @@ function showError(error) {
 
           <UTabs
             v-model="activeNav"
-            v-liquid-glass
+            v-liquid-glass="CLEAR_LENS"
             v-liquid-stretch="activeNav"
-            class="home-filter liquid-glass"
+            class="home-filter liquid-glass liquid-glass--clear"
             variant="pill"
             :items="navItems"
             :content="false"
@@ -541,7 +547,7 @@ function showError(error) {
           />
 
           <!-- USelect 渲染的是片段（触发器 + 弹层 portal），指令挂不上去，玻璃做在外面这层 -->
-          <div v-liquid-glass class="home-group-select liquid-glass">
+          <div v-liquid-glass="CLEAR_LENS" class="home-group-select liquid-glass liquid-glass--clear">
             <USelect
               v-model="activeGroupFilter"
               class="home-group-trigger"
@@ -556,8 +562,8 @@ function showError(error) {
           </div>
 
           <UFieldGroup
-            v-liquid-glass
-            class="home-view-toggle liquid-glass"
+            v-liquid-glass="CLEAR_LENS"
+            class="home-view-toggle liquid-glass liquid-glass--clear"
             role="group"
             :aria-label="t('home.viewMode')"
           >
@@ -589,8 +595,8 @@ function showError(error) {
 
           <UDropdownMenu :items="moreMenuItems" size="sm" :content="{ align: 'end' }">
             <UButton
-              v-liquid-glass
-              class="home-more liquid-glass"
+              v-liquid-glass="CLEAR_LENS"
+              class="home-more liquid-glass liquid-glass--clear"
               color="neutral"
               variant="ghost"
               size="lg"
