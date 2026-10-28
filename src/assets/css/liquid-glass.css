@@ -108,6 +108,9 @@
     var(--lg-shadow);
   backdrop-filter: blur(10px) saturate(1.5);
   -webkit-backdrop-filter: blur(10px) saturate(1.5);
+  /* 接在折射滤镜后面的调色（见下面的常规档）。自定义属性会往下继承，
+     每块玻璃先重置成不调：常规档的栏里再放一块别的玻璃，不会跟着被压一遍 */
+  --lg-tone: saturate(1);
   transition:
     background 180ms ease,
     box-shadow 180ms ease,
@@ -115,13 +118,45 @@
     --lg-glow-alpha 280ms ease;
 }
 
-/* 透明玻璃（试行，先只用在首页工具栏）：参考鸿蒙 AppleUI 组件，不铺底色，配 v-liquid-glass 的
-   lens + blur: 0，中心直接看穿，形状只靠边缘一圈薄透镜和高光线交代。
-   底色一层白雾是现在的玻璃不够「iOS」的主要原因：背后的颜色被冲淡，边缘的折射也被雾盖住。
-   悬停补一层很淡的亮面，提示这里能点 */
+/* —— 三档材质（Apple 的分法）——
+   档位只管「底色 + 背后的画面怎么处理」，边缘的薄透镜和高光线三档一样（折射参数见 v-liquid-glass 的 GLASS_* 预设）：
+   - 透明 .liquid-glass--clear：浮在壁纸上的控件（首页工具栏、顶栏的两颗胶囊）。不铺底色、不模糊，中心直接看穿；
+   - 常规 .liquid-glass--regular：上面要放字的条和栏（会话标签条、状态栏）。轻模糊，再把背后的亮度压进一段区间；
+   - 厚：菜单、弹窗，还没换（见文末「弹出层」）。
+   旧玻璃靠一层白雾保可读。雾只会往白里推：深色下压不住亮壁纸，白字看不清；
+   浅色下要压住暗壁纸就得把雾加厚，整条栏又成了一块白板，边缘的折射也被盖住。 */
+
+/* 透明：参考鸿蒙 AppleUI 组件，形状只靠边缘一圈薄透镜和高光线交代。悬停补一层很淡的亮面，提示这里能点 */
 :where(.liquid-glass--clear) {
   --lg-fill: transparent;
   --lg-fill-hover: rgb(255 255 255 / 0.08);
+}
+
+/* 常规：背后的亮度压进 [lo, hi]。浅色压到偏亮的一段，暗壁纸上深色字也看得清；
+   深色压到偏暗的一段，亮壁纸透上来也压得住白字。颜色照样透上来（饱和度还在滤镜里拉高过），只是不刺眼。
+   底色只留一层很薄的亮面交代「这里有块玻璃」。设置里的玻璃强度滑块推向「着色」时，区间收窄、底色加厚 */
+:root {
+  --lg-tone-lo: calc(0.4 + 0.22 * var(--xin-glass-tint));
+  --lg-tone-hi: 0.98;
+  --lg-regular-fill: rgb(255 255 255 / calc(0.06 + 0.3 * var(--xin-glass-tint)));
+}
+
+.dark {
+  --lg-tone-lo: calc(0.05 + 0.03 * var(--xin-glass-tint));
+  --lg-tone-hi: calc(0.48 - 0.16 * var(--xin-glass-tint));
+  --lg-regular-fill: color-mix(in srgb, rgb(255 255 255 / 0.03), rgb(36 36 40 / 0.56) calc(var(--xin-glass-tint) * 100%));
+}
+
+/* 压缩用 contrast + brightness 拼：contrast(c) 把 [0, 1] 压成以 0.5 为中心、宽 c 的一段，brightness(b) 再整体乘 b，
+   于是 lo = b(1 - c) / 2、hi = b(1 + c) / 2，反过来 b = lo + hi、c = (hi - lo) / (hi + lo)。
+   v-liquid-glass 把它接在折射后面（backdrop-filter: url(#…) var(--lg-tone)）；不支持折射的内核走这里的模糊回退 */
+:where(.liquid-glass--regular) {
+  --lg-fill: var(--lg-regular-fill);
+  --lg-tone:
+    contrast(calc((var(--lg-tone-hi) - var(--lg-tone-lo)) / (var(--lg-tone-hi) + var(--lg-tone-lo))))
+    brightness(calc(var(--lg-tone-hi) + var(--lg-tone-lo)));
+  backdrop-filter: blur(12px) saturate(1.5) var(--lg-tone);
+  -webkit-backdrop-filter: blur(12px) saturate(1.5) var(--lg-tone);
 }
 
 /* 按住时浮起的放大镜（useLiquidLens 驱动、挂 v-liquid-glass 的 magnify；目前只有 LiquidLensTabs 用）。
@@ -259,14 +294,14 @@
 }
 
 /* ————————————————————————————————————————————————————————————
-   弹出层的「常规」玻璃（Apple 的 Regular 材质）
+   弹出层玻璃（之后归到上面三档里的「厚」档）
    菜单、弹层、Toast 要读大量文字，比控件胶囊实一些、模糊重一些；
    高光线照旧（main.js 的 autoAttachLiquidGlass 给它们按尺寸生成），所以还是同一种玻璃。
    这些元素经 portal 挂在 body 下，只能写全局样式；由 vite.config.js 的
    Nuxt UI 主题配置统一挂上类名，组件里不用逐个加。
    ———————————————————————————————————————————————————————————— */
 :root {
-  --lg-fill-regular: rgb(255 255 255 / calc(0.72 + 0.16 * var(--xin-glass-tint)));
+  --lg-fill-popover: rgb(255 255 255 / calc(0.72 + 0.16 * var(--xin-glass-tint)));
   /* 对话框也有折射了（边缘一圈要透才看得见弯折），底色比以前通透；
      可读性交给折射滤镜里的那层模糊（见 main.js 的 autoAttachLiquidGlass）。
      通透档从 0.7 降到 0.6：用户嫌弹窗灰蒙蒙——透出来的是被遮罩压灰的背景，白底越厚越像一块灰白板；
@@ -278,7 +313,7 @@
 }
 
 .dark {
-  --lg-fill-regular: color-mix(in srgb, rgb(38 38 42 / 0.76), rgb(34 34 38 / 0.9) calc(var(--xin-glass-tint) * 100%));
+  --lg-fill-popover: color-mix(in srgb, rgb(38 38 42 / 0.76), rgb(34 34 38 / 0.9) calc(var(--xin-glass-tint) * 100%));
   --lg-fill-sheet: color-mix(in srgb, rgb(30 30 32 / 0.76), rgb(26 26 28 / 0.94) calc(var(--xin-glass-tint) * 100%));
   --lg-scrim: rgb(0 0 0 / 0.36);
 }
@@ -306,7 +341,7 @@
 
 .liquid-menu {
   border-radius: 16px;
-  background: var(--lg-fill-regular);
+  background: var(--lg-fill-popover);
 }
 
 .liquid-sheet {
@@ -316,7 +351,7 @@
 
 .liquid-tooltip {
   border-radius: 999px;
-  background: var(--lg-fill-regular);
+  background: var(--lg-fill-popover);
   box-shadow:
     inset 0 1px 0 var(--lg-edge-light),
     inset 0 0 0 1px var(--lg-edge-ink),

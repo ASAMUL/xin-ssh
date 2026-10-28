@@ -1,4 +1,4 @@
-/* 外壳是液态玻璃（WorkspaceShell 上挂 .liquid-glass + v-liquid-glass），
+/* 外壳是常规档的液态玻璃（WorkspaceShell 上挂 .liquid-glass--regular + v-liquid-glass，材质见 liquid-glass.css），
    这里只管里面的排布：会话标签 | 加号，加号紧跟最后一个标签（Chrome 模式） */
 /* 不用全圆胶囊：它下方是 16px 圆角的面板、底部是 14px 的状态栏，
    只有它两头是半圆会像一颗浮着的泡泡，和这一列的圆角矩形对不上 */

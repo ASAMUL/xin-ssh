@@ -11,6 +11,7 @@ import TunnelPanel from "../Tunnels/TunnelPanel.vue";
 import HomeDashboard from "../Home/HomeDashboard.vue";
 import HostMonitorSidebar from "./HostMonitorSidebar.vue";
 import WorkspaceStatusBar from "./WorkspaceStatusBar.vue";
+import { GLASS_REGULAR } from "../../directives/liquidGlass";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
@@ -44,8 +45,8 @@ function persistMonitorPaneSize(event) {
     >
       <div v-if="!uiStore.isWorkspaceImmersive" class="workspace-session-bar">
         <SessionTabs
-          v-liquid-glass="{ scale: 16 }"
-          class="liquid-glass"
+          v-liquid-glass="GLASS_REGULAR"
+          class="liquid-glass liquid-glass--regular"
           :sessions="sessionStore.sessions"
           :active-session-id="sessionStore.activeSessionId"
           :disabled="navigationLocked"

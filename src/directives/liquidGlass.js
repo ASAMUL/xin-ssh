@@ -20,7 +20,7 @@ const DEFAULTS = {
   // 色散强度：R / B 通道比 G 少弯 / 多弯的比例，0 关闭。
   // 曾给到 0.07，压在樱色水滴、终端彩字上时边缘析出的彩边太明显，会被当成玻璃描了一圈颜色
   dispersion: 0.03,
-  // 薄透镜（试行）：弯折只挤在最外一圈，配 .liquid-glass--clear 和 blur: 0 用，中心直接看穿。
+  // 薄透镜：弯折只挤在最外一圈，斜面以内完全不动（三档材质都用它，见下面的 GLASS_* 预设）。
   // 开了它 bezel / scale 由尺寸推出来，不再看传入的值
   lens: false,
   // 放大倍数（> 1 开启）：整颗玻璃变成放大镜，给按住分段控件时浮起的透镜用，同样不看 bezel / scale
@@ -29,6 +29,11 @@ const DEFAULTS = {
   // 给「几乎整块都被不透明内容盖住」的大玻璃用：折射全花在看不见的地方，而里面内容一变整块滤镜都要重算
   refraction: true,
 };
+
+// 三档材质的折射参数，和 liquid-glass.css 的 .liquid-glass--clear / --regular 配对用（底色、亮度压缩在那边）。
+// 边缘统一用薄透镜，大小玻璃的边看着一样厚；常规档上面要放字，背后轻轻糊一下
+export const GLASS_CLEAR = { lens: true, blur: 0 };
+export const GLASS_REGULAR = { lens: true, blur: 5 };
 
 // 色散要把位移做三遍，成本随面积涨；整条顶栏、大对话框底下本来也没有高对比的边缘可析出彩边，只给控件尺寸的玻璃开
 const DISPERSION_MAX_AREA = 160_000;
@@ -124,8 +129,9 @@ class LiquidGlassSurface {
         });
       }
     }
-    // 内联样式压过 .liquid-glass 里的模糊回退
-    if (refraction) this.element.style.setProperty("backdrop-filter", `url(#${this.id})`);
+    // 内联样式压过 .liquid-glass 里的模糊回退；常规档的亮度压缩（--lg-tone）接在折射后面。
+    // 弹出层没有 .liquid-glass 类、拿不到重置值，靠 var 的兜底
+    if (refraction) this.element.style.setProperty("backdrop-filter", `url(#${this.id}) var(--lg-tone, saturate(1))`);
   }
 
   destroy() {

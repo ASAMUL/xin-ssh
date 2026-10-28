@@ -250,7 +250,8 @@ export function upsertLiquidGlassFilter(id, { width, height, mapUrl, scale, blur
     "color-interpolation-filters": "sRGB",
   });
   filter.append(
-    svgElement("feGaussianBlur", { in: "SourceGraphic", stdDeviation: blur, result: "blurred" }),
+    // 边缘按最外一圈像素延伸：默认往外取到的是透明，模糊一加重，玻璃四周就淡出一圈虚边
+    svgElement("feGaussianBlur", { in: "SourceGraphic", stdDeviation: blur, edgeMode: "duplicate", result: "blurred" }),
     svgElement("feImage", {
       href: mapUrl, x: 0, y: 0, width, height, preserveAspectRatio: "none", result: "map",
     }),

@@ -10,6 +10,7 @@ import { useTransferStore } from "../../stores/transferStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useSessionLatency } from "../../composables/useSessionLatency";
 import { formatUptimeShort } from "../../utils/formatMetrics";
+import { GLASS_REGULAR } from "../../directives/liquidGlass";
 
 const { t } = useI18n();
 const sessionStore = useSessionStore();
@@ -77,7 +78,7 @@ async function copyForwardAddress(forward) {
 </script>
 
 <template>
-  <footer v-liquid-glass="{ scale: 12, blur: 3 }" class="workspace-status-bar liquid-glass">
+  <footer v-liquid-glass="GLASS_REGULAR" class="workspace-status-bar liquid-glass liquid-glass--regular">
     <span class="status-item status-connection" :class="session?.status" :title="statusLabel">
       <i></i>
       <span>SSH</span>
