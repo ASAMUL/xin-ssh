@@ -13,7 +13,7 @@
 
 .connection-table table {
   width: 100%;
-  min-width: 720px;
+  min-width: 600px;
   border-collapse: collapse;
 }
 
@@ -38,8 +38,6 @@
 }
 
 .connection-table tbody tr {
-  --status-color: var(--xin-status-idle);
-  --status-soft: rgb(var(--xin-neutral-rgb) / 0.12);
   border-bottom: 1px solid rgb(var(--xin-ink-rgb) / 0.05);
   transition: background 120ms ease;
 }
@@ -98,27 +96,22 @@ tr.home-sort-fallback {
 td.col-name {
   display: flex;
   align-items: center;
-  gap: 6px;
 }
 
-.row-star {
+.row-favorite {
+  width: 13px;
+  height: 13px;
   flex: 0 0 auto;
-  opacity: 0;
-  transition: opacity 120ms ease;
+  color: var(--xin-favorite);
 }
 
-.connection-table tbody tr:hover .row-star,
-.row-star:focus-visible,
-.row-star.favorite {
-  opacity: 1;
+.row-favorite :deep(path),
+.row-star.favorite :deep(svg path) {
+  fill: currentColor;
 }
 
 .row-star.favorite :deep(svg) {
   color: var(--xin-favorite);
-}
-
-.row-star.favorite :deep(svg path) {
-  fill: currentColor;
 }
 
 .row-name {
@@ -153,28 +146,34 @@ td.col-name {
   color: var(--xin-text-muted);
 }
 
+/* 状态点：和卡片同一种，排在名字前面 */
 .row-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 24px;
-  padding: 0 10px;
-  color: var(--xin-text-secondary);
-  border-radius: 999px;
-  background: var(--status-soft);
-  font-size: 11px;
-  font-weight: 620;
-}
-
-.row-status i {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: var(--status-color);
+  box-shadow: 0 0 0 3px var(--status-soft);
+}
+
+.connection-table tbody tr.connecting .row-status {
+  animation: row-status-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes row-status-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connection-table tbody tr.connecting .row-status {
+    animation: none;
+  }
 }
 
 .col-actions {
-  width: 124px;
+  width: 152px;
   text-align: right;
   white-space: nowrap;
 }

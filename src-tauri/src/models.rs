@@ -294,7 +294,7 @@ pub fn default_file_tree_size() -> f64 {
 }
 
 pub fn default_home_view_mode() -> String {
-    "grid".to_string()
+    "list".to_string()
 }
 
 pub fn default_ssh_keepalive_seconds() -> u64 {

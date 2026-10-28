@@ -5,6 +5,7 @@ import { useScroll } from "@vueuse/core";
 import { useToast } from "@nuxt/ui/composables";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import LiquidLensTabs from "../AppShell/LiquidLensTabs.vue";
+import { GLASS_CLEAR } from "../../directives/liquidGlass";
 import ConnectionCard from "./ConnectionCard.vue";
 import ConnectionTable from "./ConnectionTable.vue";
 import DeleteConnectionDialog from "./DeleteConnectionDialog.vue";
@@ -23,8 +24,6 @@ import { exportProfiles, readSshConfig } from "../../services/workspaceApi";
 const DEFAULT_GROUP_ID = "group-default";
 // USelect 的值不能为空，用哨兵代表「不按分组筛选」；分组 id 是 UUID，不会撞上
 const ALL_GROUPS = "all";
-// 工具栏的透明玻璃（试行）：薄透镜、不模糊，配 .liquid-glass--clear
-const CLEAR_LENS = { lens: true, blur: 0 };
 
 const { t } = useI18n();
 const toast = useToast();
@@ -61,6 +60,11 @@ const activeGroupFilter = computed({
 });
 const viewMode = computed(() => settingsStore.homeViewMode);
 const hasProfiles = computed(() => profileStore.activeProfiles.length > 0);
+// 页面不放「连接 · N 台主机」大标题（顶栏已经亮着「连接」），主机数量挪进搜索框
+const searchPlaceholder = computed(() => {
+  const count = profileStore.activeProfiles.length;
+  return count ? t("home.searchHosts", { count }) : t("home.searchPlaceholder");
+});
 const profileStatuses = computed(() => sessionStore.statusByProfile);
 const normalizedQuery = computed(() => query.value.trim().toLowerCase());
 
@@ -502,34 +506,18 @@ function showError(error) {
     <!-- 必须排在卡片和工具栏前面：靠绘制顺序生效，原因见 .home-repaint-guard 的样式 -->
     <div class="home-repaint-guard" aria-hidden="true"></div>
     <div class="home-sheet">
-      <header class="home-header">
-        <div class="home-title">
-          <h1>{{ t("home.title") }}</h1>
-          <span>{{ t("home.hostCount", { count: profileStore.activeProfiles.length }) }}</span>
-        </div>
-        <UButton
-          v-liquid-glass="{ scale: 16 }"
-          class="home-create liquid-glass liquid-glass--ink"
-          color="primary"
-          size="lg"
-          icon="i-lucide-plus"
-          :label="t('sidebar.add')"
-          @click="uiStore.openConnectionForm()"
-        />
-      </header>
-
       <div ref="homeScroll" class="home-scroll" :class="{ 'is-scrolled': !arrivedState.top }">
         <!-- 工具栏吸顶、浮在列表之上：卡片从玻璃底下滑过时，边缘的折射才看得见 -->
         <div class="home-toolbar">
           <UInput
             v-model="query"
-            v-liquid-glass="CLEAR_LENS"
+            v-liquid-glass="GLASS_CLEAR"
             class="home-search liquid-glass liquid-glass--clear"
             color="neutral"
             variant="none"
             size="lg"
             icon="i-lucide-search"
-            :placeholder="t('home.searchPlaceholder')"
+            :placeholder="searchPlaceholder"
           />
 
           <!-- 按住选中项会浮起一颗放大透镜，拖到别的选项上松手就切过去 -->
@@ -537,7 +525,7 @@ function showError(error) {
             v-model="activeNav"
             class="home-filter"
             :items="navItems"
-            :glass="CLEAR_LENS"
+            :glass="GLASS_CLEAR"
             clear
             :ui="{
               list: 'home-segment-list',
@@ -547,7 +535,7 @@ function showError(error) {
           />
 
           <!-- USelect 渲染的是片段（触发器 + 弹层 portal），指令挂不上去，玻璃做在外面这层 -->
-          <div v-liquid-glass="CLEAR_LENS" class="home-group-select liquid-glass liquid-glass--clear">
+          <div v-liquid-glass="GLASS_CLEAR" class="home-group-select liquid-glass liquid-glass--clear">
             <USelect
               v-model="activeGroupFilter"
               class="home-group-trigger"
@@ -562,7 +550,7 @@ function showError(error) {
           </div>
 
           <UFieldGroup
-            v-liquid-glass="CLEAR_LENS"
+            v-liquid-glass="GLASS_CLEAR"
             class="home-view-toggle liquid-glass liquid-glass--clear"
             role="group"
             :aria-label="t('home.viewMode')"
@@ -595,7 +583,7 @@ function showError(error) {
 
           <UDropdownMenu :items="moreMenuItems" size="sm" :content="{ align: 'end' }">
             <UButton
-              v-liquid-glass="CLEAR_LENS"
+              v-liquid-glass="GLASS_CLEAR"
               class="home-more liquid-glass liquid-glass--clear"
               color="neutral"
               variant="ghost"
@@ -606,6 +594,16 @@ function showError(error) {
               :title="t('home.moreActions')"
             />
           </UDropdownMenu>
+
+          <UButton
+            v-liquid-glass="{ scale: 16 }"
+            class="home-create liquid-glass liquid-glass--ink"
+            color="primary"
+            size="lg"
+            icon="i-lucide-plus"
+            :label="t('sidebar.add')"
+            @click="uiStore.openConnectionForm()"
+          />
         </div>
 
         <div v-if="!hasProfiles" class="home-empty">

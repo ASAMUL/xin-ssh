@@ -56,8 +56,9 @@ export const useSettingsStore = defineStore("settings", {
       normalizePaneSize(state.settings?.filePaneSize, DEFAULT_FILE_PANE_SIZE),
     fileTreeSize: (state) =>
       normalizePaneSize(state.settings?.fileTreeSize, DEFAULT_FILE_TREE_SIZE),
+    // 默认列表：主机是纯文字记录，一行正好装下；卡片视图保留给喜欢的人手动切
     homeViewMode: (state) =>
-      state.settings?.homeViewMode === "list" ? "list" : "grid",
+      state.settings?.homeViewMode === "grid" ? "grid" : "list",
     terminalBackground: (state) => normalizeTerminalBackground(state.settings?.terminalBackground),
     appearanceMode: (state) => normalizeAppearanceMode(state.settings?.appearanceMode),
     glassTint: (state) => normalizeGlassTint(state.settings?.glassTint),
@@ -130,7 +131,7 @@ export const useSettingsStore = defineStore("settings", {
     },
     setHomeViewMode(homeViewMode) {
       return this.applySettingsPatch({
-        homeViewMode: homeViewMode === "list" ? "list" : "grid",
+        homeViewMode: homeViewMode === "grid" ? "grid" : "list",
       });
     },
     setLocale(locale) {

@@ -66,7 +66,6 @@ export const messages = {
       openSessions: "已打开会话",
       moveTabLeft: "标签左移",
       moveTabRight: "标签右移",
-      notOpen: "未打开",
     },
     quickConnect: {
       open: "打开会话",
@@ -79,9 +78,8 @@ export const messages = {
       create: "新建连接",
     },
     home: {
-      title: "连接",
-      hostCount: "{count} 台主机",
       searchPlaceholder: "搜索主机或地址",
+      searchHosts: "搜索 {count} 台主机",
       filter: {
         all: "全部",
         favorites: "收藏",
@@ -112,10 +110,8 @@ export const messages = {
       profileExportFailed: "连接配置导出失败",
       table: {
         name: "名称",
-        host: "主机",
-        username: "用户名",
+        address: "地址",
         group: "分组",
-        status: "状态",
         lastConnected: "最后连接",
         actions: "操作",
       },
@@ -1145,7 +1141,6 @@ export const messages = {
       openSessions: "Open sessions",
       moveTabLeft: "Move tab left",
       moveTabRight: "Move tab right",
-      notOpen: "Not open",
     },
     quickConnect: {
       open: "Open a session",
@@ -1158,9 +1153,8 @@ export const messages = {
       create: "New connection",
     },
     home: {
-      title: "Connections",
-      hostCount: "{count} hosts",
       searchPlaceholder: "Search hosts or addresses",
+      searchHosts: "Search {count} hosts",
       filter: {
         all: "All",
         favorites: "Favorites",
@@ -1191,10 +1185,8 @@ export const messages = {
       profileExportFailed: "Could not export connection configuration",
       table: {
         name: "Name",
-        host: "Host",
-        username: "User",
+        address: "Address",
         group: "Group",
-        status: "Status",
         lastConnected: "Last connected",
         actions: "Actions",
       },

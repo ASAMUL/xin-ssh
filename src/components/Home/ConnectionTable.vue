@@ -31,8 +31,10 @@ useHomeSortable(tableBody, {
   onDrop: ({ id, order }) => emit("reorder", { id, order }),
 });
 
-function statusLabel(status) {
-  return status === "notOpen" ? t("workspace.notOpen") : t(`monitor.status.${status}`);
+// 和卡片一样写成 user@host，非 22 端口才带上端口：用户名几乎全是 root，单独一列只是重复
+function address(profile) {
+  const target = `${profile.username}@${profile.host}`;
+  return Number(profile.port) === 22 ? target : `${target}:${profile.port}`;
 }
 </script>
 
@@ -42,12 +44,11 @@ function statusLabel(status) {
       <thead>
         <tr>
           <th class="col-name">{{ t("home.table.name") }}</th>
-          <th>{{ t("home.table.host") }}</th>
-          <th>{{ t("home.table.username") }}</th>
+          <th>{{ t("home.table.address") }}</th>
           <th>{{ t("home.table.group") }}</th>
-          <th>{{ t("home.table.status") }}</th>
           <th>{{ t("home.table.lastConnected") }}</th>
-          <th class="col-actions">{{ t("home.table.actions") }}</th>
+          <!-- 按钮悬停才出现，表头写着「操作」底下却空着，像漏了东西；只留给读屏 -->
+          <th class="col-actions"><span class="sr-only">{{ t("home.table.actions") }}</span></th>
         </tr>
       </thead>
       <tbody ref="tableBody" :class="{ sortable }">
@@ -59,6 +60,27 @@ function statusLabel(status) {
         >
           <tr :class="status" :data-sort-id="profile.id">
             <td class="col-name">
+              <button type="button" class="row-name" @click="emit('open', profile)">
+                <OsIconTile :icon="resolveProfileOsIcon(profile)" :size="28" />
+                <!-- 只有开着会话才亮一颗点（和卡片一样）：一整列灰色的「未打开」全是噪音 -->
+                <i
+                  v-if="status !== 'notOpen'"
+                  class="row-status"
+                  role="img"
+                  :aria-label="t(`monitor.status.${status}`)"
+                  :title="t(`monitor.status.${status}`)"
+                ></i>
+                <span>{{ profile.name }}</span>
+                <!-- 收藏星跟在名字后面，只在收藏了时出现；切换收藏在行尾的悬停按钮里。
+                     以前星排在图标前面、平时藏着，每行图标前都空一格，和「名称」表头对不齐 -->
+                <UIcon v-if="profile.favorite" class="row-favorite" name="i-lucide-star" aria-hidden="true" />
+                <span v-if="profile.production" class="production-badge">{{ t("profile.productionBadge") }}</span>
+              </button>
+            </td>
+            <td class="cell-muted">{{ address(profile) }}</td>
+            <td class="cell-muted">{{ groupName ?? t("sidebar.ungrouped") }}</td>
+            <td class="cell-muted">{{ formatRelativeTime(profile.lastConnectedAt, t) }}</td>
+            <td class="col-actions">
               <UButton
                 class="row-star"
                 :class="{ favorite: profile.favorite }"
@@ -70,23 +92,6 @@ function statusLabel(status) {
                 :title="profile.favorite ? t('home.unfavorite') : t('home.favorite')"
                 @click="emit('toggleFavorite', profile.id)"
               />
-              <button type="button" class="row-name" @click="emit('open', profile)">
-                <OsIconTile :icon="resolveProfileOsIcon(profile)" :size="28" />
-                <span>{{ profile.name }}</span>
-                <span v-if="profile.production" class="production-badge">{{ t("profile.productionBadge") }}</span>
-              </button>
-            </td>
-            <td class="cell-muted">{{ profile.host }}</td>
-            <td class="cell-muted">{{ profile.username }}</td>
-            <td class="cell-muted">{{ groupName ?? t("sidebar.ungrouped") }}</td>
-            <td>
-              <span class="row-status">
-                <i></i>
-                <span>{{ statusLabel(status) }}</span>
-              </span>
-            </td>
-            <td class="cell-muted">{{ formatRelativeTime(profile.lastConnectedAt, t) }}</td>
-            <td class="col-actions">
               <UButton
                 color="neutral"
                 variant="ghost"
