@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import FileOperationPanel from "../FileOperationPanel.vue";
+import { GLASS_CLEAR } from "../../directives/liquidGlass";
 import WindowControls from "./WindowControls.vue";
 import brandAvatar from "../../assets/brand/xin-avatar.png";
 import { useAppStore } from "../../stores/appStore";
@@ -66,11 +67,6 @@ async function startWindowDrag(event) {
 
 <template>
   <header class="window-chrome" @mousedown="startWindowDrag">
-    <!-- 顶栏的玻璃是垫在底下的一层兄弟元素，不直接挂在 header 上：带 backdrop-filter 的祖先会成为
-         「backdrop root」，里面的「连接 | 工作区」胶囊就只能看到这层玻璃、看不到窗口底透上来的壁纸，
-         自己的折射也就没了。兄弟元素不构成 backdrop root。 -->
-    <div v-liquid-glass="{ scale: 24, blur: 3 }" class="window-chrome-glass liquid-glass" aria-hidden="true"></div>
-
     <div class="window-chrome-start">
       <span v-if="isMac" class="window-traffic-light-space" aria-hidden="true"></span>
       <div class="window-brand">
@@ -84,9 +80,9 @@ async function startWindowDrag(event) {
     <UTabs
       v-if="!appStore.isLoading"
       v-model="activeView"
-      v-liquid-glass="{ scale: 20 }"
+      v-liquid-glass="GLASS_CLEAR"
       v-liquid-stretch="activeView"
-      class="window-view-switch liquid-glass"
+      class="window-view-switch liquid-glass liquid-glass--clear"
       variant="pill"
       size="md"
       :items="viewItems"
@@ -100,7 +96,13 @@ async function startWindowDrag(event) {
     />
 
     <div class="window-chrome-end">
-      <div v-if="!appStore.isLoading" class="window-tools" @mousedown.stop>
+      <!-- 弹层（文件操作面板、提示）都经 portal 挂到 body，不会被这颗胶囊的 backdrop-filter 关住 -->
+      <div
+        v-if="!appStore.isLoading"
+        v-liquid-glass="GLASS_CLEAR"
+        class="window-tools liquid-glass liquid-glass--clear"
+        @mousedown.stop
+      >
         <FileOperationPanel />
         <UChip
           :show="transferStore.summary.activeCount > 0"
@@ -128,10 +130,7 @@ async function startWindowDrag(event) {
           @click.stop="uiStore.openSettings"
         />
       </div>
-      <template v-if="!isMac">
-        <span class="window-chrome-divider" aria-hidden="true"></span>
-        <WindowControls />
-      </template>
+      <WindowControls v-if="!isMac" />
     </div>
   </header>
 </template>

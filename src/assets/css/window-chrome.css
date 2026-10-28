@@ -1,8 +1,9 @@
-/* 顶栏 = 一条悬浮在窗口顶部的液态玻璃（离窗口边缘 8px，四角圆），
-   里面三段式 1fr | auto | 1fr，保证「连接 / 工作区」切换始终处在窗口正中。
+/* 顶栏不垫整条玻璃板，直接铺在壁纸上（macOS 26 / Win11 的标题栏都和窗口底融成一体）：
+   以前是窗口里再画一个离边 8px 的圆角盒子，里面又套一颗玻璃胶囊，盒子套盒子、两圈边框挤在一起。
+   现在只有两颗透明玻璃：中间的「连接 | 工作区」和右边的「传输 / 设置」，品牌和窗口按钮直接放在壁纸上。
+   三段式 1fr | auto | 1fr，保证切换始终处在窗口正中。
    header 本身不带滤镜、也不建层叠上下文（任何可能成为 backdrop root 的属性都不加），
-   玻璃画在第一个子元素 .window-chrome-glass 上，靠「定位元素按文档顺序绘制」垫在最底下，
-   其余几段也设成定位元素压在它上面。外圈 8px 仍属于 header，整条都能拖动窗口。 */
+   否则两颗胶囊只能折射到 header、看不到壁纸。整条都能拖动窗口。 */
 .window-chrome {
   --chrome-inset: 8px;
   position: relative;
@@ -15,13 +16,6 @@
   padding: var(--chrome-inset) calc(var(--chrome-inset) + 8px) 0 var(--chrome-inset);
   background: transparent;
   user-select: none;
-}
-
-.window-chrome-glass {
-  position: absolute;
-  inset: var(--chrome-inset) var(--chrome-inset) 0;
-  border-radius: 22px;
-  pointer-events: none;
 }
 
 .window-chrome-start,
@@ -89,11 +83,11 @@
 }
 
 /* —— 连接 / 工作区 分段切换 ——
-   外壳是一枚液态玻璃胶囊（.liquid-glass + v-liquid-glass 折射，材质见 liquid-glass.css），
+   外壳是一颗透明玻璃胶囊（.liquid-glass--clear，和首页工具栏同一档，材质见 liquid-glass.css），
    选中项是一颗樱色玻璃水滴：滑动时略冲过头再回弹，像水珠在玻璃槽里滚过去。
    Nuxt UI 自带的列表底色、描边一律清掉，否则会在玻璃里再叠一层实底。 */
 .window-view-switch {
-  border-radius: 18px;
+  border-radius: 999px;
 }
 
 .window-view-switch :deep(.window-view-list) {
@@ -104,7 +98,7 @@
 }
 
 .window-view-switch :deep(.window-view-indicator) {
-  border-radius: 14px;
+  border-radius: 999px;
   background: var(--lg-droplet-rose);
   box-shadow: var(--lg-droplet-rose-shadow);
   transition-property: translate, width;
@@ -120,7 +114,7 @@
   color: var(--xin-text-body);
   font-size: 13.5px;
   font-weight: 640;
-  border-radius: 14px;
+  border-radius: 999px;
   transition: color 200ms ease;
 }
 
@@ -158,18 +152,21 @@
   }
 }
 
-/* —— 右侧工具 —— */
+/* —— 右侧工具：和切换同高的一颗透明胶囊，按钮是里面的小胶囊 —— */
 .window-tools {
-  height: 100%;
   display: flex;
   align-items: center;
   gap: 2px;
+  margin-right: 6px;
+  padding: 4px;
+  border-radius: 999px;
 }
 
 .window-tools :deep(button) {
   height: 38px;
+  padding-inline: 14px;
   color: var(--xin-text-body);
-  border-radius: 11px;
+  border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
 }
@@ -181,14 +178,6 @@
 .window-tools :deep(button.transfer-entry-active) {
   color: var(--xin-accent-strong);
   background: rgb(var(--xin-accent-rgb) / 0.12);
-}
-
-.window-chrome-divider {
-  width: 1px;
-  height: 20px;
-  margin: 0 4px;
-  border-radius: 1px;
-  background: rgb(var(--xin-ink-rgb) / 0.12);
 }
 
 /* 窄窗口：工具按钮收成纯图标，给中间的切换留位置 */
