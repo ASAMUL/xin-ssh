@@ -12,6 +12,7 @@ import { useUiStore } from "../../stores/uiStore";
 import { useCredentialStore } from "../../stores/credentialStore";
 import { useTerminalContextMenu } from "../../composables/useTerminalContextMenu";
 import { compactMenuUi } from "../../config/menuUi";
+import { GLASS_REGULAR } from "../../directives/liquidGlass";
 import { localizeError } from "../../utils/appError";
 import { usesSavedCredentials } from "../../utils/authentication";
 import { resolvedAppearance } from "../../utils/appearanceMode";
@@ -32,6 +33,9 @@ import {
   pickBackgroundImage,
   resolveTerminalBackgroundUrl,
 } from "../../services/backgroundApi";
+
+// 工具栏胶囊压在一直在刷新的终端字上：色散要多做两遍位移，关掉
+const TERMINAL_CAPSULE_GLASS = { ...GLASS_REGULAR, dispersion: 0 };
 
 const { t } = useI18n();
 const profileStore = useProfileStore();
@@ -586,12 +590,12 @@ async function savePendingCredential() {
            窄窗口下文字收起只留图标（容器查询，见 terminal-workspace.css） -->
       <header class="terminal-panel-toolbar">
         <div class="terminal-window-actions">
-          <!-- 终端输出刷新很频繁，色散要多做两遍位移，这里关掉；模糊加重一点，底下的字才不会和按钮文字打架 -->
+          <!-- 常规档：上面放字的栏，亮度压缩的区间跟着终端主题的深浅走（见 terminal-workspace.css） -->
           <div
             v-for="group in toolbarGroups"
             :key="group.id"
-            v-liquid-glass="{ scale: 14, blur: 5, dispersion: 0 }"
-            class="terminal-action-capsule liquid-glass"
+            v-liquid-glass="TERMINAL_CAPSULE_GLASS"
+            class="terminal-action-capsule liquid-glass liquid-glass--regular"
           >
             <UButton
               v-for="action in group.actions"

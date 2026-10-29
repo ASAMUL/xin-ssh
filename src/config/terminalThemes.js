@@ -110,6 +110,10 @@ export function buildTerminalChrome(variant, material) {
     "--term-soft": withAlpha(foreground, 0.1),
     // 液态玻璃的高光：浅色底上要亮白，深色底上收着，否则一圈白边像贴纸
     "--term-highlight": isLight ? "rgb(255 255 255 / 0.92)" : "rgb(255 255 255 / 0.18)",
+    // 浮在终端上的常规档玻璃把背后的亮度压进这一段。终端的明暗和应用的明暗是两回事（浅色应用里可以开
+    // Dracula），照应用的区间压，暗终端上会顶出一块亮板、按钮的浅色字反而看不清
+    "--term-tone-lo": isLight ? "0.62" : "0.04",
+    "--term-tone-hi": isLight ? "0.98" : "0.36",
   };
 }
 

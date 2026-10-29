@@ -71,12 +71,14 @@
   pointer-events: auto;
 }
 
-/* 工具按钮的玻璃胶囊：材质变量全部改用终端主题色，于是它在 Dracula 上是暗玻璃、
-   在浅色主题上是亮玻璃——终端画布是内容层，不跟品牌色走。
-   胶囊直接压在终端文字上，底色取面板色的七成：底下的字被压淡、再被滤镜模糊，按钮上的字才读得清 */
+/* 工具按钮的玻璃胶囊：常规档，但亮度区间和底色都改用终端主题（区间见 terminalThemes.js 的 --term-tone-*），
+   于是它在 Dracula 上是暗玻璃、在浅色主题上是亮玻璃——终端画布是内容层，不跟应用的明暗和品牌色走。
+   底下的终端字先被压进区间、再被模糊，底色只要面板色的四成；以前没有压缩，得铺七成才盖得住字 */
 .terminal-action-capsule {
-  --lg-fill: color-mix(in srgb, var(--term-panel-bg, rgb(21 23 40)) 72%, transparent);
-  --lg-fill-hover: color-mix(in srgb, var(--term-panel-bg, rgb(21 23 40)) 82%, transparent);
+  --lg-tone-lo: var(--term-tone-lo, 0.04);
+  --lg-tone-hi: var(--term-tone-hi, 0.36);
+  --lg-fill: color-mix(in srgb, var(--term-panel-bg, rgb(21 23 40)) 40%, transparent);
+  --lg-fill-hover: color-mix(in srgb, var(--term-panel-bg, rgb(21 23 40)) 52%, transparent);
   --lg-edge-ink: rgb(0 0 0 / 0.14);
   --lg-shadow:
     0 1px 2px rgb(0 0 0 / 0.2),
@@ -103,7 +105,6 @@
   transition:
     color 160ms ease,
     background 160ms ease,
-    box-shadow 160ms ease,
     transform 240ms var(--lg-spring);
 }
 
@@ -117,13 +118,16 @@
   background: color-mix(in srgb, var(--term-text, #e6ebff) 10%, transparent);
 }
 
-/* 开着的面板 / 工具是胶囊里的一颗水滴：顶部一道高光把它从胶囊里「抬」出来，字色取主题强调色 */
+/* 开着的面板 / 工具铺一块实底，关上就没有，字和图标取主题强调色。
+   这些是各管各的开关、不是单选：不做成玻璃水滴（不抬高光、不投影），水滴读起来是「选中了这一项」，
+   几颗同时开着就像选了好几个。按下的回弹在下面的 :active */
 .terminal-window-actions :deep(button.active) {
   color: var(--term-accent, #e6ebff);
-  background: color-mix(in srgb, var(--term-accent, #e6ebff) 18%, transparent);
-  box-shadow:
-    inset 0 1px 0 var(--term-highlight, rgb(255 255 255 / 0.24)),
-    0 4px 10px -6px rgb(0 0 0 / 0.45);
+  background: color-mix(in srgb, var(--term-accent, #e6ebff) 22%, var(--term-panel-bg, rgb(21 23 40)));
+}
+
+.terminal-window-actions :deep(button.active:hover) {
+  background: color-mix(in srgb, var(--term-accent, #e6ebff) 30%, var(--term-panel-bg, rgb(21 23 40)));
 }
 
 .terminal-window-actions :deep(button:active) {
