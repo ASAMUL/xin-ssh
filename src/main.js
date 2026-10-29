@@ -26,6 +26,7 @@ import { i18n } from "./i18n";
 import { applyAppearanceMode } from "./utils/appearanceMode";
 import { suppressNativeContextMenu } from "./utils/nativeContextMenu";
 import {
+  GLASS_THICK,
   autoAttachLiquidGlass,
   trackLiquidGlassPointer,
   vLiquidGlass,
@@ -77,11 +78,11 @@ suppressNativeContextMenu();
 trackLiquidGlassPointer();
 
 // 弹出层才是真正展示玻璃的地方：它们浮在卡片、终端、文件列表上，边缘的弯折最明显。
-// 菜单要读字，滤镜里的模糊比控件胶囊重；对话框面积大、离内容远，折射和模糊都再加一档。
+// 菜单、对话框都是厚档：边缘和控件胶囊一样是薄透镜，背后糊得最重（底色和亮度压缩见 liquid-glass.css 的弹出层）。
 autoAttachLiquidGlass([
-  { selector: ".liquid-menu", options: { scale: 22, blur: 8 } },
+  { selector: ".liquid-menu", options: GLASS_THICK },
   // 远程编辑器：正文是不透明的代码区，整块折射看不见；打字、光标闪烁、背后终端刷新都会让整块滤镜重算，
   // 只留高光线和 CSS 模糊。规则按顺序取第一条匹配的，所以写在通用的 .liquid-sheet 前面
   { selector: ".liquid-sheet.remote-editor-modal", options: { refraction: false } },
-  { selector: ".liquid-sheet", options: { scale: 32, blur: 12 } },
+  { selector: ".liquid-sheet", options: GLASS_THICK },
 ]);

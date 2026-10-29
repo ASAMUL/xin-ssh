@@ -497,11 +497,11 @@ defineExpose({
 <template>
   <div ref="viewportRoot" v-show="active" class="terminal-viewport" :inert="!active" data-terminal-drop>
     <div ref="terminalMount" class="terminal-xterm"></div>
-    <div v-if="linkHint" class="terminal-link-hint" :style="{ left: `${linkHint.x}px`, top: `${linkHint.y}px` }">
+    <div v-if="linkHint" class="terminal-link-hint liquid-tooltip" :style="{ left: `${linkHint.x}px`, top: `${linkHint.y}px` }">
       {{ linkHint.text }}
     </div>
     <Transition name="terminal-size-hint">
-      <div v-if="sizeHint" class="terminal-size-hint">{{ t("terminal.sizeHint", sizeHint) }}</div>
+      <div v-if="sizeHint" class="terminal-size-hint liquid-tooltip">{{ t("terminal.sizeHint", sizeHint) }}</div>
     </Transition>
     <Transition name="terminal-search-pop">
       <TerminalSearchPanel

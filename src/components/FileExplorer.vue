@@ -1724,7 +1724,7 @@ function sortAriaLabel(key) {
     <Teleport to="body">
       <div
         v-if="fileDrag.chip.visible"
-        class="file-drag-chip"
+        class="file-drag-chip liquid-tooltip"
         :style="{ transform: `translate(${fileDrag.chip.x + 14}px, ${fileDrag.chip.y + 12}px)` }"
       >
         <UIcon :name="fileDrag.chip.icon" />

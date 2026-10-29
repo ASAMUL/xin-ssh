@@ -69,7 +69,7 @@
   pointer-events: none;
 }
 
-/* 悬停在路径 / 端口上时，指针右下方的一句提示（Ctrl + 点击…）。和应用的 tooltip 同一种玻璃，
+/* 悬停在路径 / 端口上时，指针右下方的一句提示（Ctrl + 点击…）。材质挂全局的 .liquid-tooltip（厚档玻璃），
    不接指针，免得挡住 xterm 判断鼠标还在不在链接上 */
 .terminal-link-hint {
   position: absolute;
@@ -77,12 +77,6 @@
   transform: translate(12px, 16px);
   padding: 4px 10px;
   color: var(--xin-text);
-  border-radius: 999px;
-  background: var(--lg-fill-popover);
-  box-shadow:
-    inset 0 0 0 1px var(--lg-edge-ink),
-    0 8px 20px -8px rgb(var(--xin-shadow-rgb) / 0.3);
-  backdrop-filter: blur(18px) saturate(1.5);
   font-family: var(--xin-font-ui);
   font-size: 12px;
   white-space: nowrap;
@@ -90,7 +84,7 @@
 }
 
 /* 调整终端大小时正中间报一下行列数（macOS 终端、iTerm2 的习惯），停手一秒后淡出。
-   和链接提示同一种玻璃；压在终端画面正中，不接指针，免得挡住点击和选区 */
+   和链接提示同一种玻璃（.liquid-tooltip）；压在终端画面正中，不接指针，免得挡住点击和选区 */
 .terminal-size-hint {
   position: absolute;
   top: 50%;
@@ -99,12 +93,6 @@
   transform: translate(-50%, -50%);
   padding: 8px 18px;
   color: var(--xin-text);
-  border-radius: 999px;
-  background: var(--lg-fill-popover);
-  box-shadow:
-    inset 0 0 0 1px var(--lg-edge-ink),
-    0 12px 28px -12px rgb(var(--xin-shadow-rgb) / 0.35);
-  backdrop-filter: blur(18px) saturate(1.5);
   font-family: var(--xin-font-ui);
   font-size: 15px;
   font-weight: 600;

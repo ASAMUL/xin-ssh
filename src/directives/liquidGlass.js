@@ -30,16 +30,20 @@ const DEFAULTS = {
   refraction: true,
 };
 
-// 三档材质的折射参数，和 liquid-glass.css 的 .liquid-glass--clear / --regular 配对用（底色、亮度压缩在那边）。
-// 边缘统一用薄透镜，大小玻璃的边看着一样厚；常规档上面要放字，背后轻轻糊一下
+// 三档材质的折射参数，和 liquid-glass.css 的 .liquid-glass--clear / --regular、弹出层的 .liquid-menu 等配对用
+// （底色、亮度压缩在那边）。边缘统一用薄透镜，大小玻璃的边看着一样厚；越往后上面的字越多，背后糊得越重
 export const GLASS_CLEAR = { lens: true, blur: 0 };
 export const GLASS_REGULAR = { lens: true, blur: 5 };
+export const GLASS_THICK = { lens: true, blur: 10 };
 
 // 色散要把位移做三遍，成本随面积涨；整条顶栏、大对话框底下本来也没有高对比的边缘可析出彩边，只给控件尺寸的玻璃开
 const DISPERSION_MAX_AREA = 160_000;
 // 薄透镜的比例照鸿蒙 AppleUI：斜面宽 = 短边一半的 24%，最外沿偏折 = 斜面宽的 2 倍。
-// 按短边算，46px 的胶囊斜面约 5.5px、最外沿往里借 11px 的背景，大小玻璃的边看着一样厚
+// 按短边算，46px 的胶囊斜面约 5.5px、最外沿往里借 11px 的背景，大小玻璃的边看着一样厚。
+// 斜面封顶 10px：菜单、对话框的短边有几百像素，照比例斜面会宽到二三十像素，边上整圈被拉花；
+// 控件尺寸的玻璃（短边 80px 以内）碰不到这个顶
 const LENS_BEZEL_RATIO = 0.24;
+const LENS_BEZEL_MAX = 10;
 const LENS_SHIFT_RATIO = 2;
 // 放大镜的边比静止的玻璃厚：斜面占短边一半的 35%，边上再往里多借 1.2 倍斜面宽，
 // 胶囊的上下沿被折进透镜里，成两道弧（参考图里标签栏的边线就是这么弯进去的）
@@ -109,7 +113,7 @@ class LiquidGlassSurface {
       magnifier = { zoom: magnify, rimShift, maxShift };
       scale = maxShift * 2;
     } else if (lens) {
-      bezel = Math.max(2, shortHalf * LENS_BEZEL_RATIO);
+      bezel = Math.max(2, Math.min(LENS_BEZEL_MAX, shortHalf * LENS_BEZEL_RATIO));
       scale = bezel * LENS_SHIFT_RATIO * 2;
     } else {
       bezel = Math.max(2, Math.min(this.options.bezel ?? Math.max(radius * 0.8, 8), width / 2, height / 2));
@@ -130,7 +134,7 @@ class LiquidGlassSurface {
       }
     }
     // 内联样式压过 .liquid-glass 里的模糊回退；常规档的亮度压缩（--lg-tone）接在折射后面。
-    // 弹出层没有 .liquid-glass 类、拿不到重置值，靠 var 的兜底
+    // 菜单、对话框的 --lg-tone 来自厚档（liquid-glass.css 的弹出层）；没挂档位的玻璃靠 var 的兜底
     if (refraction) this.element.style.setProperty("backdrop-filter", `url(#${this.id}) var(--lg-tone, saturate(1))`);
   }
 
