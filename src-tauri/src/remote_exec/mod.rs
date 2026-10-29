@@ -1,4 +1,4 @@
-//! 在服务器上执行一段 sh 脚本并按行读回输出：目录占用分析、压缩解压、Docker 容器列表共用。
+//! 在服务器上执行一段 sh 脚本并读回输出：目录占用分析、压缩解压、Docker 容器列表和日志共用。
 //! 每次开一个临时 exec 通道，用完即关，不碰用户正在用的终端。
 
 pub(crate) mod archive;
@@ -130,6 +130,23 @@ pub(crate) async fn run_command(
     cancellation: &CancellationToken,
     mut on_line: impl FnMut(&str),
 ) -> Result<CommandOutcome, AppError> {
+    let mut lines = OutputLines::default();
+    let outcome = run_command_streaming(session, command, options, cancellation, |data| {
+        lines.push(data, &mut on_line);
+    })
+    .await?;
+    lines.finish(&mut on_line);
+    Ok(outcome)
+}
+
+/// 不切行，收到一个数据包就原样交出去：容器日志带颜色控制符、不一定以换行结尾，要整段喂给 xterm
+pub(crate) async fn run_command_streaming(
+    session: &SshSession,
+    command: String,
+    options: CommandOptions,
+    cancellation: &CancellationToken,
+    mut on_data: impl FnMut(&[u8]),
+) -> Result<CommandOutcome, AppError> {
     let mut channel = {
         let session = session.lock().await;
         session.channel_open_session().await.map_err(connection_error)?
@@ -144,7 +161,7 @@ pub(crate) async fn run_command(
     let _ = channel.eof().await;
 
     let deadline = options.timeout.map(|limit| (Instant::now() + limit, limit.as_secs()));
-    let mut output = OutputLines::default();
+    let mut tail = OutputTail::default();
     let mut exit_status = None;
 
     let result = loop {
@@ -161,7 +178,9 @@ pub(crate) async fn run_command(
             _ = expire => break Err(timeout_error("remoteCommand", deadline.map_or(0, |(_, secs)| secs))),
             message = channel.wait() => match message {
                 Some(ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. }) => {
-                    output.push(&data, &mut on_line);
+                    let data: &[u8] = &data;
+                    tail.push(data);
+                    on_data(data);
                 }
                 Some(ChannelMsg::ExitStatus { exit_status: status }) => exit_status = Some(status),
                 // 服务器拒绝执行命令（没有 shell、被策略禁止）
@@ -177,11 +196,10 @@ pub(crate) async fn run_command(
         let _ = channel.close().await;
     }
     result?;
-    output.finish(&mut on_line);
 
     Ok(CommandOutcome {
         exit_status,
-        tail: output.tail(),
+        tail: tail.text(),
     })
 }
 
@@ -219,7 +237,7 @@ fn exec_unavailable() -> AppError {
     )
 }
 
-fn last_lines(text: &str, count: usize) -> String {
+pub(crate) fn last_lines(text: &str, count: usize) -> String {
     let lines: Vec<&str> = text.lines().collect();
     lines[lines.len().saturating_sub(count)..].join("\n")
 }
@@ -228,12 +246,10 @@ fn last_lines(text: &str, count: usize) -> String {
 #[derive(Default)]
 struct OutputLines {
     pending: Vec<u8>,
-    tail: Vec<u8>,
 }
 
 impl OutputLines {
     fn push(&mut self, data: &[u8], on_line: &mut impl FnMut(&str)) {
-        self.remember_tail(data);
         for &byte in data {
             if byte == b'\n' {
                 self.emit(on_line);
@@ -254,17 +270,24 @@ impl OutputLines {
         on_line(line.trim_end_matches('\r'));
         self.pending.clear();
     }
+}
 
-    fn remember_tail(&mut self, data: &[u8]) {
-        self.tail.extend_from_slice(data);
-        if self.tail.len() > OUTPUT_TAIL_BYTES * 2 {
-            self.tail.drain(..self.tail.len() - OUTPUT_TAIL_BYTES);
+#[derive(Default)]
+struct OutputTail {
+    bytes: Vec<u8>,
+}
+
+impl OutputTail {
+    fn push(&mut self, data: &[u8]) {
+        self.bytes.extend_from_slice(data);
+        if self.bytes.len() > OUTPUT_TAIL_BYTES * 2 {
+            self.bytes.drain(..self.bytes.len() - OUTPUT_TAIL_BYTES);
         }
     }
 
-    fn tail(&self) -> String {
-        let start = self.tail.len().saturating_sub(OUTPUT_TAIL_BYTES);
-        String::from_utf8_lossy(&self.tail[start..]).replace('\r', "")
+    fn text(&self) -> String {
+        let start = self.bytes.len().saturating_sub(OUTPUT_TAIL_BYTES);
+        String::from_utf8_lossy(&self.bytes[start..]).replace('\r', "")
     }
 }
 

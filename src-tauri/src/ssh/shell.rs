@@ -34,6 +34,7 @@ use crate::ssh::registry::{TerminalControl, TerminalRegistry};
 use crate::system_info::{
     collect_system_info_on_session, measure_latency_on_session, SystemInfoSampler,
 };
+use crate::util::incomplete_utf8_suffix_len;
 
 const TERMINAL_EVENT: &str = "terminal-event";
 const TERMINAL_CLOSE_REASON_CLIENT: &str = "client";
@@ -625,33 +626,4 @@ fn emit_terminal_event(
             reason: reason.map(str::to_string),
         },
     );
-}
-
-// 终端输出按字节流到达，多字节 UTF-8 字符可能被拆在两个 chunk 之间：
-// 返回结尾处不完整序列的字节数，这部分留到下一个 chunk 一起发出。
-fn incomplete_utf8_suffix_len(bytes: &[u8]) -> usize {
-    let len = bytes.len();
-    let start = len.saturating_sub(3);
-
-    for index in (start..len).rev() {
-        let byte = bytes[index];
-        if byte & 0b1100_0000 == 0b1000_0000 {
-            continue;
-        }
-
-        let expected = if byte >= 0xF0 {
-            4
-        } else if byte >= 0xE0 {
-            3
-        } else if byte >= 0xC0 {
-            2
-        } else {
-            return 0;
-        };
-
-        let available = len - index;
-        return if available < expected { available } else { 0 };
-    }
-
-    0
 }

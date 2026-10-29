@@ -49,3 +49,32 @@ pub(crate) fn summarize_entry_errors(errors: Vec<(String, AppError)>) -> AppErro
     .with("count", total)
     .with("detail", preview)
 }
+
+// 终端输出、容器日志都按字节流到达，多字节 UTF-8 字符可能被拆在两个 chunk 之间：
+// 返回结尾处不完整序列的字节数，这部分留到下一个 chunk 一起发出。
+pub(crate) fn incomplete_utf8_suffix_len(bytes: &[u8]) -> usize {
+    let len = bytes.len();
+    let start = len.saturating_sub(3);
+
+    for index in (start..len).rev() {
+        let byte = bytes[index];
+        if byte & 0b1100_0000 == 0b1000_0000 {
+            continue;
+        }
+
+        let expected = if byte >= 0xF0 {
+            4
+        } else if byte >= 0xE0 {
+            3
+        } else if byte >= 0xC0 {
+            2
+        } else {
+            return 0;
+        };
+
+        let available = len - index;
+        return if available < expected { available } else { 0 };
+    }
+
+    0
+}
