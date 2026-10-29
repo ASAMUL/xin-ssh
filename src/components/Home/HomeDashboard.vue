@@ -596,7 +596,7 @@ function showError(error) {
           </UDropdownMenu>
 
           <UButton
-            v-liquid-glass="{ scale: 16 }"
+            v-liquid-glass="GLASS_CLEAR"
             class="home-create liquid-glass liquid-glass--ink"
             color="primary"
             size="lg"

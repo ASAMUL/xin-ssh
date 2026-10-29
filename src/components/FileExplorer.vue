@@ -31,6 +31,7 @@ import {
 } from "../utils/remotePath";
 import { TERMINAL_CWD_STATUS } from "../utils/terminalCwd";
 import { compactMenuUi } from "../config/menuUi";
+import { GLASS_REGULAR } from "../directives/liquidGlass";
 import { formatBytes } from "../utils/formatMetrics";
 import { describePermissions, summarizePermissions } from "../utils/filePermissions";
 import { COMPRESS_FORMATS, archiveStem, defaultArchiveName, isSingleFileGzip } from "../utils/archive";
@@ -1739,12 +1740,13 @@ function sortAriaLabel(key) {
       </div>
     </Teleport>
     <!-- 工具栏浮在列表上：标题 · [目录树 | 后退 前进 上级] · 面包屑 ‖ 筛选 · 上传 · 新建 · 更多，每组一颗玻璃胶囊。
+         胶囊上面放字、底下滚着列表，用常规档（和会话标签条一样）；墨色的上传按钮也取常规档的折射，底色由 --ink 管。
          目录树从它底下滚过去，玻璃边缘才有东西可折射；文件表的行只滚到表头下沿（样式见 file-explorer.css）。
          低频操作（上传文件夹、下载、重命名、删除、刷新、历史、隐藏文件）收进「更多」，右键菜单保留全部 -->
     <header class="file-toolbar">
       <h3 class="file-toolbar-title">{{ t("files.fileTab") }}</h3>
 
-      <div v-liquid-glass="{ scale: 12 }" class="file-nav-capsule liquid-glass">
+      <div v-liquid-glass="GLASS_REGULAR" class="file-nav-capsule liquid-glass liquid-glass--regular">
         <UButton
           class="file-tool"
           :class="{ active: settingsStore.showFileTree }"
@@ -1836,8 +1838,8 @@ function sortAriaLabel(key) {
 
       <!-- 平时是可点的面包屑；点空白处 / Ctrl+L 进入输入模式，回车跳转，Esc 或失焦退出 -->
       <form
-        v-liquid-glass="{ scale: 12 }"
-        class="path-bar liquid-glass"
+        v-liquid-glass="GLASS_REGULAR"
+        class="path-bar liquid-glass liquid-glass--regular"
         :class="{ editing: isEditingPath }"
         aria-label="Current remote path"
         @submit.prevent="submitPath"
@@ -1885,8 +1887,8 @@ function sortAriaLabel(key) {
       <UInput
         ref="searchInputControl"
         v-model="query"
-        v-liquid-glass="{ scale: 12 }"
-        class="liquid-glass"
+        v-liquid-glass="GLASS_REGULAR"
+        class="liquid-glass liquid-glass--regular"
         color="neutral"
         variant="none"
         size="sm"
@@ -1903,7 +1905,7 @@ function sortAriaLabel(key) {
       </UInput>
 
       <UButton
-        v-liquid-glass="{ scale: 12 }"
+        v-liquid-glass="GLASS_REGULAR"
         class="file-upload liquid-glass liquid-glass--ink"
         color="primary"
         size="sm"
@@ -1916,8 +1918,8 @@ function sortAriaLabel(key) {
 
       <UDropdownMenu :items="createMenuItems" size="sm" :content="{ align: 'end' }">
         <UButton
-          v-liquid-glass="{ scale: 12 }"
-          class="file-create liquid-glass"
+          v-liquid-glass="GLASS_REGULAR"
+          class="file-create liquid-glass liquid-glass--regular"
           color="neutral"
           variant="ghost"
           size="sm"
@@ -1929,8 +1931,8 @@ function sortAriaLabel(key) {
       </UDropdownMenu>
 
       <UButton
-        v-liquid-glass="{ scale: 12 }"
-        class="file-analyze liquid-glass"
+        v-liquid-glass="GLASS_REGULAR"
+        class="file-analyze liquid-glass liquid-glass--regular"
         :class="{ active: diskUsageEnabled }"
         color="neutral"
         variant="ghost"
@@ -1946,8 +1948,8 @@ function sortAriaLabel(key) {
 
       <UDropdownMenu :items="moreMenuItems" size="sm" :content="{ align: 'end' }">
         <UButton
-          v-liquid-glass="{ scale: 12 }"
-          class="file-more liquid-glass"
+          v-liquid-glass="GLASS_REGULAR"
+          class="file-more liquid-glass liquid-glass--regular"
           color="neutral"
           variant="ghost"
           size="sm"

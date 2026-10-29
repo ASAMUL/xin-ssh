@@ -66,7 +66,7 @@
   pointer-events: none;
 }
 
-/* 胶囊统一 36px 高、两端半圆；材质全部来自 .liquid-glass，这里不写底色和投影 */
+/* 胶囊统一 36px 高、两端半圆；材质全部来自 .liquid-glass（常规档），这里不写底色和投影 */
 .file-nav-capsule,
 .path-bar,
 .file-search,
@@ -101,11 +101,12 @@
   border-radius: 999px;
 }
 
-/* 目录树开着 = 胶囊里一颗樱色水滴，和终端工具栏里开着的面板同一种语言 */
-.file-tool.active {
+/* 目录树开着 = 一块樱色实底，关上就没有，和终端工具栏里开着的面板同一种语言。
+   开关不做成玻璃水滴：水滴是分段控件「选中了这一项」的样子，开关各管各的 */
+.file-tool.active,
+.file-analyze.active {
   color: var(--xin-accent-strong);
-  background: var(--lg-droplet-rose);
-  box-shadow: var(--lg-droplet-rose-shadow);
+  background: rgb(var(--xin-accent-rgb) / 0.16);
 }
 
 /* 跟随终端开着、但这会儿跟不上（终端连到别的机器、提示符认不出来）：图标还是「链接」，只是灰下去，
@@ -244,13 +245,6 @@
   width: 36px;
   justify-content: center;
   color: var(--xin-text-secondary);
-}
-
-/* 占用分析开着：和目录树开关同一种樱色水滴 */
-.file-analyze.active {
-  color: var(--xin-accent-strong);
-  background: var(--lg-droplet-rose);
-  box-shadow: var(--lg-droplet-rose-shadow);
 }
 
 /* 分割条的 z-index 是 5：不把它圈在自己的层叠上下文里，它会从工具栏上面穿过去、抢走点击 */
