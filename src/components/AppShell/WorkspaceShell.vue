@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { Pane, Splitpanes } from "splitpanes";
 import ConnectionForm from "../ConnectionManager/ConnectionForm.vue";
+import ContainerLogWindow from "../ContainerLogs/ContainerLogWindow.vue";
 import RemoteFileEditor from "../FileEditor/RemoteFileEditor.vue";
 import SessionTabs from "../SessionTabs.vue";
 import SettingsPanel from "../Settings/SettingsPanel.vue";
@@ -89,6 +90,7 @@ function persistMonitorPaneSize(event) {
     <SettingsPanel v-if="uiStore.isSettingsOpen" @close="uiStore.closeSettings" />
     <TunnelPanel v-if="uiStore.isTunnelPanelOpen" @close="uiStore.closeTunnelPanel" />
     <RemoteFileEditor />
+    <ContainerLogWindow />
     <TerminalGuardDialog />
   </section>
 </template>

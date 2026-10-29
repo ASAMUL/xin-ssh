@@ -723,9 +723,13 @@ pub struct DockerContainer {
     pub id: String,
     pub name: String,
     pub image: String,
+    // 停掉的容器是 0
     pub pid: u32,
-    // /proc/<PID>/root：SFTP 走这里就是容器的根目录
-    pub root: String,
+    // /proc/<PID>/root：SFTP 走这里就是容器的根目录。停掉的容器没有根目录，只能看日志
+    pub root: Option<String>,
+    // docker 自己的状态名：running、paused、restarting、exited、created、dead
+    pub status: String,
+    pub exit_code: i32,
     pub started_at: String,
 }
 
@@ -734,6 +738,28 @@ pub struct DockerContainer {
 pub struct DockerContainerList {
     pub containers: Vec<DockerContainer>,
     pub is_root: bool,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContainerLogsRequest {
+    pub task_id: String,
+    pub session_id: String,
+    pub container_id: String,
+    // 先回看最近多少行，再接着跟随新日志
+    pub tail: u32,
+    pub since_seconds: Option<u64>,
+    pub timestamps: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum ContainerLogEvent {
+    Output { data: String },
+    // docker logs 自己结束了：停掉的容器日志读完了，或者跟随中的容器停了
+    Ended,
+    Canceled,
+    Failed { error: AppError },
 }
 
 #[derive(Clone, Deserialize)]

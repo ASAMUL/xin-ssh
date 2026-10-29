@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
 export function getAppStatus() {
   return invoke("get_app_status");
@@ -203,6 +203,18 @@ export function writeRemoteFileBytes({ sessionId, path, bytes, overwrite }) {
 
 export function listDockerContainers(sessionId) {
   return invoke("list_docker_containers", { sessionId });
+}
+
+// 每次开始都是一条新通道：重新加载时旧流的迟到输出落在旧通道上，不会混进新的日志里。
+// 停止用 cancelFileOperation(taskId)；结束、停止、出错都以 onEvent 的最后一条事件告知
+export function startContainerLogs(request, onEvent) {
+  const events = new Channel();
+  events.onmessage = onEvent;
+  return invoke("start_container_logs", { request, events });
+}
+
+export function exportContainerLogs(path, content) {
+  return invoke("export_container_logs", { path, content });
 }
 
 // root 是 /proc/<PID>/root，path 是容器里的绝对路径；返回解析掉软链接后的那一项

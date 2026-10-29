@@ -10,6 +10,7 @@ import FilePermissionsEditor from "./FilePermissionsEditor.vue";
 import ClipboardPasteDialog from "./FileExplorer/ClipboardPasteDialog.vue";
 import ContainerPicker from "./FileExplorer/ContainerPicker.vue";
 import DiskUsageSummary from "./FileExplorer/DiskUsageSummary.vue";
+import { useContainerLogStore } from "../stores/containerLogStore";
 import { useDiskUsageStore } from "../stores/diskUsageStore";
 import { useFileExplorerStore } from "../stores/fileExplorerStore";
 import { useFileOperationStore } from "../stores/fileOperationStore";
@@ -51,6 +52,7 @@ const emit = defineEmits(["insert-terminal-text"]);
 const { t, locale } = useI18n();
 const toast = useToast();
 const fileExplorerStore = useFileExplorerStore();
+const containerLogStore = useContainerLogStore();
 const diskUsageStore = useDiskUsageStore();
 const fileOperationStore = useFileOperationStore();
 const editorStore = useEditorStore();
@@ -812,6 +814,11 @@ function enterContainer(container) {
 function exitContainer() {
   containerPickerOpen.value = false;
   if (canNavigate.value) fileExplorerStore.exitContainer(props.activeSession);
+}
+
+function openContainerLogs(container) {
+  containerPickerOpen.value = false;
+  containerLogStore.open(props.activeSession, container);
 }
 
 function toggleDiskUsage() {
@@ -1821,6 +1828,7 @@ function sortAriaLabel(key) {
               :active-container="activeContainer"
               @enter="enterContainer"
               @exit="exitContainer"
+              @logs="openContainerLogs"
             />
           </template>
         </UPopover>

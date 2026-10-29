@@ -6,6 +6,7 @@ use std::{
     },
 };
 
+use tauri::ipc::Channel;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{timeout, Duration};
 use tokio_util::sync::CancellationToken;
@@ -15,7 +16,7 @@ use crate::error::{
     timeout as timeout_error, AppError,
 };
 use crate::models::{
-    DockerContainerList, PartialFile, RemoteChmodRequest, RemoteCopyRequest, RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent,
+    ContainerLogEvent, ContainerLogsRequest, DockerContainerList, PartialFile, RemoteChmodRequest, RemoteCopyRequest, RemoteDeleteRequest, RemoteDownloadRequest, RemoteFileContent,
     RemoteFileEntry, RemoteSystemSnapshot, RemoteUploadRequest,
 };
 use crate::remote_exec::CommandTask;
@@ -78,6 +79,12 @@ pub(crate) enum TerminalControl {
     },
     ListContainers {
         responder: oneshot::Sender<Result<DockerContainerList, AppError>>,
+    },
+    StreamContainerLogs {
+        request: ContainerLogsRequest,
+        events: Channel<ContainerLogEvent>,
+        cancellation: CancellationToken,
+        responder: oneshot::Sender<Result<(), AppError>>,
     },
     ForwardPort {
         remote_port: u16,
@@ -529,6 +536,21 @@ impl TerminalRegistry {
         let task_id = task.task_id().to_string();
         self.start_file_operation(&session_id, &task_id, "remoteCommand", |cancellation, responder| {
             TerminalControl::RunCommandTask { task, cancellation, responder }
+        })
+        .await
+    }
+
+    // 停止也走 cancel_file_operation，但不排后台命令的队（command_permits 只有两个名额）：
+    // 日志跟随没有尽头，开着日志窗口时目录分析、压缩解压不能一直等它
+    pub(crate) async fn start_container_logs(
+        &self,
+        request: ContainerLogsRequest,
+        events: Channel<ContainerLogEvent>,
+    ) -> Result<(), AppError> {
+        let session_id = request.session_id.clone();
+        let task_id = request.task_id.clone();
+        self.start_file_operation(&session_id, &task_id, "containerLogs", |cancellation, responder| {
+            TerminalControl::StreamContainerLogs { request, events, cancellation, responder }
         })
         .await
     }

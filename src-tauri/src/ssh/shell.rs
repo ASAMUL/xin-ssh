@@ -13,7 +13,7 @@ use crate::models::{
     TerminalStartRequest,
 };
 use crate::remote_exec::acknowledge_then_run;
-use crate::remote_exec::docker::list_containers_on_session;
+use crate::remote_exec::docker::{list_containers_on_session, run_container_logs};
 use crate::sftp::scoped_path::resolve_scoped_path_on_session;
 use crate::sftp::delete::run_delete_task;
 use crate::sftp::partials::discard_remote_files;
@@ -338,6 +338,22 @@ async fn run_terminal_shell(
                                 result = list_containers_on_session(&session, &cancellation) => result,
                             };
                             let _ = responder.send(result);
+                        });
+                    }
+                    TerminalControl::StreamContainerLogs {
+                        request,
+                        events,
+                        cancellation,
+                        responder,
+                    } => {
+                        let session = Arc::clone(&session);
+                        let registry = registry.clone();
+                        let task_id = request.task_id.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if responder.send(Ok(())).is_ok() {
+                                run_container_logs(session, request, events, cancellation).await;
+                            }
+                            registry.finish_file_operation(&task_id);
                         });
                     }
                     // 绑定端口 + 试开一次通道要等服务器回话，放到后台，不能卡住终端输入输出

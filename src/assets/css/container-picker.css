@@ -1,4 +1,5 @@
-/* 容器列表弹层：和文件操作面板同一套结构（标题行 + 列表 + 底部说明），列表项是一行两段的名字 / 镜像 */
+/* 容器列表弹层：和文件操作面板同一套结构（标题行 + 列表 + 底部说明），列表项是一行两段的名字 / 镜像，
+   右侧平时是 PID / 退出码，悬停时换成「日志」按钮 */
 .container-picker {
   width: min(340px, calc(100vw - 32px));
   max-height: min(460px, calc(100vh - 120px));
@@ -61,8 +62,53 @@
   font-size: 12.5px;
 }
 
-.container-picker-item.active {
+.container-picker-group {
+  margin: 0;
+  padding: 8px 8px 4px;
+  color: var(--xin-text-faint);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.container-picker-group:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--xin-border-soft);
+}
+
+.container-picker-row {
+  position: relative;
+}
+
+.container-picker-row.active .container-picker-item {
   background: var(--xin-accent-soft);
+}
+
+/* 停掉的容器进不了文件：图标和名字压暗，和能进去的分开 */
+.container-picker-row.stopped .container-picker-item {
+  color: var(--xin-text-faint);
+}
+
+.container-picker-row.stopped .container-picker-text strong {
+  color: var(--xin-text-muted);
+}
+
+.container-picker-logs {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 0.12s ease;
+}
+
+.container-picker-row:hover .container-picker-logs,
+.container-picker-row:focus-within .container-picker-logs {
+  opacity: 1;
+}
+
+.container-picker-row:hover .container-picker-state,
+.container-picker-row:focus-within .container-picker-state {
+  opacity: 0;
 }
 
 .container-picker-text {
@@ -91,11 +137,22 @@
   font-weight: 500;
 }
 
-.container-picker-pid {
+/* 至少和「日志」按钮一样宽，悬停换成按钮时名字不会被挡住 */
+.container-picker-state {
   flex: 0 0 auto;
+  min-width: 28px;
   color: var(--xin-text-faint);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  transition: opacity 0.12s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .container-picker-logs,
+  .container-picker-state {
+    transition: none;
+  }
 }
 
 .container-picker-note {
