@@ -4,8 +4,9 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
 import "@fontsource/fira-code/400.css";
 import "@fontsource/fira-code/700.css";
+// Victor Mono 的斜体是手写花体，终端里程序输出的斜体、编辑器里的注释会扭成一串连笔字，像乱码；
+// 不加载它的斜体字形，浏览器就把正体斜切成普通斜体
 import "@fontsource/victor-mono/400.css";
-import "@fontsource/victor-mono/400-italic.css";
 import "@fontsource/victor-mono/700.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/700.css";
