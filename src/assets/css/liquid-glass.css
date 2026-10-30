@@ -360,6 +360,14 @@
   background: var(--lg-fill-sheet);
 }
 
+/* 远程编辑器、容器日志这种大窗口用实底：正文本来就是整块不透明的代码 / 日志画布，玻璃只剩标题栏和底栏两条，
+   透上来的会话标签、文件列表和窗口自己的字叠在一起，只显得乱。圆角、轮廓、投影照旧，还是同一族弹窗 */
+.liquid-sheet.solid-sheet {
+  background: var(--xin-canvas-raised);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .liquid-tooltip {
   border-radius: 999px;
   background: var(--lg-fill-popover);

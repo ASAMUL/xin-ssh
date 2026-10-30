@@ -17,7 +17,7 @@ import { localizeError } from "../../utils/appError";
 
 // 外壳和文件编辑器同一种大窗口，日志画布用终端的调色板和字体
 const MODAL_UI = {
-  content: "container-log-modal max-w-[min(1180px,94vw)] sm:max-w-[min(1180px,94vw)] h-[86vh] flex flex-col",
+  content: "solid-sheet container-log-modal max-w-[min(1180px,94vw)] sm:max-w-[min(1180px,94vw)] h-[86vh] flex flex-col",
   body: "relative flex-1 min-h-0 p-0 sm:p-0 overflow-hidden flex flex-col",
   footer: "justify-between gap-3",
 };

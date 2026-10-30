@@ -24,7 +24,7 @@ const editorCursor = ref({ line: 1, column: 1, selectionLength: 0 });
 
 const editorModalUi = {
   content:
-    "remote-editor-modal max-w-[min(1180px,94vw)] sm:max-w-[min(1180px,94vw)] h-[86vh] flex flex-col",
+    "solid-sheet remote-editor-modal max-w-[min(1180px,94vw)] sm:max-w-[min(1180px,94vw)] h-[86vh] flex flex-col",
   body: "relative flex-1 min-h-0 p-0 sm:p-0 overflow-hidden flex flex-col",
   footer: "justify-between gap-3",
 };
