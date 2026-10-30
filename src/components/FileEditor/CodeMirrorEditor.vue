@@ -6,9 +6,9 @@ import { Compartment, EditorState } from "@codemirror/state";
 import { indentWithTab } from "@codemirror/commands";
 import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
-import { languages } from "@codemirror/language-data";
 import { tags } from "@lezer/highlight";
 import EditorSearchPanel from "./EditorSearchPanel.vue";
+import { editorLanguages } from "../../utils/editorLanguages";
 
 const props = defineProps({
   content: {
@@ -104,7 +104,7 @@ const syntaxHighlightTheme = HighlightStyle.define([
   },
 ]);
 
-const languageByName = new Map(languages.map((description) => [description.name, description]));
+const languageByName = new Map(editorLanguages.map((description) => [description.name, description]));
 const shellConfigFilenames = new Set([
   ".bash_profile",
   ".bashrc",
@@ -260,7 +260,7 @@ function resolveLanguageDescription(filename) {
   const basename = String(filename || "").split(/[\\/]/).pop();
   if (!basename) return null;
 
-  const matchedLanguage = LanguageDescription.matchFilename(languages, basename);
+  const matchedLanguage = LanguageDescription.matchFilename(editorLanguages, basename);
   if (matchedLanguage) return matchedLanguage;
 
   const normalizedName = basename.toLowerCase();
