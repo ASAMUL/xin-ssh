@@ -25,7 +25,7 @@ const appWindow = window.__TAURI_INTERNALS__ ? getCurrentWindow() : null;
 const platform = navigator.userAgentData?.platform ?? navigator.platform ?? "";
 const isMac = platform.toLowerCase().includes("mac");
 
-const openSessionCount = computed(() => sessionStore.sessions.filter((session) => !session.isClosing).length);
+const openSessionCount = computed(() => sessionStore.openSessionCount);
 
 // 顶栏只分两个去处：连接（首页）和工作区（上次停留的会话）；具体会话标签在工作区内部
 const viewItems = computed(() => [

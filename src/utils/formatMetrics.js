@@ -14,6 +14,14 @@ export function usageLevel(percent) {
   return "normal";
 }
 
+// 100ms 内几乎感觉不到，300ms 起敲字能明显感到回显慢
+export function latencyLevel(milliseconds) {
+  if (!Number.isFinite(milliseconds)) return "unknown";
+  if (milliseconds < 100) return "good";
+  if (milliseconds < 300) return "fair";
+  return "poor";
+}
+
 // 已用 + 缓存 + 空闲正好等于总量（后端按 available 拆的），分段条能严丝合缝铺满；
 // 拿不到缓存（/proc/meminfo 缺 MemFree）返回 null，调用方退回单段
 export function splitMemory(memory) {

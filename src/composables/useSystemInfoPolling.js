@@ -3,7 +3,8 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // 每轮完成后再计时，切会话或隐藏时废弃旧调度，避免慢采样叠加和旧回调重启定时器。
-export function useSystemInfoPolling(sessionStore, settingsStore) {
+// 默认跟着当前会话（工作区的概览栏）；首页没有当前会话，传 getSession 指定要采哪一个
+export function useSystemInfoPolling(sessionStore, settingsStore, getSession = () => sessionStore.activeSession) {
   const appWindow = isTauri() ? getCurrentWindow() : null;
   let timer = null;
   let generation = 0;
@@ -11,7 +12,7 @@ export function useSystemInfoPolling(sessionStore, settingsStore) {
   let visibilityErrorReported = false;
 
   function canPoll() {
-    const session = sessionStore.activeSession;
+    const session = getSession();
     return mounted && document.visibilityState !== "hidden"
       && session?.status === "connected" && !session.isClosing;
   }
@@ -30,12 +31,12 @@ export function useSystemInfoPolling(sessionStore, settingsStore) {
   }
 
   async function poll(currentGeneration) {
-    const session = sessionStore.activeSession;
+    const session = getSession();
     if (currentGeneration !== generation || !canPoll()) return;
     try {
       const visible = await windowIsVisible();
       if (visible && currentGeneration === generation && canPoll()
-        && sessionStore.activeSessionId === session.id) {
+        && getSession()?.id === session.id) {
         await sessionStore.refreshSystemInfo(session.id);
       }
     } finally {
@@ -58,13 +59,10 @@ export function useSystemInfoPolling(sessionStore, settingsStore) {
     if (canPoll()) void poll(generation);
   }
 
-  watch(() => [
-    sessionStore.activeSessionId,
-    sessionStore.activeSession?.currentAttemptId,
-    sessionStore.activeSession?.status,
-    sessionStore.activeSession?.isClosing,
-    settingsStore.monitorRefreshSeconds,
-  ], refresh);
+  watch(() => {
+    const session = getSession();
+    return [session?.id, session?.currentAttemptId, session?.status, session?.isClosing, settingsStore.monitorRefreshSeconds];
+  }, refresh);
 
   onMounted(() => {
     mounted = true;

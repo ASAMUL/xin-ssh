@@ -79,6 +79,8 @@ export const useSessionStore = defineStore("sessions", {
       const preferredId = state.activeSessionId ?? state.lastWorkspaceSessionId;
       return available.find((session) => session.id === preferredId) ?? available[0] ?? null;
     },
+    // 正在关的不算：顶栏「工作区」的角标和首页概况要和用户眼里的标签数一致
+    openSessionCount: (state) => state.sessions.filter((session) => !session.isClosing).length,
     // profileId → 聚合状态（同一连接多个终端时取“最好”的一个），给首页/快速连接的状态点用
     statusByProfile: (state) => {
       const priority = { connected: 4, connecting: 3, error: 2, authRequired: 1, closed: 1 };

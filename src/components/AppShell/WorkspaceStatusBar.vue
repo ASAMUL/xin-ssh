@@ -9,7 +9,7 @@ import { useSessionStore } from "../../stores/sessionStore";
 import { useTransferStore } from "../../stores/transferStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useSessionLatency } from "../../composables/useSessionLatency";
-import { formatUptimeShort } from "../../utils/formatMetrics";
+import { formatUptimeShort, latencyLevel } from "../../utils/formatMetrics";
 import { GLASS_REGULAR } from "../../directives/liquidGlass";
 
 const { t } = useI18n();
@@ -31,14 +31,7 @@ const latencyLabel = computed(() => {
   const latency = session.value?.latencyMs;
   return Number.isFinite(latency) ? `${latency} ms` : "--";
 });
-// 100ms 内几乎感觉不到，300ms 起敲字能明显感到回显慢
-const latencyLevel = computed(() => {
-  const latency = session.value?.latencyMs;
-  if (!Number.isFinite(latency)) return "unknown";
-  if (latency < 100) return "good";
-  if (latency < 300) return "fair";
-  return "poor";
-});
+const latencyClass = computed(() => latencyLevel(session.value?.latencyMs));
 // 只精确到分钟：按秒跳的读数会一直勾眼角，而「连了多久」本来也只需要个大概
 const now = useTimestamp({ interval: 15_000 });
 // 重连会把 connectedAt 重置，时长归零就等于告诉用户刚才断过一次
@@ -92,7 +85,7 @@ async function copyForwardAddress(forward) {
     <span class="status-item">UTF-8</span>
     <span class="status-item" :title="t('statusBar.latencyHint')">
       {{ t("statusBar.latency") }}
-      <strong class="status-latency" :class="latencyLevel">{{ latencyLabel }}</strong>
+      <strong class="status-latency" :class="latencyClass">{{ latencyLabel }}</strong>
     </span>
     <UButton
       class="status-item status-transfers"
