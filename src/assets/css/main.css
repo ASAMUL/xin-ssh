@@ -126,7 +126,7 @@
 
   /* —— 系统图标底座 ——
      devicon 是彩色品牌标，其中苹果 / Tux 身体是纯黑，只有浅底能同时托住所有标；
-     深色模式也保持瓷白底座（像 iOS 的 App 图标），不跟着变暗。 */
+     深色模式也保持浅底（像 iOS 的 App 图标），但降两档灰（见 .dark）。 */
   --xin-os-tile: #f5f5f7;
   --xin-os-tile-border: rgb(var(--xin-ink-rgb) / 0.06);
   --xin-os-mono: #1d1d1f;
@@ -240,7 +240,9 @@
   --xin-card-border: rgb(var(--xin-ink-rgb) / 0.09);
   --xin-card-shadow: 0 10px 28px -14px rgb(var(--xin-shadow-rgb) / 0.6);
 
-  --xin-os-tile: #e5e5ea;
+  /* systemGray5 → systemGray3：深色列表里一整列近白的方块比主机名还抢眼；
+     再暗下去 Debian 的酒红、Tux 的黑身就和底座糊成一片 */
+  --xin-os-tile: #c7c7cc;
   --xin-os-tile-border: rgb(255 255 255 / 0.1);
 
   --xin-canvas-rgb: 18 18 20;

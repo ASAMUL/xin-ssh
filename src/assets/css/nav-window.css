@@ -57,7 +57,7 @@
 }
 
 .nav-window-item[data-state="active"] {
-  color: var(--xin-accent-strong);
+  color: var(--lg-droplet-rose-text);
 }
 
 .nav-window-item [data-slot="leadingIcon"] {

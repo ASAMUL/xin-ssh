@@ -19,7 +19,7 @@
 
 .connection-table th {
   padding: 12px 14px;
-  color: var(--xin-text-soft);
+  color: var(--xin-text-muted);
   border-bottom: 1px solid var(--xin-glass-edge);
   font-size: 12px;
   font-weight: 640;

@@ -39,7 +39,7 @@
 }
 
 .appearance-switch :deep([data-slot="trigger"][data-state="active"]) {
-  color: var(--xin-accent-strong);
+  color: var(--lg-droplet-rose-text);
 }
 
 .appearance-switch :deep([data-slot="indicator"]) {

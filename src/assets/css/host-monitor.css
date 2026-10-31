@@ -212,7 +212,7 @@
 }
 
 .monitor-tabs :deep(.monitor-tabs-trigger[data-state="active"]) {
-  color: var(--xin-accent-strong);
+  color: var(--lg-droplet-rose-text);
 }
 
 .monitor-activity-caption {

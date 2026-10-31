@@ -78,7 +78,7 @@
 }
 
 .auth-methods > button.active {
-  color: var(--xin-accent-strong);
+  color: var(--lg-droplet-rose-text);
   background: var(--lg-droplet-rose);
   box-shadow: var(--lg-droplet-rose-shadow);
 }

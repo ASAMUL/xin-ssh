@@ -125,6 +125,11 @@
   padding-inline-start: 16px;
 }
 
+/* Nuxt UI 默认的 dimmed 占位字压在透明玻璃上，背后是壁纸，几乎看不见；提一档到 muted */
+.home-search :deep(input::placeholder) {
+  color: var(--xin-text-muted);
+}
+
 .home-group-select {
   min-width: 176px;
   display: flex;
@@ -195,7 +200,7 @@
 }
 
 .home-filter :deep(.home-segment-trigger[data-state="active"]) {
-  color: var(--xin-accent-strong);
+  color: var(--lg-droplet-rose-text);
 }
 
 .home-view-toggle {
@@ -218,7 +223,7 @@
 }
 
 .home-view-toggle :deep(button.active) {
-  color: var(--xin-accent-strong);
+  color: var(--lg-droplet-rose-text);
   background: var(--lg-droplet-rose);
   box-shadow: var(--lg-droplet-rose-shadow);
 }
