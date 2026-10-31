@@ -9,7 +9,7 @@
   position: relative;
   min-width: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 18px;
   overflow: hidden;
@@ -136,6 +136,116 @@
   white-space: nowrap;
 }
 
+/* 实时读数：CPU 带一条走势，内存是一根容量条，延迟底下写服务器开了多久，正好落在原来只有纹理的右半边。
+   平时一律白字，占用过高、延迟变大才转琥珀 / 红：要注意的时候才给颜色 */
+.home-session-vitals {
+  display: flex;
+  margin: 0 10px 0 0;
+}
+
+.home-vital {
+  flex: none;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 18px;
+}
+
+.home-vital + .home-vital {
+  border-left: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.home-vital dt {
+  color: var(--xin-on-ink-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.home-vital dd {
+  margin: 0;
+}
+
+.home-vital-value {
+  color: var(--xin-on-ink);
+  font-size: 22px;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  transition: color 200ms ease;
+}
+
+.home-vital-value small {
+  margin-left: 2px;
+  color: var(--xin-on-ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.home-vital.high .home-vital-value,
+.home-vital.fair .home-vital-value {
+  color: var(--xin-warning);
+}
+
+.home-vital.critical .home-vital-value,
+.home-vital.poor .home-vital-value {
+  color: var(--xin-danger);
+}
+
+.home-vital-foot {
+  height: 26px;
+  margin-top: 4px;
+}
+
+.home-vital-caption {
+  display: flex;
+  align-items: flex-end;
+  color: var(--xin-on-ink-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+/* 宽度必须钉死：UChart 没传宽度时先按 640px 画，读数这一栏又是按内容撑开的，
+   不钉住的话走势图一出来就把名字和路径那栏挤成 0 宽 */
+.home-vital-chart {
+  width: 84px;
+  overflow: hidden;
+}
+
+/* 走势图本来画在浅色卡片上：辅助线是墨色，末端那颗点描一圈卡片底色。搬到墨面上要翻过来 */
+.home-vital-chart :deep(.metric-sparkline) {
+  --spark-guide: rgb(255 255 255 / 0.1);
+  --spark-guide-strong: rgb(255 255 255 / 0.24);
+  --xin-canvas-raised: var(--xin-ink-surface-raised);
+}
+
+/* 容量条贴着上面的数字，已用 / 总量沉到底，和延迟格的运行时长落在同一条线上 */
+.home-vital-meter {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.home-vital-meter :deep(.home-vital-track) {
+  height: 4px;
+  background: rgb(255 255 255 / 0.12);
+}
+
+/* 藕荷色和概览栏网络走势的第二条线同值（墨面上总是取深色那档），和 CPU 的樱色分开 */
+.home-vital-meter :deep(.home-vital-fill) {
+  background: #a99cf0;
+}
+
+.home-vital.high .home-vital-meter :deep(.home-vital-fill) {
+  background: var(--xin-warning);
+}
+
+.home-vital.critical .home-vital-meter :deep(.home-vital-fill) {
+  background: var(--xin-danger);
+}
+
 .home-session-actions {
   display: flex;
   align-items: center;
@@ -185,6 +295,17 @@
 .home-session-more[data-state="open"] {
   color: var(--xin-on-ink);
   background: rgb(255 255 255 / 0.14);
+}
+
+/* 窗口窄了读数让位给名字和路径：三格读数要四百来像素，挤进来名字就只剩省略号 */
+@media (max-width: 1120px) {
+  .home-session-card {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .home-session-vitals {
+    display: none;
+  }
 }
 
 @media (max-width: 760px) {
