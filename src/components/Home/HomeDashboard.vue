@@ -11,6 +11,7 @@ import ConnectionTable from "./ConnectionTable.vue";
 import DeleteConnectionDialog from "./DeleteConnectionDialog.vue";
 import DeleteGroupDialog from "./DeleteGroupDialog.vue";
 import GroupNameDialog from "./GroupNameDialog.vue";
+import HomeGreeting from "./HomeGreeting.vue";
 import HomeSessionCard from "./HomeSessionCard.vue";
 import { useHomeSortable } from "../../composables/useHomeSortable";
 import { useProfileStore } from "../../stores/profileStore";
@@ -35,8 +36,10 @@ const uiStore = useUiStore();
 const query = ref("");
 const cardGrid = ref(null);
 const homeScroll = ref(null);
-// 滚离顶部才给工具栏垫滚动边缘的模糊，见 home-dashboard.css
-const { arrivedState } = useScroll(homeScroll);
+const greeting = ref(null);
+// 问候语滚出去、工具栏真正吸顶之后才垫滚动边缘的模糊，见 home-dashboard.css
+const { y: scrollTop } = useScroll(homeScroll);
+const isToolbarStuck = computed(() => scrollTop.value > (greeting.value?.$el?.offsetHeight ?? 0));
 const groupDialogOpen = ref(false);
 const groupDialogMode = ref("create");
 const groupDialogInitialName = ref("");
@@ -60,12 +63,10 @@ const activeGroupFilter = computed({
 });
 const viewMode = computed(() => settingsStore.homeViewMode);
 const hasProfiles = computed(() => profileStore.activeProfiles.length > 0);
-// 页面不放「连接 · N 台主机」大标题（顶栏已经亮着「连接」），主机数量挪进搜索框
-const searchPlaceholder = computed(() => {
-  const count = profileStore.activeProfiles.length;
-  return count ? t("home.searchHosts", { count }) : t("home.searchPlaceholder");
-});
 const profileStatuses = computed(() => sessionStore.statusByProfile);
+const onlineHostCount = computed(() =>
+  Object.values(profileStatuses.value).filter((status) => status === "connected").length,
+);
 const normalizedQuery = computed(() => query.value.trim().toLowerCase());
 
 const navItems = computed(() => [
@@ -506,7 +507,14 @@ function showError(error) {
     <!-- 必须排在卡片和工具栏前面：靠绘制顺序生效，原因见 .home-repaint-guard 的样式 -->
     <div class="home-repaint-guard" aria-hidden="true"></div>
     <div class="home-sheet">
-      <div ref="homeScroll" class="home-scroll" :class="{ 'is-scrolled': !arrivedState.top }">
+      <div ref="homeScroll" class="home-scroll" :class="{ 'is-scrolled': isToolbarStuck }">
+        <HomeGreeting
+          ref="greeting"
+          :host-count="profileStore.activeProfiles.length"
+          :online-count="onlineHostCount"
+          :session-count="sessionStore.openSessionCount"
+        />
+
         <!-- 工具栏吸顶、浮在列表之上：卡片从玻璃底下滑过时，边缘的折射才看得见 -->
         <div class="home-toolbar">
           <UInput
@@ -517,7 +525,7 @@ function showError(error) {
             variant="none"
             size="lg"
             icon="i-lucide-search"
-            :placeholder="searchPlaceholder"
+            :placeholder="t('home.searchPlaceholder')"
           />
 
           <!-- 按住选中项会浮起一颗放大透镜，拖到别的选项上松手就切过去 -->

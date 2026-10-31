@@ -79,7 +79,18 @@ export const messages = {
     },
     home: {
       searchPlaceholder: "搜索主机或地址",
-      searchHosts: "搜索 {count} 台主机",
+      greeting: {
+        morning: "早上好",
+        noon: "中午好",
+        afternoon: "下午好",
+        evening: "晚上好",
+        night: "夜深了",
+      },
+      summary: {
+        hosts: "{count} 台主机",
+        online: "{count} 台在线",
+        sessions: "{count} 个会话",
+      },
       filter: {
         all: "全部",
         favorites: "收藏",
@@ -1205,7 +1216,18 @@ export const messages = {
     },
     home: {
       searchPlaceholder: "Search hosts or addresses",
-      searchHosts: "Search {count} hosts",
+      greeting: {
+        morning: "Good morning",
+        noon: "Good afternoon",
+        afternoon: "Good afternoon",
+        evening: "Good evening",
+        night: "Working late",
+      },
+      summary: {
+        hosts: "{count} host | {count} hosts",
+        online: "{count} online",
+        sessions: "{count} session | {count} sessions",
+      },
       filter: {
         all: "All",
         favorites: "Favorites",

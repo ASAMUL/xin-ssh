@@ -1,0 +1,51 @@
+/* 首页第一行：一句问候 + 一行概况，给视线一个起点（HomeGreeting.vue 专用，scoped 引入）。
+   字直接写在壁纸上，像锁屏上的时间。背后垫一圈画布色的柔光把字托住：
+   深色下是一圈暗晕、浅色下是一圈亮晕，壁纸再花也读得清，又不用再垫一块玻璃 */
+.home-greeting {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 18px;
+  text-shadow: 0 0 24px rgb(var(--xin-canvas-rgb) / 0.7);
+}
+
+.home-greeting h1 {
+  margin: 0;
+  color: var(--xin-text);
+  font-size: 32px;
+  font-weight: 750;
+  letter-spacing: -0.6px;
+  line-height: 1.15;
+}
+
+.home-greeting-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  color: var(--xin-text-body);
+  font-size: 14px;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-greeting-summary > span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.home-greeting-summary > span + span::before {
+  margin: 0 10px;
+  color: var(--xin-text-soft);
+  content: "·";
+}
+
+/* 在线数前面一颗绿点：整行里唯一的颜色，一眼找到「有几台开着」 */
+.home-greeting-online i {
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--xin-success);
+  box-shadow: 0 0 8px rgb(var(--xin-success-rgb) / 0.55);
+}
