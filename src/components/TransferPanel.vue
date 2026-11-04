@@ -11,6 +11,7 @@ import { useTransferStore } from "../stores/transferStore";
 import { useUiStore } from "../stores/uiStore";
 import { localizeError } from "../utils/appError";
 import { compactMenuUi } from "../config/menuUi";
+import TransferTaskIcon from "./TransferPanel/TransferTaskIcon.vue";
 
 const { t } = useI18n();
 const transferStore = useTransferStore();
@@ -164,16 +165,6 @@ async function copyText(text) {
   }
 }
 
-function taskIcon(task) {
-  if (task.status === "planning") return "i-lucide-folder-search";
-  if (task.status === "failed") return "i-lucide-circle-alert";
-  if (task.status === "completed") return "i-lucide-circle-check";
-  if (task.status === "canceled") return "i-lucide-circle-minus";
-  if (task.status === "paused") return "i-lucide-circle-pause";
-
-  return task.direction === "upload" ? "i-lucide-arrow-up" : "i-lucide-arrow-down";
-}
-
 function taskProgress(task) {
   if (task.status === "completed") return 100;
   if (!task.bytesTotal) return 0;
@@ -300,7 +291,7 @@ function formatTaskTime(timestamp) {
           :data-task-id="task.id"
         >
           <span class="transfer-icon">
-            <UIcon :name="taskIcon(task)" :class="{ 'spin-icon': task.status === 'running' }" />
+            <TransferTaskIcon :task="task" />
           </span>
 
           <div class="transfer-copy">

@@ -1,6 +1,8 @@
 <script setup>
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { RefreshCw } from "@respeak/lucide-motion-vue";
+import MotionIcon from "../MotionIcon.vue";
 import { localizeError } from "../../utils/appError";
 import { formatBytes } from "../../utils/formatMetrics";
 
@@ -62,7 +64,11 @@ const summary = computed(() => {
         icon="i-lucide-refresh-cw"
         :label="t('diskUsage.rerun')"
         @click="emit('rerun')"
-      />
+      >
+        <template #leading="{ ui }">
+          <MotionIcon :icon="RefreshCw" animation="lucide-animated" hover :class="ui.leadingIcon()" />
+        </template>
+      </UButton>
       <UTooltip :text="t('diskUsage.close')">
         <UButton
           color="neutral"

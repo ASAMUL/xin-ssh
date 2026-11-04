@@ -2,7 +2,9 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Settings } from "@respeak/lucide-motion-vue";
 import FileOperationPanel from "../FileOperationPanel.vue";
+import MotionIcon from "../MotionIcon.vue";
 import { GLASS_CLEAR } from "../../directives/liquidGlass";
 import WindowControls from "./WindowControls.vue";
 import brandAvatar from "../../assets/brand/xin-avatar.png";
@@ -128,7 +130,11 @@ async function startWindowDrag(event) {
           icon="i-lucide-settings"
           :label="t('app.settings')"
           @click.stop="uiStore.openSettings"
-        />
+        >
+          <template #leading="{ ui }">
+            <MotionIcon :icon="Settings" animation="lucide-animated" hover :class="ui.leadingIcon()" />
+          </template>
+        </UButton>
       </div>
       <WindowControls v-if="!isMac" />
     </div>

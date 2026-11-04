@@ -1,7 +1,9 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { RefreshCw } from "@respeak/lucide-motion-vue";
 import CodeMirrorEditor from "./CodeMirrorEditor.vue";
+import MotionIcon from "../MotionIcon.vue";
 import {
   TERMINAL_FONTS,
   buildEditorTheme,
@@ -203,7 +205,11 @@ function handleCursorChange(position) {
           icon="i-lucide-refresh-cw"
           :label="t('editor.retry')"
           @click="editorStore.retryLoad()"
-        />
+        >
+          <template #leading="{ ui }">
+            <MotionIcon :icon="RefreshCw" animation="lucide-animated" hover :class="ui.leadingIcon()" />
+          </template>
+        </UButton>
       </div>
 
       <template v-else>

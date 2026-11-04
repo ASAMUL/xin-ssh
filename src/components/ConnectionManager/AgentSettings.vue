@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { RefreshCw } from "@respeak/lucide-motion-vue";
+import MotionIcon from "../MotionIcon.vue";
 import { listAgentIdentities } from "../../services/workspaceApi";
 import { normalizeAgentConfig } from "../../utils/sshAgent";
 import { localizeError } from "../../utils/appError";
@@ -98,7 +100,12 @@ async function refreshIdentities() {
           :aria-label="t('profile.agentRefresh')"
           :title="t('profile.agentRefresh')"
           @click="refreshIdentities"
-        />
+        >
+          <!-- 加载中让出插槽，Nuxt UI 自带的转圈图标才会出来 -->
+          <template v-if="!isLoading" #leading="{ ui }">
+            <MotionIcon :icon="RefreshCw" animation="lucide-animated" hover :class="ui.leadingIcon()" />
+          </template>
+        </UButton>
       </div>
     </div>
     <p v-if="error" class="form-section-footer error">{{ error }}</p>

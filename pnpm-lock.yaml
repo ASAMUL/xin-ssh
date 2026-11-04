@@ -62,6 +62,9 @@ importers:
       '@nuxt/ui':
         specifier: ^4.12.0
         version: 4.12.0(b93aaca30ddac7be0ad84b29dcaf3267)
+      '@respeak/lucide-motion-vue':
+        specifier: ^0.7.0
+        version: 0.7.0(@nuxt/kit@4.6.1(@nuxt/schema@4.6.1)(confbox@0.3.1)(dotenv@17.4.2)(giget@3.2.0)(jiti@2.7.0)(magic-string@1.4.3)(mlly@1.8.2)(unplugin@3.4.0(esbuild@0.27.7)(rollup@4.60.4)(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))))(motion-v@2.10.0(@vueuse/core@14.4.0(vue@3.5.34(typescript@6.0.3)))(vue@3.5.34(typescript@6.0.3)))(vue@3.5.34(typescript@6.0.3))
       '@tanstack/charts':
         specifier: ^1.1.0
         version: 1.1.0(vue@3.5.34(typescript@6.0.3))
@@ -107,6 +110,9 @@ importers:
       idb-keyval:
         specifier: ^6.3.0
         version: 6.3.0
+      motion-v:
+        specifier: ^2.10.0
+        version: 2.10.0(@vueuse/core@14.4.0(vue@3.5.34(typescript@6.0.3)))(vue@3.5.34(typescript@6.0.3))
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@6.0.3)(vue@3.5.34(typescript@6.0.3))
@@ -886,6 +892,16 @@ packages:
       proxy-agent:
         optional: true
       yauzl:
+        optional: true
+
+  '@respeak/lucide-motion-vue@0.7.0':
+    resolution: {integrity: sha512-O5hoZJHnQwV4c345PY5FbPZyeR2Urd/Xm0xbTPVDerFyovfZn6aCHZG6LaRL+z75/82LdRcCbQm1stHfj0NvQQ==}
+    peerDependencies:
+      '@nuxt/kit': ^3.0.0
+      motion-v: ^2
+      vue: ^3.3
+    peerDependenciesMeta:
+      '@nuxt/kit':
         optional: true
 
   '@rollup/rollup-android-arm-eabi@4.60.4':
@@ -1812,6 +1828,10 @@ packages:
   colortranslator@5.0.0:
     resolution: {integrity: sha512-Z3UPUKasUVDFCDYAjP2fmlVRf1jFHJv1izAmPjiOa0OCIw1W7iC8PZ2GsoDa8uZv+mKyWopxxStT9q05+27h7w==}
 
+  commander@2.0.0:
+    resolution: {integrity: sha512-qebjpyeaA/nJ4w3EO2cV2++/zEkccPnjWogzA2rff+Lk8ILI75vULeTmyd4wPxWdKwtP3J+G39IXVZadh0UHyw==}
+    engines: {node: '>= 0.6.x'}
+
   confbox@0.1.8:
     resolution: {integrity: sha512-RMtmw0iFkeR4YV+fUOSucriAQNb9g8zFR52MWCtl+cCZOFRNL6zeB395vPzFhEjjn4fMxXudmELnl/KF/WrK6w==}
 
@@ -1848,6 +1868,9 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
+  d3-array@1.2.0:
+    resolution: {integrity: sha512-k5VJMv55KYLBYJO9BFYddq6ly58JQBQlEqc6DakXA4auJqR1FFLRPdOOn4h+vOORtKpYTEbzpFd7bnlmCmK//Q==}
 
   d3-array@2.12.1:
     resolution: {integrity: sha512-B0ErZK/66mHtEsR1TkPEEkwdy+WDesimkM5gpZr5Dsg54BiTA5RXtYW5qTLIAcekaS9xfZrzBLF/OAkB3Qn1YQ==}
@@ -1914,6 +1937,9 @@ packages:
     resolution: {integrity: sha512-p3KP5HCf/bvjBSSKuXid6Zqijx7wIfNW+J/maPs+iwR35at5JCbLUT0LzF1cnjbCHWhqzQTIN2Jpe8pRebIEFQ==}
     engines: {node: '>=12'}
 
+  d3-polygon@1.0.3:
+    resolution: {integrity: sha512-2zP7GOvf4XOWTeQouK7fCO534yQxyhYYTw6GTqcXifIalHgA6qV/es+4GRQii9m6XxEPFcht4loobD/o2iEo1A==}
+
   d3-quadtree@3.0.1:
     resolution: {integrity: sha512-04xDrxQTDTCFwP5H6hRhsRcb9xxv2RzkcsygFzmkSIOJy3PeRJP7sNk3VRIbKXcog561P9oU0/rVH6vDROAgUw==}
     engines: {node: '>=12'}
@@ -1977,6 +2003,9 @@ packages:
   dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
+
+  earcut@2.1.1:
+    resolution: {integrity: sha512-+BGT9Mffq3Oxf2nDOtzaJDd9P8g/z3WNYGO84Q23hDBot5VU8DNGY73Vc94eVDvHjMyhonnuEg+DNwEQ6iZn3w==}
 
   embla-carousel-auto-height@8.6.0:
     resolution: {integrity: sha512-/HrJQOEM6aol/oF33gd2QlINcXy3e19fJWvHDuHWp2bpyTa+2dm9tVVJak30m2Qy6QyQ6Fc8DkImtv7pxWOJUQ==}
@@ -2082,6 +2111,9 @@ packages:
       picomatch:
         optional: true
 
+  flubber@0.4.2:
+    resolution: {integrity: sha512-79RkJe3rA4nvRCVc2uXjj7U/BAUq84TS3KHn6c0Hr9K64vhj83ZNLUziNx4pJoBumSPhOl5VjH+Z0uhi+eE8Uw==}
+
   fontaine@0.8.0:
     resolution: {integrity: sha512-eek1GbzOdWIj9FyQH/emqW1aEdfC3lYRCHepzwlFCm5T77fBSRSyNRKE6/antF1/B1M+SfJXVRQTY9GAr7lnDg==}
     engines: {node: '>=18.12.0'}
@@ -2108,6 +2140,20 @@ packages:
       react:
         optional: true
       react-dom:
+        optional: true
+
+  framer-motion@14.8.0:
+    resolution: {integrity: sha512-PQsSx+UlaKiyPhADjVT5wALBErJJdbMeKQS4gQx6ibOrSNni7qjqfTKMvf6YHGG8pQWi6njs7AqrIG7R2hbnxA==}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0
+      react-dom: ^18.0.0 || ^19.0.0
+      remix: ^3.1.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
+      remix:
         optional: true
 
   fsevents@2.3.3:
@@ -2357,8 +2403,20 @@ packages:
   motion-dom@14.3.0:
     resolution: {integrity: sha512-rcKO4aEJzAqDEsrH6qFzhLZxs7bNqZpiUEuEATz9LaRwt6dG7hZEbcFUSHNR8NECaKYM0Iuw6Iv6NpWEGXDI+w==}
 
+  motion-dom@14.8.0:
+    resolution: {integrity: sha512-HzA41kvV7BgluM7L/XbW+gHFzDtJUbHnEsrlnIzPS9dqSfoPy9YzL6VKF7ai0TiQcykkkLUqvIxECAdwa9gwAw==}
+
   motion-utils@14.1.1:
     resolution: {integrity: sha512-3VvN5Uvf8B6qG+OfOui6Nht5EWp+vLuU3IqcAj7ItZGKqtmTjCebl5sGZF7/08gEHRnEl1AP/fIwbcEyVrcQGQ==}
+
+  motion-utils@14.7.0:
+    resolution: {integrity: sha512-woO0/Nb7ys75f94fjvQi/6leiHGvZUYkeHUPEZ3vxsV+9OpEVhkxp01x8MlRwX0zt31EqgXsKDAoBoJLC148Tw==}
+
+  motion-v@2.10.0:
+    resolution: {integrity: sha512-uWEEtQgS3fE1AWf6FNJ3JhXMJ9jNv6FJSQnE/Od1a6/dtk1zYcAU7ViBruXM7OgXI0B+fnJrzETIt0wQTIMeJA==}
+    peerDependencies:
+      '@vueuse/core': '>=10.0.0'
+      vue: '>=3.0.0'
 
   motion-v@2.8.0:
     resolution: {integrity: sha512-kCwxm+EUbXW/lUdhTyozTKCX2WmQ5aDrjrPtFnUKByw99cz6mQAJyqtIubGdecnDM4VvNz8JOhWy2upp3m5b3w==}
@@ -2515,8 +2573,8 @@ packages:
   prosemirror-model@1.25.6:
     resolution: {integrity: sha512-RIm+e9BiqAaJ1mRECv3vR3C+VG8ELoTTI+47tVudGi82yLnFOx3G/p/iSPK1HmHQdKhkkrJ68NJqxh7S+FBVmQ==}
 
-  prosemirror-schema-list@1.5.1:
-    resolution: {integrity: sha512-927lFx/uwyQaGwJxLWCZRkjXG0p48KpMj6ueoYiu4JX05GGuGcgzAy62dfiV8eFZftgyBUvLx76RsMe20fJl+Q==}
+  prosemirror-schema-list@1.6.0:
+    resolution: {integrity: sha512-G1srDtan+VqWn+qpmWFj/6j0YsZ5zMU+ZIlGVIW41a5JF2jAI3jzfMRWmSABmEH2Qoq1PmAG/o2mucMMdLOsLg==}
 
   prosemirror-state@1.4.4:
     resolution: {integrity: sha512-6jiYHH2CIGbCfnxdHbXZ12gySFY/fz/ulZE333G6bPqIZ4F+TXo9ifiR86nAHpWnfoNjOb3o5ESi7J8Uz1jXHw==}
@@ -2647,6 +2705,12 @@ packages:
     resolution: {integrity: sha512-H+ue8Zo4vJmV2nRjpx86P35lzwDT3nItnIsocgumgr0hHMQ+ZGq5vrERg9kJBo5AWGmxZDhzDo+WVIJqkB0cGA==}
     engines: {node: '>=16'}
 
+  svg-path-properties@0.2.1:
+    resolution: {integrity: sha512-fRrj4zbCtiARuTMKtnnxGXN6paeyFOk67eYVlfr2E56vVgBd5CalvN6rVAV/6LurrtTGYgPteTYadosw97SNBg==}
+
+  svgpath@2.6.0:
+    resolution: {integrity: sha512-OIWR6bKzXvdXYyO4DK/UWa1VA1JeKq8E+0ug2DG98Y/vOmMpfZNj+TIG988HjfYSqtcy/hFOtZq/n/j5GSESNg==}
+
   tailwind-merge@3.7.0:
     resolution: {integrity: sha512-XPPUyAc+cvspz3lHTcR/QgPfW2A0lv/xQNIjX3HGhLR+Nq2lHaLq5MtTesHn8GUr3W3DguT2KT5x3NVgRtYwmA==}
 
@@ -2682,12 +2746,19 @@ packages:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
     engines: {node: '>=12.0.0'}
 
+  topojson-client@3.1.0:
+    resolution: {integrity: sha512-605uxS6bcYxGXw9qi62XyrV6Q3xwbndjachmNxu8HWTtVPxZfEJN9fd/SZS1Q54Sn2y0TMyMxFj/cJINqGHrKw==}
+    hasBin: true
+
   totalist@3.0.1:
     resolution: {integrity: sha512-sf4i37nQ2LBx4m3wB74y+ubopq6W/dIzXg0FDGjsYnZHVa1Da8FH853wlL2gtUhg+xJXjfk3kUZS3BRoQeoQBQ==}
     engines: {node: '>=6'}
 
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
+
+  tslib@2.9.1:
+    resolution: {integrity: sha512-a4Ux9VKuIMHsOS7ENbEq6hK2ZGYIT27Rtl0E4eD9KqwxhKiQeMZE/9xb3IdYwWaSOyIBQLExhQgXDTYoiCxnWA==}
 
   type-level-regexp@0.1.17:
     resolution: {integrity: sha512-wTk4DH3cxwk196uGLK/E9pE45aLfeKJacKmcEgEOA/q5dnPGNxXt0cfYdFxb57L+sEpf1oJH4Dnx/pnRcku9jg==}
@@ -4014,6 +4085,14 @@ snapshots:
       modern-tar: 0.7.6
       yargs: 18.0.0
 
+  '@respeak/lucide-motion-vue@0.7.0(@nuxt/kit@4.6.1(@nuxt/schema@4.6.1)(confbox@0.3.1)(dotenv@17.4.2)(giget@3.2.0)(jiti@2.7.0)(magic-string@1.4.3)(mlly@1.8.2)(unplugin@3.4.0(esbuild@0.27.7)(rollup@4.60.4)(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))))(motion-v@2.10.0(@vueuse/core@14.4.0(vue@3.5.34(typescript@6.0.3)))(vue@3.5.34(typescript@6.0.3)))(vue@3.5.34(typescript@6.0.3))':
+    dependencies:
+      flubber: 0.4.2
+      motion-v: 2.10.0(@vueuse/core@14.4.0(vue@3.5.34(typescript@6.0.3)))(vue@3.5.34(typescript@6.0.3))
+      vue: 3.5.34(typescript@6.0.3)
+    optionalDependencies:
+      '@nuxt/kit': 4.6.1(@nuxt/schema@4.6.1)(confbox@0.3.1)(dotenv@17.4.2)(giget@3.2.0)(jiti@2.7.0)(magic-string@1.4.3)(mlly@1.8.2)(unplugin@3.4.0(esbuild@0.27.7)(rollup@4.60.4)(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)))
+
   '@rollup/rollup-android-arm-eabi@4.60.4':
     optional: true
 
@@ -4446,7 +4525,7 @@ snapshots:
       prosemirror-history: 1.5.1
       prosemirror-keymap: 1.2.3
       prosemirror-model: 1.25.6
-      prosemirror-schema-list: 1.5.1
+      prosemirror-schema-list: 1.6.0
       prosemirror-state: 1.4.4
       prosemirror-tables: 1.8.5
       prosemirror-transform: 1.12.0
@@ -4818,6 +4897,8 @@ snapshots:
 
   colortranslator@5.0.0: {}
 
+  commander@2.0.0: {}
+
   confbox@0.1.8: {}
 
   confbox@0.2.4: {}
@@ -4850,6 +4931,8 @@ snapshots:
       source-map-js: 1.2.1
 
   csstype@3.2.3: {}
+
+  d3-array@1.2.0: {}
 
   d3-array@2.12.1:
     dependencies:
@@ -4909,6 +4992,8 @@ snapshots:
   d3-path@1.0.9: {}
 
   d3-path@3.1.0: {}
+
+  d3-polygon@1.0.3: {}
 
   d3-quadtree@3.0.1: {}
 
@@ -4975,6 +5060,8 @@ snapshots:
   devtools-protocol@0.0.1638949: {}
 
   dotenv@17.4.2: {}
+
+  earcut@2.1.1: {}
 
   embla-carousel-auto-height@8.6.0(embla-carousel@8.6.0):
     dependencies:
@@ -5114,6 +5201,15 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.4
 
+  flubber@0.4.2:
+    dependencies:
+      d3-array: 1.2.0
+      d3-polygon: 1.0.3
+      earcut: 2.1.1
+      svg-path-properties: 0.2.1
+      svgpath: 2.6.0
+      topojson-client: 3.1.0
+
   fontaine@0.8.0:
     dependencies:
       '@capsizecss/unpack': 4.0.0
@@ -5171,6 +5267,12 @@ snapshots:
       motion-dom: 14.3.0
       motion-utils: 14.1.1
       tslib: 2.8.1
+
+  framer-motion@14.8.0:
+    dependencies:
+      motion-dom: 14.8.0
+      motion-utils: 14.7.0
+      tslib: 2.9.1
 
   fsevents@2.3.3:
     optional: true
@@ -5359,7 +5461,26 @@ snapshots:
     dependencies:
       motion-utils: 14.1.1
 
+  motion-dom@14.8.0:
+    dependencies:
+      motion-utils: 14.7.0
+
   motion-utils@14.1.1: {}
+
+  motion-utils@14.7.0: {}
+
+  motion-v@2.10.0(@vueuse/core@14.4.0(vue@3.5.34(typescript@6.0.3)))(vue@3.5.34(typescript@6.0.3)):
+    dependencies:
+      '@vueuse/core': 14.4.0(vue@3.5.34(typescript@6.0.3))
+      framer-motion: 14.8.0
+      hey-listen: 1.0.8
+      motion-dom: 14.8.0
+      motion-utils: 14.7.0
+      vue: 3.5.34(typescript@6.0.3)
+    transitivePeerDependencies:
+      - react
+      - react-dom
+      - remix
 
   motion-v@2.8.0(@vueuse/core@14.4.0(vue@3.5.34(typescript@6.0.3)))(vue@3.5.34(typescript@6.0.3)):
     dependencies:
@@ -5509,7 +5630,7 @@ snapshots:
     dependencies:
       orderedmap: 2.1.1
 
-  prosemirror-schema-list@1.5.1:
+  prosemirror-schema-list@1.6.0:
     dependencies:
       prosemirror-model: 1.25.6
       prosemirror-state: 1.4.4
@@ -5677,6 +5798,10 @@ snapshots:
     dependencies:
       copy-anything: 4.0.5
 
+  svg-path-properties@0.2.1: {}
+
+  svgpath@2.6.0: {}
+
   tailwind-merge@3.7.0: {}
 
   tailwind-variants@3.2.2(tailwind-merge@3.7.0)(tailwindcss@4.3.3):
@@ -5703,9 +5828,15 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
 
+  topojson-client@3.1.0:
+    dependencies:
+      commander: 2.0.0
+
   totalist@3.0.1: {}
 
   tslib@2.8.1: {}
+
+  tslib@2.9.1: {}
 
   type-level-regexp@0.1.17: {}
 

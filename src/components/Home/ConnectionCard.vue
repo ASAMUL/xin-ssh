@@ -1,6 +1,8 @@
 <script setup>
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { Star } from "@respeak/lucide-motion-vue";
+import MotionIcon from "../MotionIcon.vue";
 import OsIconTile from "../ConnectionManager/OsIconTile.vue";
 import { resolveProfileOsIcon } from "../../config/osIcons";
 import { formatRelativeTime } from "../../utils/relativeTime";
@@ -74,7 +76,11 @@ defineOptions({ inheritAttrs: false });
           :aria-label="profile.favorite ? t('home.unfavorite') : t('home.favorite')"
           :title="profile.favorite ? t('home.unfavorite') : t('home.favorite')"
           @click="emit('toggleFavorite', profile.id)"
-        />
+        >
+          <template #leading="{ ui }">
+            <MotionIcon :icon="Star" :play-on="profile.favorite" :class="ui.leadingIcon()" />
+          </template>
+        </UButton>
         <UDropdownMenu v-if="hasMenu" :items="menuItems" size="sm" :content="{ align: 'end' }">
           <UButton
             color="neutral"

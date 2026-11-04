@@ -155,6 +155,8 @@ Found a bug? Congratulations, it's our bug now. Both of ours.
 
 A lot of Xin SSH was pair-programmed with [Claude](https://claude.com/claude-code). Claude wrote this README, too.
 
+Animated icons come from [lucide-motion-vue](https://github.com/respeak-io/lucide-motion-vue). The shapes are [Lucide](https://lucide.dev) (ISC); the motion is adapted from [lucide-animated](https://lucide-animated.com) (MIT) and [animate-ui](https://github.com/imskyleen/animate-ui) (MIT + Commons Clause).
+
 ## License
 
 [MIT](LICENSE)

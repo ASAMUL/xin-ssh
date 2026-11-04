@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "@nuxt/ui/composables";
 import { save } from "@tauri-apps/plugin-dialog";
+import { RefreshCw } from "@respeak/lucide-motion-vue";
 import ContainerLogConsole from "./ContainerLogConsole.vue";
+import MotionIcon from "../MotionIcon.vue";
 import { getTerminalTheme, resolveTerminalFontStack, resolveThemeVariant } from "../../config/terminalThemes";
 import { cancelFileOperation, exportContainerLogs, startContainerLogs } from "../../services/workspaceApi";
 import {
@@ -284,7 +286,11 @@ function handleOpenChange(open) {
               :disabled="!isConnected"
               :aria-label="t('containerLogs.reload')"
               @click="start"
-            />
+            >
+              <template #leading="{ ui }">
+                <MotionIcon :icon="RefreshCw" animation="lucide-animated" hover :class="ui.leadingIcon()" />
+              </template>
+            </UButton>
           </UTooltip>
         </div>
 

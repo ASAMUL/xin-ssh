@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { RefreshCw } from "@respeak/lucide-motion-vue";
+import MotionIcon from "../MotionIcon.vue";
 import { listDockerContainers } from "../../services/workspaceApi";
 import { localizeError } from "../../utils/appError";
 
@@ -83,7 +85,12 @@ function stateLabel(container) {
           :loading="isLoading"
           :aria-label="t('docker.refresh')"
           @click="refresh"
-        />
+        >
+          <!-- 加载中让出插槽，Nuxt UI 自带的转圈图标才会出来 -->
+          <template v-if="!isLoading" #leading="{ ui }">
+            <MotionIcon :icon="RefreshCw" animation="lucide-animated" hover :class="ui.leadingIcon()" />
+          </template>
+        </UButton>
       </UTooltip>
     </header>
 

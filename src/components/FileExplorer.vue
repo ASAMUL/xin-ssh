@@ -6,7 +6,9 @@ import { useVirtualizer } from "@tanstack/vue-virtual";
 import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
 import { useToast } from "@nuxt/ui/composables";
+import { RefreshCw } from "@respeak/lucide-motion-vue";
 import FilePermissionsEditor from "./FilePermissionsEditor.vue";
+import MotionIcon from "./MotionIcon.vue";
 import ClipboardPasteDialog from "./FileExplorer/ClipboardPasteDialog.vue";
 import ContainerPicker from "./FileExplorer/ContainerPicker.vue";
 import DiskUsageSummary from "./FileExplorer/DiskUsageSummary.vue";
@@ -2097,7 +2099,7 @@ function sortAriaLabel(key) {
             <strong>{{ emptyState.title }}</strong>
             <span>{{ emptyState.description }}</span>
             <button v-if="emptyState.isError" type="button" class="retry-button" @click="refreshDirectory">
-              <UIcon name="i-lucide-refresh-cw" />
+              <MotionIcon :icon="RefreshCw" animation="lucide-animated" hover />
               <span>{{ t("files.retry") }}</span>
             </button>
           </div>

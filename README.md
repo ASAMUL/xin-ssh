@@ -155,6 +155,8 @@ pnpm test          # 跑前端单元测试
 
 Xin SSH 的很多代码，是和 [Claude](https://claude.com/claude-code)结对写出来的。这份 README 也是它写的。
 
+动态图标来自 [lucide-motion-vue](https://github.com/respeak-io/lucide-motion-vue)。图形是 [Lucide](https://lucide.dev)（ISC），动效改编自 [lucide-animated](https://lucide-animated.com)（MIT）和 [animate-ui](https://github.com/imskyleen/animate-ui)（MIT + Commons Clause）。
+
 ## 许可证
 
 [MIT](LICENSE)
