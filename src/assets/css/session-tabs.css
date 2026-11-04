@@ -45,12 +45,6 @@
   box-shadow: var(--lg-droplet-clear-shadow);
 }
 
-/* 生产机的「生产」角标排在标题后面，网格多给一列；不写的话它会被挤到第二行、掉出标签底部。
-   只在有角标时加这一列：空列也会多吃一份 gap，普通标签的标题和关闭按钮之间会平白多出 8px */
-.session-tab-main:has(.production-badge) {
-  grid-template-columns: auto 8px minmax(0, 1fr) auto;
-}
-
 /* 生产机的标签：一圈细红边。选中时水滴照旧，红边也留着——切到它的那一刻最需要知道这是生产机 */
 .session-tab.production,
 .session-tab.production.active {
@@ -106,21 +100,22 @@
   );
 }
 
+/* 宽度跟着名字走，不设最小宽：最小宽会让短名字的标签尾巴空一截，标签之间的空隙就忽大忽小 */
 .session-tab {
   width: auto;
-  min-width: 128px;
-  max-width: 226px;
+  max-width: 220px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
   flex: 0 0 auto;
 }
 
+/* 关闭按钮叠在图标上、不占位（见 .tab-close），这里只当它的定位参照 */
 .session-tab-content {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px;
+  position: relative;
   height: 100%;
   min-width: 0;
+  display: flex;
   align-items: center;
 }
 
@@ -168,14 +163,15 @@
   }
 }
 
+/* 左内边距 6px：标签高 34、去掉 1px 边框剩 32，20px 的底座上下各留 6px；左边也留 6px，四周等距才像嵌在标签里 */
 .session-tab-main {
+  flex: 1 1 auto;
   min-width: 0;
   height: 100%;
-  display: grid;
-  grid-template-columns: auto 8px minmax(0, 1fr);
+  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 6px 0 9px;
+  padding: 0 12px 0 6px;
   color: inherit;
   border: 0;
   background: transparent;
@@ -183,27 +179,45 @@
   user-select: none;
 }
 
+.tab-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  transition: opacity 130ms ease;
+}
+
+/* 深色下瓷白底座是整条标签栏里最亮的一块，会把视线从名字上抢走。
+   换成墨色会话卡那种半透明暗底座：彩色标照样有东西托着，Tux 的黑身子也不会融进玻璃里。
+   多挂一层 .session-tab：OsIconTile 自己的 .dark .os-icon-tile 和这里同级，同级时谁赢看样式表加载顺序 */
+.dark .session-tab .tab-os-icon {
+  color: var(--xin-text-body);
+  border-color: rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.1);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1);
+}
+
+/* 状态角标压在底座右下角，底座在那里挖一个缺口：玻璃底色一直在变，描边色怎么选都会有地方对不上，挖空就不用选 */
+.tab-os-icon.notched {
+  mask-image: radial-gradient(circle at calc(100% - 1.5px) calc(100% - 1.5px), transparent 5px, #000 5.5px);
+}
+
 .tab-status {
-  width: 8px;
-  height: 8px;
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--xin-status-idle);
-  box-shadow: 0 0 0 4px rgb(var(--xin-neutral-rgb) / 0.12);
 }
 
 .tab-status.authRequired {
   background: var(--xin-accent);
-  box-shadow: 0 0 0 4px rgb(var(--xin-accent-rgb) / 0.13);
-}
-
-.tab-status.connected {
-  background: var(--xin-success);
-  box-shadow: 0 0 0 4px rgb(var(--xin-success-rgb) / 0.16);
 }
 
 .tab-status.connecting {
   background: var(--xin-warning);
-  box-shadow: 0 0 0 4px rgb(var(--xin-warning-rgb) / 0.14);
   animation: tab-status-pulse 1.15s ease-in-out infinite;
 }
 
@@ -221,7 +235,6 @@
 
 .tab-status.error {
   background: var(--xin-danger);
-  box-shadow: 0 0 0 4px rgb(var(--xin-danger-rgb) / 0.12);
 }
 
 .tab-title {
@@ -233,30 +246,59 @@
   white-space: nowrap;
 }
 
-/* 关闭按钮悬停/激活/键盘聚焦才现身，平时保持安静 */
+/* 关闭按钮不占位，悬停时换掉图标（Safari 的做法）：常驻的话每个标签尾巴都得给它留 30px，
+   标签之间的空隙就成了内部间距的好几倍。位置和图标底座严丝合缝地重叠（左 6px、20px 见方）。
+   平时用 visibility 藏起来而不只是透明：看不见的关闭键不能接住点击 */
 .tab-close {
-  width: 22px;
-  height: 22px;
-  justify-self: center;
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+  margin-top: -10px;
+  padding: 0;
   display: grid;
   place-items: center;
   color: var(--xin-text-soft);
-  font-size: 13px;
   border: 0;
-  border-radius: 50%;
+  border-radius: 6px;
   background: transparent;
   opacity: 0;
+  visibility: hidden;
   transition:
     opacity 130ms ease,
+    visibility 0s linear 130ms,
     background 130ms ease,
     color 130ms ease,
     transform 200ms cubic-bezier(0.32, 0.72, 0.24, 1);
 }
 
-.session-tab:hover .tab-close,
-.session-tab.active .tab-close,
-.tab-close:focus-visible {
+/* 悬停先等 240ms 再换成关闭键：关会话没有确认、也撤不回，前台命令直接断掉。
+   鼠标划过去顺手点在图标那块，本意是切标签，这时关闭键还没出来，点中的是标签本身 */
+.session-tab:hover .tab-close {
   opacity: 1;
+  visibility: visible;
+  transition-delay: 240ms, 240ms, 0s, 0s, 0s;
+}
+
+.session-tab:hover .tab-icon {
+  opacity: 0;
+  transition-delay: 240ms;
+}
+
+/* 键盘 Tab 到标签上就立刻亮出来，否则藏着的按钮进不了焦点顺序，键盘没法关；正在关闭时转圈也要看得见。
+   写在悬停规则后面：同级时靠后的赢，延迟才会被清掉 */
+.session-tab:has(:focus-visible) .tab-close,
+.session-tab.closing .tab-close {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.session-tab:has(:focus-visible) .tab-icon,
+.session-tab.closing .tab-icon {
+  opacity: 0;
+  transition-delay: 0s;
 }
 
 .tab-close:hover {
@@ -276,7 +318,6 @@
 
 @media (max-width: 760px) {
   .session-tab {
-    min-width: 108px;
     max-width: 140px;
   }
 }

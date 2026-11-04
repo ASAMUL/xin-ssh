@@ -55,6 +55,15 @@ function setDragging(dragging) {
   emit("dragging", dragging);
 }
 
+// 会话绝大多数时候都是已连接，常亮的绿点不带新信息；只在出状况时挂角标，异常才显眼
+function hasStatusAlert(session) {
+  return session.status !== "connected";
+}
+
+function tabLabel(session) {
+  return hasStatusAlert(session) ? `${session.name} · ${t(`monitor.status.${session.status}`)}` : session.name;
+}
+
 function selectSessionTab(session) {
   if (!props.disabled && !isDragging.value && !session.isClosing) emit("select", session.id);
 }
@@ -177,15 +186,22 @@ watch(
                 type="button"
                 class="session-tab-main"
                 :disabled="disabled || session.isClosing"
-                :aria-label="session.name"
+                :aria-label="tabLabel(session)"
                 :aria-pressed="session.id === activeSessionId"
-                :title="session.name"
+                :title="tabLabel(session)"
                 @click.stop="selectSessionTab(session)"
                 @keydown.ctrl.shift.left.exact.stop.prevent="moveSessionTab(session.id, -1)"
                 @keydown.ctrl.shift.right.exact.stop.prevent="moveSessionTab(session.id, 1)"
               >
-                <OsIconTile class="tab-os-icon" :icon="osIcons[session.id]" :size="20" />
-                <span class="tab-status" :class="session.status"></span>
+                <span class="tab-icon">
+                  <OsIconTile
+                    class="tab-os-icon"
+                    :class="{ notched: hasStatusAlert(session) }"
+                    :icon="osIcons[session.id]"
+                    :size="20"
+                  />
+                  <span v-if="hasStatusAlert(session)" class="tab-status" :class="session.status"></span>
+                </span>
                 <span class="tab-title">{{ session.name }}</span>
                 <span v-if="profileStore.isProductionProfile(session.profileId)" class="production-badge">
                   {{ t("profile.productionBadge") }}
@@ -194,6 +210,7 @@ watch(
               <UButton
                 color="neutral" variant="ghost" size="xs" square icon="i-lucide-x"
                 class="tab-close"
+                :ui="{ leadingIcon: 'size-3.5' }"
                 :disabled="disabled || session.isClosing"
                 :loading="session.isClosing"
                 :aria-label="t('terminal.closeSession')"
