@@ -13,3 +13,20 @@
   filter: blur(var(--wallpaper-blur, 0px));
   pointer-events: none;
 }
+
+/* 顶部淡化纱：只在壁纸压不住字时出现（AppWallpaper 量出来的）。
+   问候语、品牌名直接写在壁纸上，没有玻璃可依靠，像锁屏顶部那样从上往下淡出一层画布色。
+   只管到问候语那一行：工具栏的玻璃自己会压亮度，纱再往下拖就雾到画面主体（人物的脸）上，
+   上半截发白、下半截浓，分界正好横在画面中间。
+   用画布色不用白 / 黑：浅色下是往亮里推、深色下是往暗里压，同一条规则两头都管 */
+.app-wallpaper-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgb(var(--xin-canvas-rgb) / 0.58) 0,
+    rgb(var(--xin-canvas-rgb) / 0.46) 150px,
+    rgb(var(--xin-canvas-rgb) / 0) 250px
+  );
+  pointer-events: none;
+}

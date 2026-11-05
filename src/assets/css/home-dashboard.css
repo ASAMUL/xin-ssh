@@ -19,6 +19,29 @@
   --xin-card: var(--lg-fill);
 }
 
+/* 壁纸压不住字时（<html data-wallpaper-assist>，见 AppWallpaper）的纸面：先压亮度、再铺一层薄纸。
+   原来 82% 的白纸压在黑发上会透出一片灰、压在脸上又是白的，同一张卡一边灰一边白，像蹭脏了。
+   现在背后先被压进一段很窄的亮度区间（浅色贴着白、深色贴着黑），明暗差抹平了，纸就能减薄到三成多；
+   压缩会顺带把颜色也洗淡，最后再把饱和度拉回来：卡片整块均匀，壁纸的颜色还淡淡地透着，不是一片灰。
+   公式和液态玻璃的 --lg-tone 同一个（见 liquid-glass.css），只是这里是内容层，不折射 */
+:root[data-wallpaper-assist] .home-dashboard {
+  --paper-tone-lo: 0.8;
+  --paper-tone-hi: 0.98;
+  --xin-card: rgb(var(--xin-fill-rgb) / calc(0.35 + 0.4 * var(--xin-glass-tint)));
+  --xin-card-backdrop:
+    blur(24px)
+    contrast(calc((var(--paper-tone-hi) - var(--paper-tone-lo)) / (var(--paper-tone-hi) + var(--paper-tone-lo))))
+    brightness(calc(var(--paper-tone-hi) + var(--paper-tone-lo)))
+    saturate(3);
+}
+
+/* 深色那一档无色底只托得住暗壁纸，亮壁纸上要压向暗的一端，纸面换成画布的深灰 */
+.dark[data-wallpaper-assist] .home-dashboard {
+  --paper-tone-lo: 0.05;
+  --paper-tone-hi: 0.3;
+  --xin-card: rgb(var(--xin-canvas-raised-rgb) / calc(0.35 + 0.4 * var(--xin-glass-tint)));
+}
+
 /* 悬停顶栏按钮后，第一排卡片顶上会留下一道硬边的模糊条带。
    Chromium 每帧只重画变了的矩形：矩形碰到带模糊的玻璃，就扩成整块玻璃，但只对绘制顺序排在后面的玻璃生效。
    吸顶的工具栏画在卡片之后，它把重画区撑到卡片顶上一截时，卡片已经检查过了，于是只重画那一截；
@@ -99,6 +122,12 @@
 
 .home-scroll.is-scrolled .home-toolbar::before {
   opacity: 1;
+}
+
+/* 壁纸压不住字时透明胶囊会压亮度（liquid-glass.css），但被压过的底是中等亮度，不是白：
+   muted 那一档灰（搜索占位字、视图切换图标）在上面只剩 2:1 出头，整条栏退一档用 secondary */
+:root[data-wallpaper-assist] .home-toolbar {
+  --xin-text-muted: var(--xin-text-secondary);
 }
 
 .home-toolbar > * {
@@ -294,6 +323,38 @@
   margin: 0 0 10px;
   color: var(--xin-text-muted);
   font-size: 13px;
+}
+
+/* 壁纸压不住字时，空状态落在画面正中，顶部那道淡化纱管不到，字底下就是壁纸最花的地方。
+   垫一张和连接卡同材质的纸：卡片是内容层，本来就自带纸面，这里只是让空状态也有一张 */
+:root[data-wallpaper-assist] .home-empty,
+:root[data-wallpaper-assist] .home-section-empty {
+  align-self: center;
+  border: 1px solid var(--xin-card-border);
+  background: var(--xin-card);
+  box-shadow: var(--xin-specular), var(--xin-card-shadow);
+  backdrop-filter: var(--xin-card-backdrop);
+  -webkit-backdrop-filter: var(--xin-card-backdrop);
+}
+
+/* 收得比连接卡还小一圈：它只是一句提示加一个按钮，太大就成了全屏最亮的一块，抢了按钮、也压住了画面主体 */
+:root[data-wallpaper-assist] .home-empty {
+  width: min(360px, 100%);
+  gap: 8px;
+  margin-top: 32px;
+  padding: 28px 28px 24px;
+  border-radius: var(--xin-radius-xl);
+}
+
+:root[data-wallpaper-assist] .home-section-empty {
+  margin-top: 32px;
+  padding: 12px 22px;
+  border-radius: 999px;
+}
+
+/* 纸面上的说明字和卡片里的次要信息同一档，muted 在半透的纸上偏淡 */
+:root[data-wallpaper-assist] .home-empty p {
+  color: var(--xin-text-secondary);
 }
 
 @media (max-width: 760px) {

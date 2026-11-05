@@ -151,11 +151,40 @@
   --lg-regular-fill: color-mix(in srgb, rgb(255 255 255 / 0.03), rgb(36 36 40 / 0.56) calc(var(--xin-glass-tint) * 100%));
 }
 
+/* 透明档的「帮一把」：壁纸压不住字时（<html data-wallpaper-assist>，AppWallpaper 按壁纸明暗量出来），
+   透明玻璃也接上亮度压缩。透明档上的字直接落在壁纸上，浅色下压不住暗处、深色下压不住亮处。
+   浅色的下限比常规档高：常规档的 0.4 是给本来就带底色的栏用的，透明档底下可能整片是黑发。
+   0.62 字已经读得清，但压在暗处的那半颗胶囊是浅灰、紧挨着的卡片是白，同屏看着脏，提到 0.7；
+   上限照旧贴着白，亮的地方几乎不变，画面的颜色还透得上来。
+   深色直接借常规档的区间，那一段本来就是按「亮壁纸上的白字」定的 */
+:root {
+  --lg-assist-lo: calc(0.7 + 0.12 * var(--xin-glass-tint));
+  --lg-assist-hi: 0.98;
+  --lg-assist-fill: rgb(255 255 255 / calc(0.08 + 0.3 * var(--xin-glass-tint)));
+  --lg-assist-fill-hover: rgb(255 255 255 / calc(0.18 + 0.3 * var(--xin-glass-tint)));
+}
+
+.dark {
+  --lg-assist-lo: var(--lg-regular-lo);
+  --lg-assist-hi: var(--lg-regular-hi);
+  --lg-assist-fill: var(--lg-regular-fill);
+  --lg-assist-fill-hover: color-mix(in srgb, rgb(255 255 255 / 0.08), rgb(52 52 58 / 0.62) calc(var(--xin-glass-tint) * 100%));
+}
+
+/* 写在透明档的规则后面：同是零优先级，靠先后压过它的 transparent 底色。
+   按住时浮起的透镜不在这里——它放大的是背后连字带图的整片画面，压亮度会把选中色的字一起洗白 */
+:where([data-wallpaper-assist] .liquid-glass--clear) {
+  --lg-fill: var(--lg-assist-fill);
+  --lg-fill-hover: var(--lg-assist-fill-hover);
+  --lg-tone-lo: var(--lg-assist-lo);
+  --lg-tone-hi: var(--lg-assist-hi);
+}
+
 /* 压缩用 contrast + brightness 拼：contrast(c) 把 [0, 1] 压成以 0.5 为中心、宽 c 的一段，brightness(b) 再整体乘 b，
    于是 lo = b(1 - c) / 2、hi = b(1 + c) / 2，反过来 b = lo + hi、c = (hi - lo) / (hi + lo)。
    v-liquid-glass 把它接在折射后面（backdrop-filter: url(#…) var(--lg-tone)）；不支持折射的内核走各档自己的模糊回退。
    公式只写这一处，各档（还有终端胶囊这种跟着终端主题走的）只给自己的 --lg-tone-lo / hi */
-:where(.liquid-glass--regular, .liquid-menu, .liquid-sheet, .liquid-tooltip) {
+:where(.liquid-glass--regular, .liquid-menu, .liquid-sheet, .liquid-tooltip, [data-wallpaper-assist] .liquid-glass--clear) {
   --lg-tone:
     contrast(calc((var(--lg-tone-hi) - var(--lg-tone-lo)) / (var(--lg-tone-hi) + var(--lg-tone-lo))))
     brightness(calc(var(--lg-tone-hi) + var(--lg-tone-lo)));

@@ -119,6 +119,9 @@
   /* —— 卡片纸面 ——
      首页卡片是「压在玻璃上的纸」：比玻璃更实、描边更清楚，列表扫读时边界不糊。 */
   --xin-card: rgb(var(--xin-fill-rgb) / 0.82);
+  /* 首页的纸直接压在壁纸上，自带一层模糊：深色下半透明的纸面后面不会透出清晰的波浪线跟字打架。
+     这是普通材质不是液态玻璃——卡片是内容，不折射。壁纸压不住字时首页会换一套（home-dashboard.css） */
+  --xin-card-backdrop: blur(24px) saturate(1.2);
   --xin-card-border: rgb(var(--xin-ink-rgb) / 0.07);
   --xin-card-shadow:
     0 1px 2px rgb(var(--xin-shadow-rgb) / 0.04),
