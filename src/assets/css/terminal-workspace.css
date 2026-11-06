@@ -247,9 +247,22 @@
   color: var(--xin-text-secondary);
 }
 
+/* 连接失败：上面一只咬断网线的猫，下面是报错原文。
+   报错可能是一长串系统错误，不再横着排，限宽后居中折行，免得面板被撑到和终端一样宽 */
 .terminal-connecting.error {
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(420px, calc(100% - 40px));
+  padding: 16px 28px 22px;
   color: var(--xin-danger-text);
+  text-align: center;
   border-color: rgb(var(--xin-danger-rgb) / 0.32);
+}
+
+/* 画布比例跟素材一致（424 × 403）：播放器是等比缩进画布，比例不对会在上下或左右留白，猫和报错字之间就空出一截 */
+.terminal-error-illustration {
+  width: 132px;
+  aspect-ratio: 424 / 403;
 }
 
 /* 服务器主机密钥变更（TOFU 校验失败）确认面板 */

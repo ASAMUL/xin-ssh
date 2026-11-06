@@ -7,6 +7,7 @@ under the Lottie Simple License, reproduced below.
 | File | Source | Changes |
 | --- | --- | --- |
 | `cat-drawing.lottie` | LottieFiles free animation "Kitty" | Added a `graphite` color slot to the pencil tip and the drawn line so dark mode can lighten them; renamed the animation id |
+| `cat-unplugged.lottie` | LottieFiles free animation "Error 404 on Laptop" | Removed the "404 ERROR" lettering and the yellow backdrop; added `cable`, `cable-sheen`, `screen` and `shadow` color slots so dark mode can recolor them; renamed the animation id |
 
 ---
 

@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { Pane, Splitpanes } from "splitpanes";
 import { useI18n } from "vue-i18n";
 import FileExplorer from "../FileExplorer.vue";
+import LottieAnimation from "../LottieAnimation.vue";
 import SnippetPanel from "./SnippetPanel.vue";
 import TerminalViewport from "./TerminalViewport.vue";
 import { useProfileStore } from "../../stores/profileStore";
@@ -33,6 +34,16 @@ import {
   pickBackgroundImage,
   resolveTerminalBackgroundUrl,
 } from "../../services/backgroundApi";
+import catUnpluggedUrl from "../../assets/lottie/cat-unplugged.lottie?url";
+
+// 连接失败时那只咬断网线的猫：网线是近黑色、笔记本屏幕是纯白，放到深色面板上一个看不见、一个刺眼。
+// 网线换浅灰；屏幕压成深灰，像熄了屏，正好也是「没连上」；底下的暖色投影在深色上发脏，改成黑影
+const CAT_UNPLUGGED_DARK_SLOTS = {
+  cable: [0.682, 0.682, 0.698, 1],
+  "cable-sheen": [0.557, 0.557, 0.576, 1],
+  screen: [0.173, 0.173, 0.18, 1],
+  shadow: [0, 0, 0, 1],
+};
 
 // 工具栏胶囊压在一直在刷新的终端字上：色散要多做两遍位移，关掉
 const TERMINAL_CAPSULE_GLASS = { ...GLASS_REGULAR, dispersion: 0 };
@@ -729,7 +740,9 @@ async function savePendingCredential() {
           </div>
 
           <div v-else-if="activeSession?.status === 'error'" class="terminal-connecting error">
-            <UIcon name="i-lucide-circle-alert" />
+            <div class="terminal-error-illustration">
+              <LottieAnimation :src="catUnpluggedUrl" :dark-slots="CAT_UNPLUGGED_DARK_SLOTS" />
+            </div>
             <span>{{ activeSession.error }}</span>
           </div>
         </div>
