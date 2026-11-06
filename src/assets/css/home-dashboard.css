@@ -297,19 +297,12 @@
   text-align: center;
 }
 
-.home-empty-icon {
-  width: 64px;
-  height: 64px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 6px;
-  color: var(--xin-on-ink-accent);
-  border-radius: 20px;
-  background: linear-gradient(160deg, var(--xin-ink-surface-raised), var(--xin-ink-surface));
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.12),
-    0 16px 32px -14px rgb(var(--xin-shadow-rgb) / 0.5);
-  font-size: 28px;
+/* 一只抱着铅笔画线的小猫（LottieAnimation）。以前是一块墨色方块里放服务器图标：
+   整屏最重的颜色压在浅色卡片正中，像一块警示牌。素材四周自带留白，下边距收一点，标题贴近画面 */
+.home-empty-illustration {
+  width: 136px;
+  height: 136px;
+  margin-bottom: -4px;
 }
 
 .home-empty h3 {

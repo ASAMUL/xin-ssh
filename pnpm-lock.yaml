@@ -59,6 +59,9 @@ importers:
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.5
+      '@lottiefiles/dotlottie-web':
+        specifier: ^0.82.1
+        version: 0.82.1
       '@nuxt/ui':
         specifier: ^4.12.0
         version: 4.12.0(b93aaca30ddac7be0ad84b29dcaf3267)
@@ -756,6 +759,10 @@ packages:
 
   '@lezer/yaml@1.0.4':
     resolution: {integrity: sha512-2lrrHqxalACEbxIbsjhqGpSW8kWpUKuY6RHgnSAFZa6qK62wvnPxA8hGOwOoDbwHcOFs5M4o27mjGu+P7TvBmw==}
+
+  '@lottiefiles/dotlottie-web@0.82.1':
+    resolution: {integrity: sha512-hLPdAL0dUeHKvQvXqw1p3FtvzZUHRtBsTMt3FLLgphFThsUPNUj2+U+GyttJ5H5qSt5JreLzoaD+IaKO8H/VnA==}
+    engines: {node: '>=18.17.0', npm: '>=9.5.0'}
 
   '@marijn/find-cluster-break@1.0.3':
     resolution: {integrity: sha512-FY+MKLBoTsLNJF/eLWaOsXGdz6uh3Iu1axjPf6TUq92IYumcTcXWHoS747JARLkcdlJ/Waiaxc5wQfFO8jC6NA==}
@@ -3769,6 +3776,8 @@ snapshots:
       '@lezer/common': 1.5.2
       '@lezer/highlight': 1.2.5
       '@lezer/lr': 1.4.10
+
+  '@lottiefiles/dotlottie-web@0.82.1': {}
 
   '@marijn/find-cluster-break@1.0.3': {}
 

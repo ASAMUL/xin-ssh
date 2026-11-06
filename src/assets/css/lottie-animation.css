@@ -1,0 +1,7 @@
+/* Lottie 插画的画布（LottieAnimation.vue 专用，scoped 引入）。
+   尺寸由外面的容器给：播放器开了 autoResize，按画布的 CSS 尺寸乘设备像素比重新分配像素 */
+.lottie-animation {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

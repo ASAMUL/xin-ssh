@@ -5,7 +5,9 @@ import { useScroll } from "@vueuse/core";
 import { useToast } from "@nuxt/ui/composables";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import LiquidLensTabs from "../AppShell/LiquidLensTabs.vue";
+import LottieAnimation from "../LottieAnimation.vue";
 import { GLASS_CLEAR } from "../../directives/liquidGlass";
+import catDrawingUrl from "../../assets/lottie/cat-drawing.lottie?url";
 import ConnectionCard from "./ConnectionCard.vue";
 import ConnectionTable from "./ConnectionTable.vue";
 import DeleteConnectionDialog from "./DeleteConnectionDialog.vue";
@@ -27,6 +29,8 @@ import { exportProfiles, readSshConfig } from "../../services/workspaceApi";
 const DEFAULT_GROUP_ID = "group-default";
 // USelect 的值不能为空，用哨兵代表「不按分组筛选」；分组 id 是 UUID，不会撞上
 const ALL_GROUPS = "all";
+// 空状态的小猫抱着铅笔画线：笔尖和画出来的线是深灰，深色卡片上看不见，换成浅灰（systemGray2）
+const CAT_DARK_SLOTS = { graphite: [0.682, 0.682, 0.698, 1] };
 
 const { t } = useI18n();
 const toast = useToast();
@@ -623,8 +627,8 @@ function showError(error) {
         </div>
 
         <div v-if="!hasProfiles" class="home-empty">
-          <div class="home-empty-icon">
-            <UIcon name="i-lucide-server" />
+          <div class="home-empty-illustration">
+            <LottieAnimation :src="catDrawingUrl" :dark-slots="CAT_DARK_SLOTS" />
           </div>
           <h3>{{ t("home.emptyTitle") }}</h3>
           <p>{{ t("home.emptyDescription") }}</p>
