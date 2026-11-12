@@ -3,7 +3,9 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import OsIconTile from "../ConnectionManager/OsIconTile.vue";
 import MetricSparkline from "../Monitor/MetricSparkline.vue";
+import LottieAnimation from "../LottieAnimation.vue";
 import { resolveProfileOsIcon } from "../../config/osIcons";
+import catNappingUrl from "../../assets/lottie/cat-napping.lottie?url";
 import {
   clampPercent,
   formatGibibytes,
@@ -20,6 +22,19 @@ const props = defineProps({
 });
 const emit = defineEmits(["resume"]);
 const { t } = useI18n();
+
+// 猫是照着浅色卡片配的色；深色下服务器机箱和投影换暗一档（槽 id 见 scripts/build-cat-napping-lottie.py）
+const CAT_DARK_SLOTS = {
+  "server-body": [0.227, 0.227, 0.255, 1],
+  "server-line": [0.337, 0.337, 0.373, 1],
+  "server-detail": [0.294, 0.294, 0.325, 1],
+  shadow: [0, 0, 0, 1],
+};
+// 惊醒立刻走（中途那一下跳动读成「被吓了一跳」）；睡回去等这一轮甩尾巴甩完，不然尾巴会闪
+const CAT_TRANSITIONS = [
+  { from: "nap", to: "awake", via: "wake" },
+  { from: "awake", to: "nap", via: "sleep", finishLoop: true },
+];
 
 const osIcon = computed(() => resolveProfileOsIcon(props.profile));
 const address = computed(() => {
@@ -42,6 +57,12 @@ const memoryPercent = computed(() => memory.value?.usagePercent ?? null);
 const memoryCaption = computed(() => (memory.value?.totalBytes
   ? `${formatGibibytes(memory.value.usedBytes)} / ${formatGibibytes(memory.value.totalBytes)} GiB`
   : ""));
+
+// CPU 或内存到了读数转琥珀那一档（≥80%）猫就醒：机器在使劲，它盯着；降回去它看完这一轮再睡
+const BUSY_LEVELS = new Set(["high", "critical"]);
+const isBusy = computed(() => isConnected.value
+  && (BUSY_LEVELS.has(usageLevel(cpuPercent.value)) || BUSY_LEVELS.has(usageLevel(memoryPercent.value))));
+const catMarker = computed(() => (isBusy.value ? "awake" : "nap"));
 
 const latency = computed(() => (Number.isFinite(props.session.latencyMs) ? props.session.latencyMs : null));
 const uptimeLabel = computed(() => (systemInfo.value?.uptimeSeconds
@@ -69,6 +90,16 @@ function roundedPercent(value) {
         <span>{{ t("home.currentDirectory") }}</span>
         <code>{{ session.remotePath || "/" }}</code>
       </span>
+    </div>
+
+    <!-- 趴在服务器上打盹的猫：「它帮你守着这台机器」，挨着读数，像在旁边盯着那几个数；机器忙起来它就醒 -->
+    <div class="home-session-cat">
+      <LottieAnimation
+        :src="catNappingUrl"
+        :dark-slots="CAT_DARK_SLOTS"
+        :marker="catMarker"
+        :transitions="CAT_TRANSITIONS"
+      />
     </div>
 
     <dl v-if="isConnected" class="home-session-vitals">

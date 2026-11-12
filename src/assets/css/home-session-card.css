@@ -1,14 +1,15 @@
 /* 当前会话卡：视线第一落点是「你刚才在哪台机器上」，这是连接页最常见的下一步动作。
    材质和下面的列表、连接卡片是同一种纸面，深浅模式都跟着页面走。以前是一整块不透明的墨，
    铺满整宽压在又亮又透的页面上，像在页面上挖了个洞，壁纸到它这里也断了（浅色尤其突兀）。
-   现在靠内容撑主次：排在最上面、大号读数、樱色走势线，和整页唯一一颗实打实的樱色按钮。 */
+   现在靠内容撑主次：排在最上面、打盹的猫、大号读数、樱色走势线，和整页唯一一颗实打实的樱色按钮。 */
 .home-session-card {
   --status-color: var(--xin-status-idle);
   --status-glow: rgb(var(--xin-neutral-rgb) / 0.3);
   position: relative;
   min-width: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  /* 图标 · 名字（吃掉剩下的宽度）· 猫 · 读数 · 按钮 */
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 18px;
   padding: 22px 24px;
@@ -110,6 +111,15 @@
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 打盹的猫（scripts/build-cat-napping-lottie.py 生成，6 秒一圈的慢循环）：名字和读数之间原来是七百来像素的空白，
+   整张卡因此像一条表格行。猫挨着读数，像在旁边盯着那几个数。
+   画布上下各留了白（头顶飘 z、底下一圈投影），上下负外边距吃进卡片内边距，卡片不会因为它变高 */
+.home-session-cat {
+  width: 151px;
+  height: 108px;
+  margin: -16px 0 -18px;
 }
 
 /* 实时读数：CPU 带一条走势，内存是一根容量条，延迟底下写服务器开了多久，填在名字和按钮之间。
@@ -269,6 +279,17 @@
 .home-session-more[data-state="open"] {
   color: var(--xin-text);
   background: rgb(var(--xin-ink-rgb) / 0.09);
+}
+
+/* 窗口不够宽时先收起猫：它是陪衬，名字被挤成省略号就本末倒置了 */
+@media (max-width: 1240px) {
+  .home-session-card {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .home-session-cat {
+    display: none;
+  }
 }
 
 /* 窗口窄了读数让位给名字和路径：三格读数要四百来像素，挤进来名字就只剩省略号 */
