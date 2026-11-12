@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import MetricSparkline from "./MetricSparkline.vue";
 import OsIconTile from "../ConnectionManager/OsIconTile.vue";
+import NavWindowPane from "../NavWindowPane.vue";
 import {
   clampPercent,
   formatBytes,
@@ -215,131 +216,133 @@ function filterRows(rows, query, fields) {
         </template>
 
         <template #overview>
-          <h3 class="nav-window-pane-title">{{ t("monitor.overviewTab") }}</h3>
-
-          <div class="overview-tiles">
-            <article class="overview-tile rose" :class="usageLevel(cpuPercent)">
-              <header><UIcon name="i-lucide-cpu" />{{ t("monitor.cpu") }}</header>
-              <strong>{{ formatPercent(cpuPercent) }}</strong>
-              <div class="tile-visual">
-                <MetricSparkline
-                  :samples="history"
-                  :categories="cpuCategories"
-                  :max="100"
-                  :height="34"
-                  :format="formatPercent"
-                />
-              </div>
-              <small>{{ cpuCaption }}</small>
-            </article>
-
-            <article class="overview-tile rose" :class="usageLevel(memory?.usagePercent)">
-              <header><UIcon name="i-lucide-memory-stick" />{{ t("monitor.memory") }}</header>
-              <strong>{{ formatPercent(memory?.usagePercent ?? null) }}</strong>
-              <div class="tile-visual">
-                <UProgressGroup
-                  class="usage-bar"
-                  :items="memoryBar"
-                  :max="memoryParts ? memory.totalBytes : 100"
-                  :ui="BAR_UI"
-                />
-              </div>
-              <small>{{ memoryCaption }}</small>
-            </article>
-
-            <article v-if="rootDisk" class="overview-tile violet" :class="rootDisk.level">
-              <header>
-                <UIcon name="i-lucide-hard-drive" />{{ t("monitor.disk") }}
-                <em>{{ rootDisk.path }}</em>
-              </header>
-              <strong>{{ formatPercent(rootDisk.percent) }}</strong>
-              <div class="tile-visual">
-                <UProgressGroup class="usage-bar" :items="rootDisk.bar" :ui="BAR_UI" />
-              </div>
-              <small>{{ rootDisk.caption }}</small>
-            </article>
-          </div>
-
-          <section class="form-section">
-            <h4 class="form-section-title">{{ t("monitor.basicInfo") }}</h4>
-            <div class="form-list">
-              <div v-for="row in systemRows" :key="row.id" class="form-row form-row-split">
-                <span class="form-row-label">{{ row.label }}</span>
-                <span class="row-value" :title="row.value">{{ row.value }}</span>
-              </div>
-            </div>
-          </section>
-        </template>
-
-        <template #processes>
-          <h3 class="nav-window-pane-title">{{ t("monitor.processTab") }}</h3>
-
-          <div class="pane-toolbar">
-            <UTabs
-              v-model="processSort"
-              v-liquid-stretch="processSort"
-              class="sort-switch"
-              variant="pill"
-              size="sm"
-              :items="processSortItems"
-              :content="false"
-            />
-            <UInput
-              v-model="processQuery"
-              class="pane-search"
-              icon="i-lucide-search"
-              size="sm"
-              variant="soft"
-              :placeholder="t('monitor.searchProcesses')"
-            />
-          </div>
-
-          <section class="form-section">
-            <div v-if="visibleProcesses.length" class="form-list metric-list">
-              <div v-for="process in visibleProcesses" :key="process.pid" class="form-row metric-row">
-                <div class="metric-row-main">
-                  <strong>{{ process.name }}</strong>
-                  <small :title="process.meta">{{ process.meta }}</small>
+          <NavWindowPane :title="t('monitor.overviewTab')">
+            <div class="overview-tiles">
+              <article class="overview-tile rose" :class="usageLevel(cpuPercent)">
+                <header><UIcon name="i-lucide-cpu" />{{ t("monitor.cpu") }}</header>
+                <strong>{{ formatPercent(cpuPercent) }}</strong>
+                <div class="tile-visual">
+                  <MetricSparkline
+                    :samples="history"
+                    :categories="cpuCategories"
+                    :max="100"
+                    :height="34"
+                    :format="formatPercent"
+                  />
                 </div>
-                <span class="metric-value" :class="{ active: processSort === 'cpu' }">{{ process.cpuLabel }}</span>
-                <span class="metric-value" :class="{ active: processSort === 'memory' }">{{ process.memoryLabel }}</span>
-              </div>
-            </div>
-            <UEmpty
-              v-else
-              size="sm"
-              variant="naked"
-              :icon="processQuery ? 'i-lucide-search-x' : 'i-lucide-activity'"
-              :description="processQuery ? t('monitor.noMatches') : t('monitor.noData')"
-            />
-            <p class="form-section-footer">{{ t("monitor.processFootnote", { limit: PROCESS_SAMPLE_LIMIT }) }}</p>
-          </section>
-        </template>
+                <small>{{ cpuCaption }}</small>
+              </article>
 
-        <template #services>
-          <h3 class="nav-window-pane-title">{{ t("monitor.serviceTab") }}</h3>
+              <article class="overview-tile rose" :class="usageLevel(memory?.usagePercent)">
+                <header><UIcon name="i-lucide-memory-stick" />{{ t("monitor.memory") }}</header>
+                <strong>{{ formatPercent(memory?.usagePercent ?? null) }}</strong>
+                <div class="tile-visual">
+                  <UProgressGroup
+                    class="usage-bar"
+                    :items="memoryBar"
+                    :max="memoryParts ? memory.totalBytes : 100"
+                    :ui="BAR_UI"
+                  />
+                </div>
+                <small>{{ memoryCaption }}</small>
+              </article>
 
-          <UEmpty
-            v-if="services === null"
-            size="sm"
-            variant="naked"
-            icon="i-lucide-server-off"
-            :description="t('monitor.servicesUnsupported')"
-          />
-          <template v-else>
-            <div class="pane-toolbar">
-              <span class="pane-count">{{ t("monitor.runningServices", { count: services.length }) }}</span>
-              <UInput
-                v-model="serviceQuery"
-                class="pane-search"
-                icon="i-lucide-search"
-                size="sm"
-                variant="soft"
-                :placeholder="t('monitor.searchServices')"
-              />
+              <article v-if="rootDisk" class="overview-tile violet" :class="rootDisk.level">
+                <header>
+                  <UIcon name="i-lucide-hard-drive" />{{ t("monitor.disk") }}
+                  <em>{{ rootDisk.path }}</em>
+                </header>
+                <strong>{{ formatPercent(rootDisk.percent) }}</strong>
+                <div class="tile-visual">
+                  <UProgressGroup class="usage-bar" :items="rootDisk.bar" :ui="BAR_UI" />
+                </div>
+                <small>{{ rootDisk.caption }}</small>
+              </article>
             </div>
 
             <section class="form-section">
+              <h4 class="form-section-title">{{ t("monitor.basicInfo") }}</h4>
+              <div class="form-list">
+                <div v-for="row in systemRows" :key="row.id" class="form-row form-row-split">
+                  <span class="form-row-label">{{ row.label }}</span>
+                  <span class="row-value" :title="row.value">{{ row.value }}</span>
+                </div>
+              </div>
+            </section>
+          </NavWindowPane>
+        </template>
+
+        <template #processes>
+          <NavWindowPane :title="t('monitor.processTab')">
+            <template #toolbar>
+              <div class="pane-toolbar">
+                <UTabs
+                  v-model="processSort"
+                  v-liquid-stretch="processSort"
+                  class="sort-switch"
+                  variant="pill"
+                  size="sm"
+                  :items="processSortItems"
+                  :content="false"
+                />
+                <UInput
+                  v-model="processQuery"
+                  class="pane-search"
+                  icon="i-lucide-search"
+                  size="sm"
+                  variant="soft"
+                  :placeholder="t('monitor.searchProcesses')"
+                />
+              </div>
+            </template>
+
+            <section class="form-section">
+              <div v-if="visibleProcesses.length" class="form-list metric-list">
+                <div v-for="process in visibleProcesses" :key="process.pid" class="form-row metric-row">
+                  <div class="metric-row-main">
+                    <strong>{{ process.name }}</strong>
+                    <small :title="process.meta">{{ process.meta }}</small>
+                  </div>
+                  <span class="metric-value" :class="{ active: processSort === 'cpu' }">{{ process.cpuLabel }}</span>
+                  <span class="metric-value" :class="{ active: processSort === 'memory' }">{{ process.memoryLabel }}</span>
+                </div>
+              </div>
+              <UEmpty
+                v-else
+                size="sm"
+                variant="naked"
+                :icon="processQuery ? 'i-lucide-search-x' : 'i-lucide-activity'"
+                :description="processQuery ? t('monitor.noMatches') : t('monitor.noData')"
+              />
+              <p class="form-section-footer">{{ t("monitor.processFootnote", { limit: PROCESS_SAMPLE_LIMIT }) }}</p>
+            </section>
+          </NavWindowPane>
+        </template>
+
+        <template #services>
+          <NavWindowPane :title="t('monitor.serviceTab')">
+            <template v-if="services !== null" #toolbar>
+              <div class="pane-toolbar">
+                <span class="pane-count">{{ t("monitor.runningServices", { count: services.length }) }}</span>
+                <UInput
+                  v-model="serviceQuery"
+                  class="pane-search"
+                  icon="i-lucide-search"
+                  size="sm"
+                  variant="soft"
+                  :placeholder="t('monitor.searchServices')"
+                />
+              </div>
+            </template>
+
+            <UEmpty
+              v-if="services === null"
+              size="sm"
+              variant="naked"
+              icon="i-lucide-server-off"
+              :description="t('monitor.servicesUnsupported')"
+            />
+            <section v-else class="form-section">
               <div v-if="visibleServices.length" class="form-list">
                 <div v-for="service in visibleServices" :key="service.name" class="form-row form-row-split">
                   <span class="service-name">
@@ -359,82 +362,82 @@ function filterRows(rows, query, fields) {
                 :description="serviceQuery ? t('monitor.noMatches') : t('monitor.noServices')"
               />
             </section>
-          </template>
+          </NavWindowPane>
         </template>
 
         <template #storage>
-          <h3 class="nav-window-pane-title">{{ t("monitor.storageTab") }}</h3>
-
-          <section class="form-section">
-            <h4 class="form-section-title">{{ t("monitor.mountPoints") }}</h4>
-            <div v-if="disks.length" class="form-list">
-              <div
-                v-for="disk in disks"
-                :key="disk.path"
-                class="form-row form-row-block disk-row violet"
-                :class="disk.level"
-              >
-                <div class="disk-row-line">
-                  <strong>{{ disk.path }}</strong>
-                  <span>{{ formatPercent(disk.percent) }}</span>
-                </div>
-                <UProgressGroup class="usage-bar" :items="disk.bar" :ui="BAR_UI" />
-                <div class="disk-row-line muted">
-                  <small>{{ disk.filesystem }}</small>
-                  <small>{{ disk.caption }}</small>
+          <NavWindowPane :title="t('monitor.storageTab')">
+            <section class="form-section">
+              <h4 class="form-section-title">{{ t("monitor.mountPoints") }}</h4>
+              <div v-if="disks.length" class="form-list">
+                <div
+                  v-for="disk in disks"
+                  :key="disk.path"
+                  class="form-row form-row-block disk-row violet"
+                  :class="disk.level"
+                >
+                  <div class="disk-row-line">
+                    <strong>{{ disk.path }}</strong>
+                    <span>{{ formatPercent(disk.percent) }}</span>
+                  </div>
+                  <UProgressGroup class="usage-bar" :items="disk.bar" :ui="BAR_UI" />
+                  <div class="disk-row-line muted">
+                    <small>{{ disk.filesystem }}</small>
+                    <small>{{ disk.caption }}</small>
+                  </div>
                 </div>
               </div>
-            </div>
-            <UEmpty v-else size="sm" variant="naked" icon="i-lucide-hard-drive" :description="t('monitor.noData')" />
-          </section>
+              <UEmpty v-else size="sm" variant="naked" icon="i-lucide-hard-drive" :description="t('monitor.noData')" />
+            </section>
+          </NavWindowPane>
         </template>
 
         <template #network>
-          <h3 class="nav-window-pane-title">{{ t("monitor.network") }}</h3>
+          <NavWindowPane :title="t('monitor.network')">
+            <section class="form-section">
+              <h4 class="form-section-title">{{ t("monitor.liveRate") }}</h4>
+              <div class="form-list">
+                <div class="form-row form-row-block rate-row">
+                  <div class="rate-values">
+                    <span class="send">
+                      <UIcon name="i-lucide-arrow-up" />{{ t("monitor.send") }}
+                      <strong>{{ formatBytesPerSecond(latestSample?.txBytesPerSecond) }}</strong>
+                    </span>
+                    <span class="receive">
+                      <UIcon name="i-lucide-arrow-down" />{{ t("monitor.receive") }}
+                      <strong>{{ formatBytesPerSecond(latestSample?.rxBytesPerSecond) }}</strong>
+                    </span>
+                  </div>
+                  <MetricSparkline
+                    :samples="history"
+                    :categories="networkCategories"
+                    :height="56"
+                    :format="formatBytesPerSecond"
+                  />
+                </div>
+              </div>
+            </section>
 
-          <section class="form-section">
-            <h4 class="form-section-title">{{ t("monitor.liveRate") }}</h4>
-            <div class="form-list">
-              <div class="form-row form-row-block rate-row">
-                <div class="rate-values">
-                  <span class="send">
-                    <UIcon name="i-lucide-arrow-up" />{{ t("monitor.send") }}
-                    <strong>{{ formatBytesPerSecond(latestSample?.txBytesPerSecond) }}</strong>
+            <section class="form-section">
+              <h4 class="form-section-title">{{ t("monitor.interfaces") }}</h4>
+              <div v-if="interfaces.length" class="form-list metric-list">
+                <div v-for="network in interfaces" :key="network.name" class="form-row metric-row">
+                  <div class="metric-row-main">
+                    <strong>{{ network.name }}</strong>
+                    <small>{{ network.ipv4Address ?? "--" }}</small>
+                  </div>
+                  <span class="metric-value receive">
+                    <UIcon name="i-lucide-arrow-down" />{{ formatBytes(network.rxBytes) }}
                   </span>
-                  <span class="receive">
-                    <UIcon name="i-lucide-arrow-down" />{{ t("monitor.receive") }}
-                    <strong>{{ formatBytesPerSecond(latestSample?.rxBytesPerSecond) }}</strong>
+                  <span class="metric-value send">
+                    <UIcon name="i-lucide-arrow-up" />{{ formatBytes(network.txBytes) }}
                   </span>
                 </div>
-                <MetricSparkline
-                  :samples="history"
-                  :categories="networkCategories"
-                  :height="56"
-                  :format="formatBytesPerSecond"
-                />
               </div>
-            </div>
-          </section>
-
-          <section class="form-section">
-            <h4 class="form-section-title">{{ t("monitor.interfaces") }}</h4>
-            <div v-if="interfaces.length" class="form-list metric-list">
-              <div v-for="network in interfaces" :key="network.name" class="form-row metric-row">
-                <div class="metric-row-main">
-                  <strong>{{ network.name }}</strong>
-                  <small>{{ network.ipv4Address ?? "--" }}</small>
-                </div>
-                <span class="metric-value receive">
-                  <UIcon name="i-lucide-arrow-down" />{{ formatBytes(network.rxBytes) }}
-                </span>
-                <span class="metric-value send">
-                  <UIcon name="i-lucide-arrow-up" />{{ formatBytes(network.txBytes) }}
-                </span>
-              </div>
-            </div>
-            <UEmpty v-else size="sm" variant="naked" icon="i-lucide-network" :description="t('monitor.noData')" />
-            <p class="form-section-footer">{{ networkFootnote }}</p>
-          </section>
+              <UEmpty v-else size="sm" variant="naked" icon="i-lucide-network" :description="t('monitor.noData')" />
+              <p class="form-section-footer">{{ networkFootnote }}</p>
+            </section>
+          </NavWindowPane>
         </template>
       </UTabs>
 

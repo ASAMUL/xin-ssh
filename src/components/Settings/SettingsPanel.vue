@@ -7,6 +7,7 @@ import { clearCommandHistory } from "../../services/commandHistory";
 import { useAppStore } from "../../stores/appStore";
 import { useSettingsStore, SSH_KEEPALIVE_SECONDS_OPTIONS } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
+import NavWindowPane from "../NavWindowPane.vue";
 import GlassTintSetting from "./GlassTintSetting.vue";
 import WallpaperSetting from "./WallpaperSetting.vue";
 
@@ -113,98 +114,101 @@ async function openWorkspaceDir() {
         </template>
 
         <template #appearance>
-          <h3 class="nav-window-pane-title">{{ t("settings.appearance") }}</h3>
-          <section class="form-section">
-            <div class="form-list">
-              <div class="form-row form-row-split">
-                <span class="form-row-label">{{ t("settings.colorScheme") }}</span>
-                <UTabs
-                  v-model="appearanceMode"
-                  v-liquid-stretch="appearanceMode"
-                  class="appearance-switch"
-                  variant="pill"
-                  size="sm"
-                  :items="appearanceItems"
-                  :content="false"
-                />
+          <NavWindowPane :title="t('settings.appearance')">
+            <section class="form-section">
+              <div class="form-list">
+                <div class="form-row form-row-split">
+                  <span class="form-row-label">{{ t("settings.colorScheme") }}</span>
+                  <UTabs
+                    v-model="appearanceMode"
+                    v-liquid-stretch="appearanceMode"
+                    class="appearance-switch"
+                    variant="pill"
+                    size="sm"
+                    :items="appearanceItems"
+                    :content="false"
+                  />
+                </div>
               </div>
-            </div>
-            <p class="form-section-footer">{{ t("settings.appearanceHint") }}</p>
-          </section>
-          <GlassTintSetting />
-          <WallpaperSetting />
+              <p class="form-section-footer">{{ t("settings.appearanceHint") }}</p>
+            </section>
+            <GlassTintSetting />
+            <WallpaperSetting />
+          </NavWindowPane>
         </template>
 
         <template #terminal>
-          <h3 class="nav-window-pane-title">{{ t("settings.terminal") }}</h3>
-          <section class="form-section">
-            <div class="form-list">
-              <label class="form-row form-row-split">
-                <span class="form-row-label">{{ t("settings.commandSuggestions") }}</span>
-                <USwitch v-model="commandSuggestions" />
-              </label>
-              <div class="form-row form-row-split">
-                <span class="form-row-label">{{ t("settings.commandHistory") }}</span>
-                <UButton
-                  color="neutral"
-                  variant="soft"
-                  size="sm"
-                  icon="i-lucide-eraser"
-                  :label="t('settings.clearCommandHistory')"
-                  :loading="isClearingHistory"
-                  @click="clearHistory"
-                />
+          <NavWindowPane :title="t('settings.terminal')">
+            <section class="form-section">
+              <div class="form-list">
+                <label class="form-row form-row-split">
+                  <span class="form-row-label">{{ t("settings.commandSuggestions") }}</span>
+                  <USwitch v-model="commandSuggestions" />
+                </label>
+                <div class="form-row form-row-split">
+                  <span class="form-row-label">{{ t("settings.commandHistory") }}</span>
+                  <UButton
+                    color="neutral"
+                    variant="soft"
+                    size="sm"
+                    icon="i-lucide-eraser"
+                    :label="t('settings.clearCommandHistory')"
+                    :loading="isClearingHistory"
+                    @click="clearHistory"
+                  />
+                </div>
               </div>
-            </div>
-            <p class="form-section-footer">{{ t("settings.commandSuggestionsHint") }}</p>
-          </section>
-          <section class="form-section">
-            <h4 class="form-section-title">{{ t("settings.connection") }}</h4>
-            <div class="form-list">
-              <div class="form-row form-row-split">
-                <span class="form-row-label">{{ t("settings.keepalive") }}</span>
-                <USelect
-                  v-model="sshKeepaliveSeconds"
-                  class="settings-select"
-                  variant="soft"
-                  size="sm"
-                  :items="keepaliveItems"
-                />
+              <p class="form-section-footer">{{ t("settings.commandSuggestionsHint") }}</p>
+            </section>
+            <section class="form-section">
+              <h4 class="form-section-title">{{ t("settings.connection") }}</h4>
+              <div class="form-list">
+                <div class="form-row form-row-split">
+                  <span class="form-row-label">{{ t("settings.keepalive") }}</span>
+                  <USelect
+                    v-model="sshKeepaliveSeconds"
+                    class="settings-select"
+                    variant="soft"
+                    size="sm"
+                    :items="keepaliveItems"
+                  />
+                </div>
               </div>
-            </div>
-            <p class="form-section-footer">{{ t("settings.keepaliveHint") }}</p>
-          </section>
+              <p class="form-section-footer">{{ t("settings.keepaliveHint") }}</p>
+            </section>
+          </NavWindowPane>
         </template>
 
         <template #general>
-          <h3 class="nav-window-pane-title">{{ t("settings.general") }}</h3>
-          <section class="form-section">
-            <div class="form-list">
-              <div class="form-row form-row-split">
-                <span class="form-row-label">{{ t("settings.language") }}</span>
-                <USelect v-model="locale" class="settings-select" variant="soft" size="sm" :items="localeItems" />
+          <NavWindowPane :title="t('settings.general')">
+            <section class="form-section">
+              <div class="form-list">
+                <div class="form-row form-row-split">
+                  <span class="form-row-label">{{ t("settings.language") }}</span>
+                  <USelect v-model="locale" class="settings-select" variant="soft" size="sm" :items="localeItems" />
+                </div>
               </div>
-            </div>
-          </section>
-          <section class="form-section">
-            <h4 class="form-section-title">{{ t("settings.data") }}</h4>
-            <div class="form-list">
-              <div class="form-row form-row-split">
-                <span class="form-row-label">{{ t("settings.workspaceDir") }}</span>
-                <UButton
-                  color="neutral"
-                  variant="soft"
-                  size="sm"
-                  icon="i-lucide-folder-open"
-                  :label="t('settings.workspaceDirOpen')"
-                  :title="t('settings.workspaceDirOpenTitle')"
-                  :disabled="!appStore.workspaceDir"
-                  @click="openWorkspaceDir"
-                />
+            </section>
+            <section class="form-section">
+              <h4 class="form-section-title">{{ t("settings.data") }}</h4>
+              <div class="form-list">
+                <div class="form-row form-row-split">
+                  <span class="form-row-label">{{ t("settings.workspaceDir") }}</span>
+                  <UButton
+                    color="neutral"
+                    variant="soft"
+                    size="sm"
+                    icon="i-lucide-folder-open"
+                    :label="t('settings.workspaceDirOpen')"
+                    :title="t('settings.workspaceDirOpenTitle')"
+                    :disabled="!appStore.workspaceDir"
+                    @click="openWorkspaceDir"
+                  />
+                </div>
               </div>
-            </div>
-            <p class="form-section-footer workspace-path">{{ appStore.workspaceDir }}</p>
-          </section>
+              <p class="form-section-footer workspace-path">{{ appStore.workspaceDir }}</p>
+            </section>
+          </NavWindowPane>
         </template>
       </UTabs>
 

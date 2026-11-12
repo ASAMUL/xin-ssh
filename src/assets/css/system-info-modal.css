@@ -184,12 +184,13 @@
   white-space: nowrap;
 }
 
-/* —— 页内工具条：左分段 / 计数，右搜索 —— */
+/* —— 页内工具条：左分段 / 计数，右搜索。放在 NavWindowPane 钉住的页头里，滚列表时搜索框还在手边 —— */
 .pane-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  /* 工具条和下面的列表是一伙的，比标题与卡片之间的 20px 贴近一点 */
   margin-bottom: -6px;
 }
 
