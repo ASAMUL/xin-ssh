@@ -281,24 +281,21 @@ const toolbarGroups = computed(() => [
       {
         id: "sidebar",
         icon: "i-lucide-panel-left",
-        label: t("terminal.toolbar.sidebar"),
-        title: t(showMonitorPane.value ? "terminal.hideSidebar" : "terminal.showSidebar"),
+        tooltip: t(showMonitorPane.value ? "terminal.hideSidebar" : "terminal.showSidebar"),
         active: showMonitorPane.value,
         run: () => togglePanel(settingsStore.showMonitorSidebar, settingsStore.toggleMonitorSidebar),
       },
       {
         id: "files",
         icon: "i-lucide-panel-bottom",
-        label: t("terminal.toolbar.files"),
-        title: t(showFilePane.value ? "terminal.hideFilePanel" : "terminal.showFilePanel"),
+        tooltip: t(showFilePane.value ? "terminal.hideFilePanel" : "terminal.showFilePanel"),
         active: showFilePane.value,
         run: () => togglePanel(settingsStore.showFileExplorer, settingsStore.toggleFileExplorer),
       },
       {
         id: "immersive",
         icon: uiStore.isWorkspaceImmersive ? "i-lucide-minimize" : "i-lucide-maximize",
-        label: t("terminal.toolbar.immersive"),
-        title: t(uiStore.isWorkspaceImmersive ? "terminal.exitImmersive" : "terminal.enterImmersive"),
+        tooltip: t(uiStore.isWorkspaceImmersive ? "terminal.exitImmersive" : "terminal.enterImmersive"),
         active: uiStore.isWorkspaceImmersive,
         run: () => uiStore.toggleWorkspaceImmersive(),
       },
@@ -310,16 +307,14 @@ const toolbarGroups = computed(() => [
       {
         id: "snippets",
         icon: "i-lucide-square-terminal",
-        label: t("terminal.toolbar.snippets"),
-        title: t("snippets.title"),
+        tooltip: t("snippets.title"),
         active: isSnippetsOpen.value,
         run: toggleSnippets,
       },
       {
         id: "appearance",
         icon: "i-lucide-palette",
-        label: t("terminal.toolbar.theme"),
-        title: t("terminal.appearance"),
+        tooltip: t("terminal.appearance"),
         active: isAppearanceOpen.value,
         run: toggleAppearance,
       },
@@ -331,23 +326,21 @@ const toolbarGroups = computed(() => [
       {
         id: "search",
         icon: "i-lucide-search",
-        label: t("terminal.toolbar.search"),
-        title: `${t("terminal.search.toggle")} (Ctrl+Shift+F)`,
+        tooltip: t("terminal.search.toggle"),
+        kbds: ["ctrl", "shift", "f"],
         active: isSearchOpen.value,
         run: toggleTerminalSearch,
       },
       {
         id: "clear",
         icon: "i-lucide-eraser",
-        label: t("terminal.toolbar.clear"),
-        title: t("terminal.clear"),
+        tooltip: t("terminal.clear"),
         run: () => sessionStore.clearActiveTerminal(),
       },
       {
         id: "reconnect",
         icon: "i-lucide-rotate-cw",
-        label: t("terminal.toolbar.reconnect"),
-        title: t("terminal.reconnect"),
+        tooltip: t("terminal.reconnect"),
         run: reconnectTerminal,
       },
     ],
@@ -595,33 +588,32 @@ async function savePendingCredential() {
         :data-material="settingsStore.terminalMaterial"
         :style="themeStyleVars"
       >
-      <!-- 工具栏不占行，三组玻璃胶囊浮在终端画面右上角：布局（左栏 / 下方文件 / 沉浸）· 工具（片段 / 主题）· 会话（搜索 / 清空 / 重连）。
+      <!-- 工具栏不占行，一颗玻璃胶囊浮在终端画面右上角，竖线分开三组：布局（左栏 / 下方文件 / 沉浸）· 工具（片段 / 主题）· 会话（搜索 / 清空 / 重连）。
            终端输出从胶囊底下滚过，边缘的折射才看得见；代价是右上角一小块文字会被压住（用户认可）。
-           连接目标（user@host:port）挪到了底部状态栏——放在左上角会正好压住每行开头。
-           窄窗口下文字收起只留图标（容器查询，见 terminal-workspace.css） -->
+           只放图标、说明进悬停提示：带字时整条近 860px，压住了第一行的一大半；
+           分成三颗胶囊时，底下的终端字会从胶囊之间的缝里漏出半截。
+           连接目标（user@host:port）挪到了底部状态栏——放在左上角会正好压住每行开头。 -->
       <header class="terminal-panel-toolbar">
-        <div class="terminal-window-actions">
-          <!-- 常规档：上面放字的栏，亮度压缩的区间跟着终端主题的深浅走（见 terminal-workspace.css） -->
-          <div
-            v-for="group in toolbarGroups"
-            :key="group.id"
-            v-liquid-glass="TERMINAL_CAPSULE_GLASS"
-            class="terminal-action-capsule liquid-glass liquid-glass--regular"
-          >
-            <UButton
-              v-for="action in group.actions"
-              :key="action.id"
-              :class="{ active: action.active }"
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              :icon="action.icon"
-              :label="action.label"
-              :aria-pressed="action.active ?? undefined"
-              :title="action.title ?? action.label"
-              @click="action.run"
-            />
-          </div>
+        <!-- 常规档：上面放图标的栏，亮度压缩的区间跟着终端主题的深浅走（见 terminal-workspace.css） -->
+        <div
+          v-liquid-glass="TERMINAL_CAPSULE_GLASS"
+          class="terminal-window-actions terminal-action-capsule liquid-glass liquid-glass--regular"
+        >
+          <template v-for="(group, index) in toolbarGroups" :key="group.id">
+            <USeparator v-if="index > 0" orientation="vertical" class="terminal-action-divider" />
+            <UTooltip v-for="action in group.actions" :key="action.id" :text="action.tooltip" :kbds="action.kbds">
+              <UButton
+                :class="{ active: action.active }"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                :icon="action.icon"
+                :aria-label="action.tooltip"
+                :aria-pressed="action.active ?? undefined"
+                @click="action.run"
+              />
+            </UTooltip>
+          </template>
         </div>
       </header>
 

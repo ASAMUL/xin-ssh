@@ -46,9 +46,8 @@
   backdrop-filter: blur(28px) saturate(1.4);
 }
 
-/* 浮动工具栏：一条铺满面板宽度的透明层，胶囊靠右。它本身不接指针，胶囊之间和左边的空白
-   照样能选中、滚动底下的终端；铺满宽度是为了保留 inline-size 容器查询——
-   窄的时候按钮文字收起只留图标（绝对定位又收缩包裹的元素做不了尺寸容器，宽度会被算成 0）。
+/* 浮动工具栏：一条铺满面板宽度的透明层，胶囊靠右。它本身不接指针，胶囊左边的空白
+   照样能选中、滚动底下的终端。
    右边留 30px：xterm 的滚动条在它 16px 内边距里侧，胶囊得停在滚动条左边。 */
 .terminal-panel-toolbar {
   position: absolute;
@@ -60,15 +59,21 @@
   padding: 0 30px 0 16px;
   color: var(--term-text, #e6ebff);
   pointer-events: none;
-  container-type: inline-size;
 }
 
 .terminal-window-actions {
   flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   pointer-events: auto;
+}
+
+/* 组与组之间的细竖线：比按钮矮一截，读成「同一颗胶囊里的分组」，而不是把胶囊切断 */
+.terminal-action-divider {
+  height: 16px;
+  margin: 0 4px;
+}
+
+.terminal-action-divider :deep([data-slot="border"]) {
+  border-color: color-mix(in srgb, var(--term-text, #e6ebff) 16%, transparent);
 }
 
 /* 工具按钮的玻璃胶囊：常规档，但亮度区间和底色都改用终端主题（区间见 terminalThemes.js 的 --term-tone-*），
@@ -94,14 +99,13 @@
 }
 
 .terminal-window-actions :deep(button) {
+  width: 30px;
   height: 28px;
-  gap: 5px;
-  padding: 0 10px;
+  justify-content: center;
+  padding: 0;
   color: var(--term-text-muted, rgba(230, 235, 255, 0.6));
   border-radius: 999px;
   background: transparent;
-  font-size: 12px;
-  font-weight: 560;
   transition:
     color 160ms ease,
     background 160ms ease,
@@ -118,32 +122,21 @@
   background: color-mix(in srgb, var(--term-text, #e6ebff) 10%, transparent);
 }
 
-/* 开着的面板 / 工具铺一块实底，关上就没有，字和图标取主题强调色。
+/* 开着的面板 / 工具：图标取主题强调色，底下只垫一层很淡的强调色，关上就没有。
+   不铺实底：左栏、文件面板平时一直开着，实底会让「常态」成为整条最亮的东西；淡色够眼角认出哪几颗开着。
    这些是各管各的开关、不是单选：不做成玻璃水滴（不抬高光、不投影），水滴读起来是「选中了这一项」，
    几颗同时开着就像选了好几个。按下的回弹在下面的 :active */
 .terminal-window-actions :deep(button.active) {
   color: var(--term-accent, #e6ebff);
-  background: color-mix(in srgb, var(--term-accent, #e6ebff) 22%, var(--term-panel-bg, rgb(21 23 40)));
+  background: color-mix(in srgb, var(--term-accent, #e6ebff) 12%, transparent);
 }
 
 .terminal-window-actions :deep(button.active:hover) {
-  background: color-mix(in srgb, var(--term-accent, #e6ebff) 30%, var(--term-panel-bg, rgb(21 23 40)));
+  background: color-mix(in srgb, var(--term-accent, #e6ebff) 20%, transparent);
 }
 
 .terminal-window-actions :deep(button:active) {
   transform: scale(0.94);
-}
-
-@container (max-width: 860px) {
-  .terminal-window-actions :deep(button [data-slot="label"]) {
-    display: none;
-  }
-
-  .terminal-window-actions :deep(button) {
-    width: 30px;
-    justify-content: center;
-    padding: 0;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
