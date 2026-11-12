@@ -1,0 +1,10 @@
+/*
+  motion-v 会给每个 motion 元素（svg 以及里面的 g/path/circle）挂上 focus 监听，
+  Chromium 会让挂了 focus 监听的 SVG 元素变成鼠标可聚焦，于是点在图标上时焦点落到 svg 上，
+  浏览器就给它画默认的黑色焦点圈。
+  图标只是装饰，让鼠标穿透到外层按钮，焦点就落回按钮本身，和静态图标的按钮表现一致。
+  悬停动画挂在外层按钮上（trigger-target="closest:button"），不受影响。
+*/
+.motion-icon {
+  pointer-events: none;
+}

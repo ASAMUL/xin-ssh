@@ -54,6 +54,9 @@ watch(
     :persist-on-animate-end="!hover"
     :trigger-target="hover ? 'closest:button' : 'self'"
   >
-    <component :is="icon" :size="size" aria-hidden="true" />
+    <component :is="icon" :size="size" class="motion-icon" aria-hidden="true" />
   </AnimateIcon>
 </template>
+
+<!-- 不加 scoped：svg 由图标库组件渲染、再被 AnimateIcon 克隆转发，作用域属性落不到它身上 -->
+<style src="../assets/css/motion-icon.css"></style>
