@@ -1,27 +1,25 @@
-/* 当前会话卡：首页唯一的一块墨。浅色纸面上压一块墨，视线第一落点就是
-   「你刚才在哪台机器上」——这是连接页最常见的下一步动作。 */
+/* 当前会话卡：视线第一落点是「你刚才在哪台机器上」，这是连接页最常见的下一步动作。
+   材质和下面的列表、连接卡片是同一种纸面，深浅模式都跟着页面走。以前是一整块不透明的墨，
+   铺满整宽压在又亮又透的页面上，像在页面上挖了个洞，壁纸到它这里也断了（浅色尤其突兀）。
+   现在靠内容撑主次：排在最上面、大号读数、樱色走势线，和整页唯一一颗实打实的樱色按钮。 */
 .home-session-card {
   --status-color: var(--xin-status-idle);
   --status-glow: rgb(var(--xin-neutral-rgb) / 0.3);
-  /* .liquid-rim 的高光描边压在墨面上要收着点，否则一圈白边像贴纸 */
-  --lg-edge-light: rgb(255 255 255 / 0.3);
-  --lg-edge-soft: rgb(255 255 255 / 0.08);
   position: relative;
   min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 18px;
-  overflow: hidden;
   padding: 22px 24px;
-  color: var(--xin-on-ink);
-  border: 1px solid rgb(255 255 255 / 0.06);
+  color: var(--xin-text);
+  border: 1px solid var(--xin-card-border);
   border-radius: var(--xin-radius-lg);
-  background: linear-gradient(120deg, var(--xin-ink-surface) 0%, var(--xin-ink-surface) 45%, var(--xin-ink-surface-raised) 100%);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.08),
-    0 1px 2px rgb(var(--xin-shadow-rgb) / 0.12),
-    0 18px 40px -20px rgb(var(--xin-shadow-rgb) / 0.55);
+  background: var(--xin-card);
+  box-shadow: var(--xin-specular), var(--xin-card-shadow);
+  /* 纸面的模糊跟着 --xin-card 一起定义（main.css「卡片纸面」）：壁纸压不住字时首页会把两样一起换掉 */
+  backdrop-filter: var(--xin-card-backdrop);
+  -webkit-backdrop-filter: var(--xin-card-backdrop);
 }
 
 .home-session-card.connected {
@@ -37,28 +35,6 @@
 .home-session-card.error {
   --status-color: var(--xin-danger);
   --status-glow: rgb(var(--xin-danger-rgb) / 0.45);
-}
-
-/* 右半边一层若有若无的「终端行」纹理 + 一点樱色余光，只在卡片右侧出现，
-   往左渐隐到纯墨，不和文字抢对比。 */
-.home-session-texture {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(420px 180px at 88% 0%, rgb(236 122 164 / 0.16), transparent 70%),
-    repeating-linear-gradient(180deg, rgb(255 255 255 / 0.045) 0 2px, transparent 2px 10px);
-  mask-image: linear-gradient(90deg, transparent 30%, rgb(0 0 0 / 0.9) 72%, transparent 100%);
-}
-
-.home-session-card > :not(.home-session-texture) {
-  position: relative;
-}
-
-/* 深色的墨令牌是 #2c2c2e，压在壁纸上像一块灰板，撑不起「墨」。
-   会话卡钉回浅色那档更深的墨，深浅两套是同一块墨樱 */
-.dark .home-session-card {
-  --xin-ink-surface: #1d1d1f;
 }
 
 .home-session-copy {
@@ -106,7 +82,7 @@
 
 .home-session-address {
   overflow: hidden;
-  color: var(--xin-on-ink-muted);
+  color: var(--xin-text-secondary);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -118,7 +94,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: rgb(251 247 250 / 0.5);
+  color: var(--xin-text-muted);
   font-size: 12.5px;
 }
 
@@ -129,15 +105,15 @@
 .home-session-path code {
   min-width: 0;
   overflow: hidden;
-  color: rgb(251 247 250 / 0.72);
+  color: var(--xin-text-secondary);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 实时读数：CPU 带一条走势，内存是一根容量条，延迟底下写服务器开了多久，正好落在原来只有纹理的右半边。
-   平时一律白字，占用过高、延迟变大才转琥珀 / 红：要注意的时候才给颜色 */
+/* 实时读数：CPU 带一条走势，内存是一根容量条，延迟底下写服务器开了多久，填在名字和按钮之间。
+   平时一律正文色，占用过高、延迟变大才转琥珀 / 红：要注意的时候才给颜色 */
 .home-session-vitals {
   display: flex;
   margin: 0 10px 0 0;
@@ -153,11 +129,11 @@
 }
 
 .home-vital + .home-vital {
-  border-left: 1px solid rgb(255 255 255 / 0.08);
+  border-left: 1px solid rgb(var(--xin-ink-rgb) / 0.08);
 }
 
 .home-vital dt {
-  color: var(--xin-on-ink-muted);
+  color: var(--xin-text-muted);
   font-size: 11.5px;
   font-weight: 600;
 }
@@ -167,7 +143,7 @@
 }
 
 .home-vital-value {
-  color: var(--xin-on-ink);
+  color: var(--xin-text);
   font-size: 22px;
   font-weight: 680;
   font-variant-numeric: tabular-nums;
@@ -178,7 +154,7 @@
 
 .home-vital-value small {
   margin-left: 2px;
-  color: var(--xin-on-ink-muted);
+  color: var(--xin-text-muted);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
@@ -202,7 +178,7 @@
 .home-vital-caption {
   display: flex;
   align-items: flex-end;
-  color: var(--xin-on-ink-muted);
+  color: var(--xin-text-muted);
   font-size: 11.5px;
   white-space: nowrap;
 }
@@ -214,13 +190,6 @@
   overflow: hidden;
 }
 
-/* 走势图本来画在浅色卡片上：辅助线是墨色，末端那颗点描一圈卡片底色。搬到墨面上要翻过来 */
-.home-vital-chart :deep(.metric-sparkline) {
-  --spark-guide: rgb(255 255 255 / 0.1);
-  --spark-guide-strong: rgb(255 255 255 / 0.24);
-  --xin-canvas-raised: var(--xin-ink-surface-raised);
-}
-
 /* 容量条贴着上面的数字，已用 / 总量沉到底，和延迟格的运行时长落在同一条线上 */
 .home-vital-meter {
   display: flex;
@@ -230,11 +199,15 @@
 
 .home-vital-meter :deep(.home-vital-track) {
   height: 4px;
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(var(--xin-ink-rgb) / 0.08);
 }
 
-/* 藕荷色和概览栏网络走势的第二条线同值（墨面上总是取深色那档），和 CPU 的樱色分开 */
+/* 藕荷色和概览栏网络走势的第二条线同值（metric-sparkline.css 的 --spark-violet），和 CPU 的樱色分开 */
 .home-vital-meter :deep(.home-vital-fill) {
+  background: #8b7fd8;
+}
+
+.dark .home-vital-meter :deep(.home-vital-fill) {
   background: #a99cf0;
 }
 
@@ -252,13 +225,14 @@
   gap: 10px;
 }
 
-/* 墨底上的樱色玻璃水滴：浅粉底 + 深莓字，是整页唯一一处「粉得实」的地方 */
+/* 樱色水滴：整页唯一一处「粉得实」的地方，樱色从原来墨面上的余光挪到了这颗能点的按钮上。
+   浅色的通用水滴近乎白色（它本来压在灰玻璃上），放在白纸面上会隐身，这里自己调一档看得出的粉 */
 .home-session-resume {
   height: 46px;
   padding: 0 22px;
-  color: var(--ui-color-primary-800);
+  color: var(--xin-accent-strong);
   border-radius: 999px;
-  background: var(--lg-droplet-rose);
+  background: linear-gradient(180deg, rgb(var(--xin-accent-rgb) / 0.24) 0%, rgb(var(--xin-accent-rgb) / 0.16) 100%);
   box-shadow: var(--lg-droplet-rose-shadow);
   font-size: 14px;
   font-weight: 680;
@@ -269,12 +243,12 @@
 
 .home-session-resume:hover {
   filter: brightness(1.04);
-  background: var(--lg-droplet-rose);
 }
 
-/* 深色下水滴是半透的樱色，字换白才压得住 */
+/* 深色的通用水滴本来就是半透的樱色，直接用；字换白才压得住 */
 .dark .home-session-resume {
   color: #ffffff;
+  background: var(--lg-droplet-rose);
 }
 
 .home-session-resume:active {
@@ -285,16 +259,16 @@
   width: 46px;
   height: 46px;
   justify-content: center;
-  color: var(--xin-on-ink);
+  color: var(--xin-text-secondary);
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.08);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  background: rgb(var(--xin-ink-rgb) / 0.05);
+  box-shadow: inset 0 0 0 1px rgb(var(--xin-ink-rgb) / 0.06);
 }
 
 .home-session-more:hover,
 .home-session-more[data-state="open"] {
-  color: var(--xin-on-ink);
-  background: rgb(255 255 255 / 0.14);
+  color: var(--xin-text);
+  background: rgb(var(--xin-ink-rgb) / 0.09);
 }
 
 /* 窗口窄了读数让位给名字和路径：三格读数要四百来像素，挤进来名字就只剩省略号 */

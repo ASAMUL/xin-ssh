@@ -56,9 +56,7 @@ function roundedPercent(value) {
 
 <template>
   <article class="home-session-card liquid-rim" :class="session.status">
-    <div class="home-session-texture" aria-hidden="true"></div>
-
-    <OsIconTile :icon="osIcon" :size="60" tone="ink" />
+    <OsIconTile :icon="osIcon" :size="60" />
 
     <div class="home-session-copy">
       <strong>

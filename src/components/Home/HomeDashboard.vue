@@ -111,13 +111,13 @@ const featuredProfile = computed(() => {
   const session = featuredSession.value;
   return session ? filteredProfiles.value.find((profile) => profile.id === session.profileId) ?? null : null;
 });
-// 首页亮着时墨色卡上的读数靠这里接着采：工作区的概览栏和状态栏只跟当前会话，回到首页就停了。
+// 首页亮着时会话卡上的读数靠这里接着采：工作区的概览栏和状态栏只跟当前会话，回到首页就停了。
 // 工作区亮着（有当前会话）时交还给它们，同一个会话不采两遍
 const liveSession = computed(() => (sessionStore.activeSession || !featuredProfile.value ? null : featuredSession.value));
 useSystemInfoPolling(sessionStore, settingsStore, () => liveSession.value);
 useSessionLatency(sessionStore, () => liveSession.value);
 
-// 已经在墨色卡里展示的连接不在下方网格重复出现
+// 已经在会话卡里展示的连接不在下方网格重复出现
 const listedProfiles = computed(() => featuredProfile.value
   ? filteredProfiles.value.filter((profile) => profile.id !== featuredProfile.value.id)
   : filteredProfiles.value);

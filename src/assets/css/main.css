@@ -76,7 +76,7 @@
   --xin-status-idle: #a1a1a6;
   --xin-favorite: #eea12c;
 
-  /* —— 墨面：主按钮、当前会话卡这类「压得住」的实底 ——
+  /* —— 墨面：主按钮这类「压得住」的实底 ——
      墨樱的层次靠「浅纸面 + 少量墨块」拉开，墨块上的文字与图标走 on-ink 两档。 */
   --xin-ink-surface: #1d1d1f;
   --xin-ink-surface-raised: #3a3a3e;
@@ -225,7 +225,7 @@
   --xin-status-idle: #636366;
   --xin-favorite: #f2b54a;
 
-  /* 深色画布本身就是墨，墨面得再抬一级，否则会话卡和画布糊成一块 */
+  /* 深色画布本身就是墨，墨面得再抬一级，否则墨色按钮和画布糊成一块 */
   --xin-ink-surface: #2c2c2e;
   --xin-ink-surface-raised: #3a3a3e;
 

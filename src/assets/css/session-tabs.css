@@ -188,7 +188,7 @@
 }
 
 /* 深色下瓷白底座是整条标签栏里最亮的一块，会把视线从名字上抢走。
-   换成墨色会话卡那种半透明暗底座：彩色标照样有东西托着，Tux 的黑身子也不会融进玻璃里。
+   换成半透明的暗底座：彩色标照样有东西托着，Tux 的黑身子也不会融进玻璃里。
    多挂一层 .session-tab：OsIconTile 自己的 .dark .os-icon-tile 和这里同级，同级时谁赢看样式表加载顺序 */
 .dark .session-tab .tab-os-icon {
   color: var(--xin-text-body);
