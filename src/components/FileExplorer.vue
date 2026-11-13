@@ -1908,7 +1908,7 @@ function sortAriaLabel(key) {
 
       <UButton
         v-liquid-glass="GLASS_REGULAR"
-        class="file-upload liquid-glass liquid-glass--ink"
+        class="file-upload liquid-glass liquid-glass--ink rose-action"
         color="primary"
         size="sm"
         icon="i-lucide-upload"

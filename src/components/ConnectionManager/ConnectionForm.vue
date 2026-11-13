@@ -607,7 +607,7 @@ async function createInlineGroup() {
           type="submit"
           color="primary"
           size="lg"
-          class="cta-button"
+          class="cta-button rose-action"
           icon="i-lucide-save"
           :loading="isSavingProfile"
           :disabled="!canSave"

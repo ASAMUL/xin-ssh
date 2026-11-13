@@ -433,6 +433,37 @@ button {
   }
 }
 
+/* 樱色水滴主按钮（只管浅色）：首页「继续会话」那一颗的样子。挂在浅色纸面上的主动作上——
+   新建连接、保存连接、文件面板的上传、隧道面板、片段面板；墨块压在又亮又透的页面上太突兀（同会话卡去墨的理由）。
+   深色下这些按钮本来就是樱色，不动。
+   不改 .cta-button 本身：终端凭据 / 指纹面板也用它，那里底下是深色终端画布，淡粉会发暗、深莓字读不出。
+   通用水滴 --lg-droplet-rose 浅色下近乎白，压在白纸面上会隐身，这里调一档看得出的粉。
+   玻璃按钮（.liquid-glass--ink）的底色画在 --lg-fill 上，所以一律走这两个变量，普通按钮也照它画 */
+:root:not(.dark) .rose-action {
+  --lg-fill: linear-gradient(180deg, rgb(var(--xin-accent-rgb) / 0.24) 0%, rgb(var(--xin-accent-rgb) / 0.16) 100%);
+  --lg-fill-hover: linear-gradient(180deg, rgb(var(--xin-accent-rgb) / 0.3) 0%, rgb(var(--xin-accent-rgb) / 0.21) 100%);
+  /* 墨玻璃那圈 20% 黑的内轮廓换成淡樱，不然粉胶囊外面箍一道灰边 */
+  --lg-edge-ink: rgb(var(--xin-accent-rgb) / 0.14);
+  color: var(--xin-accent-strong);
+  background: var(--lg-fill);
+}
+
+:root:not(.dark) .rose-action:not(.liquid-glass) {
+  box-shadow: var(--lg-droplet-rose-shadow);
+}
+
+/* 墨底上的图标是浅樱色（on-ink-accent），挪到淡粉底上就糊了，跟字走深莓 */
+:root:not(.dark) .rose-action [data-slot="leadingIcon"],
+:root:not(.dark) .rose-action [data-slot="trailingIcon"] {
+  color: inherit;
+}
+
+/* .cta-button 悬停是提亮 1.12，在淡粉上只会更白；改成粉再浓一点 */
+:root:not(.dark) .rose-action:hover:not(:disabled) {
+  filter: none;
+  background: var(--lg-fill-hover);
+}
+
 .workspace-layout {
   min-width: 0;
   display: flex;

@@ -228,7 +228,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 上传是这一栏唯一的「主动作」，用墨玻璃；新建和更多是普通的透明玻璃 */
+/* 上传是这一栏唯一的「主动作」：浅色下是樱色水滴（.rose-action），深色下是樱色玻璃；新建和更多是普通的透明玻璃 */
 .file-upload,
 .file-create {
   padding: 0 16px;

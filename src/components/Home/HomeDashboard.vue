@@ -617,7 +617,7 @@ function showError(error) {
 
           <UButton
             v-liquid-glass="GLASS_CLEAR"
-            class="home-create liquid-glass liquid-glass--ink"
+            class="home-create liquid-glass liquid-glass--ink rose-action"
             color="primary"
             size="lg"
             icon="i-lucide-plus"
@@ -633,7 +633,7 @@ function showError(error) {
           <h3>{{ t("home.emptyTitle") }}</h3>
           <p>{{ t("home.emptyDescription") }}</p>
           <UButton
-            class="cta-button"
+            class="cta-button rose-action"
             color="primary"
             size="lg"
             icon="i-lucide-plus"

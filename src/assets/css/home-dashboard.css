@@ -191,7 +191,7 @@
   color: var(--xin-text-body);
 }
 
-/* 新建连接：墨色液态玻璃（.liquid-glass--ink），整页唯一一块「压得住」的按钮，排在工具栏最右 */
+/* 新建连接：排在工具栏最右的主动作。玻璃是 .liquid-glass--ink，浅色下由 .rose-action 换成樱色水滴（和「继续会话」同一颗），深色下本来就是樱色玻璃 */
 .home-create {
   flex: 0 0 auto;
   padding: 0 22px;

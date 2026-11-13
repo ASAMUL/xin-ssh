@@ -145,7 +145,7 @@ function roundedPercent(value) {
 
     <div class="home-session-actions">
       <UButton
-        class="home-session-resume"
+        class="home-session-resume rose-action"
         size="lg"
         trailing-icon="i-lucide-arrow-right"
         :label="t('home.resumeSession')"

@@ -322,7 +322,7 @@ async function confirmDelete(snippetId) {
           type="submit"
           color="primary"
           size="lg"
-          class="cta-button"
+          class="cta-button rose-action"
           :loading="isSaving"
           :label="t('snippets.save')"
         />

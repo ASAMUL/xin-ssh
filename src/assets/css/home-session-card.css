@@ -235,14 +235,12 @@
   gap: 10px;
 }
 
-/* 樱色水滴：整页唯一一处「粉得实」的地方，樱色从原来墨面上的余光挪到了这颗能点的按钮上。
-   浅色的通用水滴近乎白色（它本来压在灰玻璃上），放在白纸面上会隐身，这里自己调一档看得出的粉 */
+/* 樱色水滴：樱色从原来墨面上的余光挪到了这颗能点的按钮上。
+   浅色下的粉底和深莓字来自全局的 .rose-action（main.css），新建连接、保存连接、上传也是这一颗 */
 .home-session-resume {
   height: 46px;
   padding: 0 22px;
-  color: var(--xin-accent-strong);
   border-radius: 999px;
-  background: linear-gradient(180deg, rgb(var(--xin-accent-rgb) / 0.24) 0%, rgb(var(--xin-accent-rgb) / 0.16) 100%);
   box-shadow: var(--lg-droplet-rose-shadow);
   font-size: 14px;
   font-weight: 680;
