@@ -28,7 +28,7 @@ It makes file management the main event: drag, double-click and right-click file
 
 - **Hands off your server**: no agent, no edits to `.bashrc`, no injected scripts. Everything runs on the client
 - **Lightweight**: built on Tauri 2 with the system WebView, so it doesn't ship a copy of Chromium
-- **Early days**: currently 0.1.0, developed and tested mainly on Windows 11
+- **Early days**: still at 0.1.x, developed and tested mainly on Windows 11
 
 Yes, the icon is a cat-eared girl. No, this does not affect her ability to connect to servers.
 
