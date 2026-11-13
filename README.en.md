@@ -150,6 +150,9 @@ Found a bug? Congratulations, it's our bug now. Both of ours.
 
 A lot of Xin SSH was pair-programmed with [Claude](https://claude.com/claude-code). Claude wrote this README, too.
 
+[Linux.do](https://linux.do) A genuine, welcoming, cohesive, and professional Chinese-language community—a refreshing presence in the world of online forums.
+
+
 Animated icons come from [lucide-motion-vue](https://github.com/respeak-io/lucide-motion-vue). The shapes are [Lucide](https://lucide.dev) (ISC); the motion is adapted from [lucide-animated](https://lucide-animated.com) (MIT) and [animate-ui](https://github.com/imskyleen/animate-ui) (MIT + Commons Clause).
 
 The two cats on the empty state and the connection-failure screen come from [LottieFiles](https://lottiefiles.com). They're distributed under the Lottie Simple License, not the project's MIT license; see [src/assets/lottie/LICENSE.md](src/assets/lottie/LICENSE.md). The cat napping on the session card is our own.

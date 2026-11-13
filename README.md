@@ -150,6 +150,8 @@ pnpm test          # 跑前端单元测试
 
 Xin SSH 的很多代码，是和 [Claude](https://claude.com/claude-code) 结对写出来的。这份 README 也是它写的。
 
+[Linux.do](https://linux.do) 真诚、友善、团结、专业的中文社区，互联网论坛的一股清流。
+
 动态图标来自 [lucide-motion-vue](https://github.com/respeak-io/lucide-motion-vue)。图形是 [Lucide](https://lucide.dev)（ISC），动效改编自 [lucide-animated](https://lucide-animated.com)（MIT）和 [animate-ui](https://github.com/imskyleen/animate-ui)（MIT + Commons Clause）。
 
 空状态和连接失败时的两只猫来自 [LottieFiles](https://lottiefiles.com)，按 Lottie Simple License 分发，不在本项目的 MIT 许可范围内，详见 [src/assets/lottie/LICENSE.md](src/assets/lottie/LICENSE.md)。会话卡片上打盹的那只是我们自己画的。
