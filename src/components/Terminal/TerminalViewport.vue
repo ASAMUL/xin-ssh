@@ -11,7 +11,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import TerminalSearchPanel from "./TerminalSearchPanel.vue";
-import { buildSearchDecorations, buildXtermTheme, resolveTerminalFontWeight } from "../../config/terminalThemes";
+import { buildSearchDecorations, buildXtermTheme, resolveTerminalTextOptions } from "../../config/terminalThemes";
 import { loadCommandHistory, recordCommand, suggestCommand } from "../../services/commandHistory";
 import { resolveRemoteHome } from "../../services/workspaceApi";
 import { useTerminalGuard } from "../../composables/useTerminalGuard";
@@ -100,7 +100,7 @@ onMounted(() => {
     cursorBlink: true,
     fontFamily: props.fontFamily,
     fontSize: props.fontSize,
-    fontWeight: resolveTerminalFontWeight(props.theme),
+    ...resolveTerminalTextOptions(props.theme),
     lineHeight: 1.18,
     scrollback: 8000,
     cols: session.value?.terminalColumns ?? 120,
@@ -227,7 +227,7 @@ function updateAppearance() {
     commandSuggest.setTheme(props.theme);
     terminal.options.fontFamily = props.fontFamily;
     terminal.options.fontSize = props.fontSize;
-    terminal.options.fontWeight = resolveTerminalFontWeight(props.theme);
+    Object.assign(terminal.options, resolveTerminalTextOptions(props.theme));
   }
   scheduleLayout();
   document.fonts?.ready.then(scheduleLayout);

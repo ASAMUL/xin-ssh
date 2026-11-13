@@ -58,10 +58,17 @@ export function normalizeTerminalThemeId(themeId) {
   return TERMINAL_THEMES.some((theme) => theme.id === id) ? id : DEFAULT_TERMINAL_THEME_ID;
 }
 
-// 白底上的深色字天生显得比深底上的浅字细（光渗：亮处会往暗处「吃」一圈），同样的字重放到浅色主题上发虚。
-// 按明暗而不是按主题定：凡是浅色主题正文都加一档到 500；粗体仍是 bold，和正文拉得开
-export function resolveTerminalFontWeight(variant) {
-  return variant.mode === "light" ? 500 : "normal";
+// 只按明暗、不按具体主题决定的文字选项，浅色主题一律适用：
+// · fontWeight：白底上的深色字天生显得比深底上的浅字细（光渗：亮处会往暗处「吃」一圈），同样的字重放到
+//   浅色主题上发虚，正文加一档到 500；粗体仍是 bold，和正文拉得开。
+// · minimumContrastRatio：ls 给「所有人可写的目录」配的是黑字绿底（tw=30;42），深色主题里绿亮黑暗没问题，
+//   浅色主题的绿和黑都偏深，挤到 2.6:1 读不出。交给 xterm 自带的对比度兜底，按单元格把字往深或往浅推。
+//   定 3 而不是 VS Code 的 4.5：浅色主题的彩色都在 3:1 上下，定高了整套彩色会被统一压暗、调色板白调了；
+//   3 只拦真正读不出的组合。深色主题保持 1（不干预）
+export function resolveTerminalTextOptions(variant) {
+  return variant.mode === "light"
+    ? { fontWeight: 500, minimumContrastRatio: 3 }
+    : { fontWeight: "normal", minimumContrastRatio: 1 };
 }
 
 export function normalizeTerminalAppearance(value) {
@@ -93,7 +100,9 @@ export function buildXtermTheme(variant, material) {
   const { xterm } = variant;
   return {
     ...xterm,
-    background: material === "clear" ? "rgba(0, 0, 0, 0)" : xterm.background,
+    // 通透材质只要全透明，但颜色本身要保留主题底色：xterm 算最低对比度时只看背景的 rgb、不管 alpha，
+    // 写成透明黑会被当成黑底，浅色主题的深色字反而被往浅里推。alpha 为 0 时 WebGL 混合后不留任何像素，画面不变
+    background: material === "clear" ? withAlpha(xterm.background, 0) : xterm.background,
     scrollbarSliderBackground: withAlpha(xterm.foreground, 0.26),
     scrollbarSliderHoverBackground: withAlpha(xterm.foreground, 0.38),
     scrollbarSliderActiveBackground: variant.accent,

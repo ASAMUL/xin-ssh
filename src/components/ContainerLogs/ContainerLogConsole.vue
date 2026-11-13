@@ -7,7 +7,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import TerminalSearchPanel from "../Terminal/TerminalSearchPanel.vue";
-import { buildSearchDecorations, buildXtermTheme, resolveTerminalFontWeight } from "../../config/terminalThemes";
+import { buildSearchDecorations, buildXtermTheme, resolveTerminalTextOptions } from "../../config/terminalThemes";
 
 // 只负责把日志画出来：用 xterm 而不是编辑器，是因为容器日志常带 ANSI 颜色，编辑器里只会是一串 ^[[32m。
 // 流从哪来、什么时候停由日志窗口管
@@ -44,7 +44,7 @@ onMounted(() => {
     disableStdin: true,
     fontFamily: props.fontFamily,
     fontSize: props.fontSize,
-    fontWeight: resolveTerminalFontWeight(props.theme),
+    ...resolveTerminalTextOptions(props.theme),
     lineHeight: 1.18,
     scrollback: SCROLLBACK_LINES,
     theme: logTheme(),
@@ -78,7 +78,7 @@ watch(() => [props.theme, props.fontFamily, props.fontSize], () => {
   terminal.options.theme = logTheme();
   terminal.options.fontFamily = props.fontFamily;
   terminal.options.fontSize = props.fontSize;
-  terminal.options.fontWeight = resolveTerminalFontWeight(props.theme);
+  Object.assign(terminal.options, resolveTerminalTextOptions(props.theme));
   scheduleLayout();
 });
 
