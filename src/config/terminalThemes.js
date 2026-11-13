@@ -58,6 +58,12 @@ export function normalizeTerminalThemeId(themeId) {
   return TERMINAL_THEMES.some((theme) => theme.id === id) ? id : DEFAULT_TERMINAL_THEME_ID;
 }
 
+// 白底上的深色字天生显得比深底上的浅字细（光渗：亮处会往暗处「吃」一圈），同样的字重放到浅色主题上发虚。
+// 按明暗而不是按主题定：凡是浅色主题正文都加一档到 500；粗体仍是 bold，和正文拉得开
+export function resolveTerminalFontWeight(variant) {
+  return variant.mode === "light" ? 500 : "normal";
+}
+
 export function normalizeTerminalAppearance(value) {
   return TERMINAL_APPEARANCES.includes(value) ? value : DEFAULT_TERMINAL_APPEARANCE;
 }
@@ -221,42 +227,45 @@ export const TERMINAL_THEMES = [
           brightWhite: "#fafafa",
         },
       }),
-      // 昼：深色版翻过来，色相不动，只把明度压下去。之前那版浅色「宣 Paper」用户不喜欢
-      // （浅色终端不适应，名字也不属于墨樱）；后来还是决定给浅色留一个选择，名字跟着墨樱走。
-      // 底色是冷中性的 zinc-50，不走暖纸色，和应用的灰阶同源。
+      // 昼：白底。之前那版浅色「宣 Paper」用户不喜欢（浅色终端不适应，名字也不属于墨樱）；
+      // 后来还是决定给浅色留一个选择，名字跟着墨樱走。
+      // 2026-11-12 重配（中间试过中性浅灰「雾」、樱粉纸底「樱纸」，用户都不要，定下白底）：
+      // 原来的问题不在白，在彩色——六色拉平到同一对比度＝同一明度，只能是砖红、墨绿、芥末棕、藏青，发闷。
+      // 现在彩色在 OKLCH 里配、饱和度给足、各自保留天然明暗（黄就是亮的琥珀橙，蓝就是沉的钴蓝），
+      // 和 Xcode / GitHub Light 一样清透；字是 Apple 的标准墨色。樱色只落在光标和选区上。
+      // 底色不用纯白：#fff 大面积铺开刺眼，压 6% 亮度看着仍是白（彩色对比度只掉零点几）
       light: variant("light", {
         id: "xin-ink-rose-day",
         nameKey: "terminal.themeName.inkRoseDay",
         // 樱色跟应用浅色的强调色同一个值，深色版也是这样
         accent: "#c93a72",
         xterm: {
-          background: "#fafafa",
-          foreground: "#27272a",
+          background: "#f8f8fa",
+          foreground: "#1d1d1f",
           cursor: "#c93a72",
-          cursorAccent: "#fafafa",
+          cursorAccent: "#f8f8fa",
           selectionBackground: "rgba(201, 58, 114, 0.18)",
-          black: "#3f3f46",
-          // 六个彩色对底色都是 5.2:1 左右（深色版各色亮度不一，浅色下按对比度拉平更稳）。
-          // 黄色在这个明度只能是芥末棕，色相往橙偏一点，免得发绿
-          red: "#b5443a",
-          green: "#18793b",
-          yellow: "#8d6105",
-          blue: "#106bbd",
-          magenta: "#ad4379",
-          cyan: "#09757f",
-          // 很多程序默认背景是黑的，会拿 white 写字：给中灰而不是近白，浅底上还读得出
-          white: "#919197",
-          // 自动补全提示、注释：和深色版一样 ≈4:1
-          brightBlack: "#7b7b83",
-          // bright 在深色版是更亮，在这里是更深（≈6.8:1）——都是「更显眼」。
+          black: "#3a3a3c",
+          // 对底色：朱红 4.8 · 翠绿 4.1 · 琥珀橙 3.0 · 钴蓝 5.5 · 樱 5.1 · 青 4.0
+          red: "#d81f23",
+          green: "#008c39",
+          yellow: "#de7300",
+          blue: "#0f59e7",
+          magenta: "#ca1977",
+          cyan: "#00879d",
+          // 很多程序默认背景是黑的，会拿 white 写字：给中灰而不是近白，白底上还读得出
+          white: "#8e8e93",
+          // 自动补全提示、注释：≈3.2:1，要暗但读得出
+          brightBlack: "#8a8a8e",
+          // bright 在深色版是更亮，在这里是同色相更深一档——都是「更显眼」。
           // 加粗的目录、可执行文件默认画成 bright 色，所以它们比普通色更沉
-          brightRed: "#a9241e",
-          brightGreen: "#03662d",
-          brightYellow: "#765102",
-          brightBlue: "#0159a2",
-          brightMagenta: "#a02468",
-          brightCyan: "#04616a",
-          brightWhite: "#a6a7ac",
+          brightRed: "#b50000",
+          brightGreen: "#00701e",
+          brightYellow: "#be5800",
+          brightBlue: "#003bc5",
+          brightMagenta: "#a9005d",
+          brightCyan: "#006b81",
+          brightWhite: "#aeaeb2",
         },
       }),
     },

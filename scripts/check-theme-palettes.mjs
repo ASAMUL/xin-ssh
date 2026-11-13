@@ -22,6 +22,10 @@ const MIN_DELTA_E_CRITICAL = 26;
 const MIN_DELTA_E = 12;
 // 自家的 Xin 按正文标准（WCAG AA 4.5:1）要求；经典组按宽档只做提示
 const MIN_CONTRAST = { xin: 4.5, classic: 3 };
+// 浅色版的六个彩色不按正文标准：浅底上的彩色要鲜，就得各自保留天然的明暗（黄天生就亮），
+// 硬拉到 4.5 会全压成同一个暗度——墨樱·昼 2026-11-12 先后两版因此被用户说「发闷」「太清淡」。
+// 门槛照公认好看的浅色主题定（Catppuccin Latte 黄 2.6、粉 2.8）；正文字色仍按上面的标准
+const MIN_LIGHT_ACCENT_CONTRAST = 2.5;
 const MIN_DIM_CONTRAST = 3;
 // 经典组是上游原版配色（Vesper / Poimandres 的 green/cyan 本来就贴得很近），
 // 「原汁原味」正是这一组存在的理由，撞色也不该由我们去改——只提示不算失败。
@@ -93,8 +97,11 @@ for (const theme of variants) {
 
   for (const slot of [...SEMANTIC_SLOTS, "foreground"]) {
     const ratio = contrastRatio(theme.xterm[slot], background);
-    if (ratio < minContrast) {
-      notes.push(`低对比 ${slot} ${ratio.toFixed(2)}:1 < ${minContrast} (${theme.xterm[slot]})`);
+    const floor = theme.mode === "light" && slot !== "foreground"
+      ? Math.min(minContrast, MIN_LIGHT_ACCENT_CONTRAST)
+      : minContrast;
+    if (ratio < floor) {
+      notes.push(`低对比 ${slot} ${ratio.toFixed(2)}:1 < ${floor} (${theme.xterm[slot]})`);
     }
   }
 
