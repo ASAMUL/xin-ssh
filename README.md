@@ -15,110 +15,104 @@
 
 </div>
 
----
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/screenshots/workspace-dark.webp" />
+  <img src=".github/assets/screenshots/workspace-light.webp" alt="工作区：终端、文件面板和主机概览在同一个窗口里" />
+</picture>
 
-市面上的 SSH 工具大致分两种：终端好用，但传文件要另开一个软件的；传文件好用，但界面还停在上个世纪的。
+## 简介
 
-Xin SSH 想试试第三种。
+Xin SSH 是一个 SSH 客户端，把终端、文件管理和主机监控放在同一个窗口里。
 
-在这里，文件管理不是终端旁边的附属品，而是主角。拖拽、双击、右键——你在自己电脑上怎么管文件，在服务器上就怎么管。终端当然也在，离你只有一次点击。
+它让文件管理当主角：服务器上的文件，你可以像在自己电脑上一样拖拽、双击、右键。终端就在旁边，两边还会互相配合。
+
+- **不碰你的服务器**：不装 agent，不改 `.bashrc`，不注入脚本，所有功能都在客户端完成
+- **轻**：基于 Tauri 2，用系统自带的 WebView，不额外打包一个 Chromium
+- **还在早期**：当前版本 0.1.0，主要在 Windows 11 上开发和测试
 
 是的，图标是一个猫耳少女。不，这不影响它连服务器。
 
-## 亮点
+## 功能
 
-### 文件管理是主角，不是配角
+### 文件管理
 
-- 路径栏、前进后退、多选、右键菜单，几万个文件的目录也不卡（虚拟滚动）
-- 拖拽上传，整个目录一起拖也行；同名文件会问你覆盖、跳过还是改名
-- 断点续传，传了一半断了不用从头再来
-- 双击文件直接在内置编辑器里改，保存就写回服务器
-- 权限用勾选框改，不用再心算 `rwxr-xr-x`
+- 路径栏、前进后退、多选、右键菜单；几万个文件的目录也不卡
+- 拖拽上传，整个文件夹也行；同名文件会问你覆盖、跳过还是改名
+- 传输可以暂停、断点续传，传完用 SHA-256 核对
+- 双击文件在内置编辑器里打开，保存直接写回服务器
+- **Ctrl + V** 把剪贴板里的文件、截图或文字直接存到服务器
+- 右键在服务器上压缩、解压（zip、tar.gz），不用下载下来再传回去
+- 目录占用分析：一眼看出是哪个目录把磁盘塞满了
+- 权限用勾选框改，还会用大白话告诉你这组权限是什么意思
+- 浏览 Docker 容器里的文件（只读）、查看容器日志，已经停止的容器也能看日志
 
-> 你当然可以继续用 vim 改配置。我们只是不再要求你这么做。
+### 终端
 
-### 终端和文件面板，终于开始说话了
-
-- 终端里 `cd /var/log`，文件面板跟着过去
-- 终端输出里的路径按住 Ctrl / ⌘ 点一下：文件在编辑器里打开并跳到那一行（`main.go:42` 这种报错格外好用），目录在文件面板里打开
-- 服务器打印的端口（比如 `listening on :8080`）点一下，自动转发到本机，网页直接在浏览器里打开
-- 文件从面板拖到终端，路径自动填进命令行
-- 文件从桌面拖到终端，上传到终端当前所在的目录，传完再把路径填进命令行
-
-> 服务器打印的 `http://localhost:5173`，点开以后终于是服务器上的那个 5173 了。
-
-### 生产机保护
-
-给连接打开「生产环境」开关，之后在上面敲 `rm -rf`、`drop database` 这类命令，回车前会先弹个确认。粘贴多行命令也会拦一下。在 mysql 客户端里敲的也拦得住。
-
-> 它拦不住你删库。但它会问一句「你确定吗」。很多事故，差的就是这一句。
-
-### 记性比你好一点
-
-- **命令联想**：打字时把历史里最近一条匹配的命令用灰字补在后面，按 → 采纳，和 fish 一个手感
-- **命令标记**：提示符自动上色（`root` 会特别醒目），执行超过 3 秒的命令在右侧显示耗时，Ctrl + ↑ / ↓ 在命令之间跳
+- 终端里 `cd` 到哪，文件面板就跟到哪
+- 按住 Ctrl / ⌘ 点终端里的路径：文件在编辑器里打开并跳到那一行，目录在文件面板里打开
+- 点一下服务器打印的端口（比如 `listening on :8080`），自动转发到本机并在浏览器里打开
+- 文件拖进终端自动填上路径；从桌面拖进来，先上传到终端当前目录再填路径
+- **命令联想**：打字时用灰字补出历史里匹配的命令，按 → 采纳
+- **命令标记**：提示符自动上色，跑了 3 秒以上的命令在右侧显示耗时，Ctrl + ↑ / ↓ 在命令之间跳
 - **命令片段**：常用命令存起来，点一下就发
-- **恢复会话**：重新打开应用，上次的标签页都还在
+- **生产机保护**：给连接打开「生产环境」，之后敲 `rm -rf`、`drop database`，或者粘贴多行命令，回车前都会先让你确认
+- 同一个连接可以开多个终端，断线自动重连，重新打开应用时恢复上次的标签页
 
-> 上周敲过的那条四十个字符的 docker 命令，它还记得。你忘了也没关系，这本来就不该是你的工作。
+### 主机监控
 
-### 不在你的服务器上动手脚
+- 侧栏主机概览：系统信息、CPU 走势、内存（已用 / 缓存 / 空闲）、磁盘、网速、占用最高的进程和服务
+- 首页的「继续会话」卡片实时显示 CPU、内存和延迟。卡片上趴着一只打盹的猫，服务器忙起来（CPU 或内存到 80%）它就醒了
 
-上面这些全部在客户端完成：不装 agent，不改 `.bashrc`，不往 shell 里注入任何脚本。目录跟随靠的是 OSC 7 和识别提示符，监控靠的是只读命令。
-
-> 你的服务器不会知道，它正被一个很好看的客户端连着。
-
-### 安全上不偷懒
+### 连接与安全
 
 - 认证方式：密码、私钥（ed25519 / RSA / ECDSA，支持口令）、本机 SSH agent、keyboard-interactive 二次验证
 - 首次连接记下主机指纹，之后指纹对不上就拒绝连接
 - 保存的密码和私钥用 ChaCha20-Poly1305 加密，只存在你自己的电脑上
-- 续传前核对已经传过去的部分，下载完、续传完再用 SHA-256 核对整个文件；服务器上有 `sha256sum` 就让服务器自己算，不用把文件再传一遍
-- 配置文件原子写入，写到一半出意外也不会写坏
-
-> 传完会算一遍 SHA-256。不是不信任你的网络，是不信任所有网络。
-
-### 看得见服务器在干嘛
-
-侧栏的主机概览：发行版、CPU 走势、内存、磁盘、上下行网速、进程和服务，刷新间隔可调。
-
-> CPU 跑满的时候，你至少可以是第一个知道的人。
-
-### 好看是认真的
-
-- iOS 风格的液态玻璃界面，深色浅色都有，还能换壁纸
-- 终端主题：自家的墨樱（Ink & Rose），以及 Catppuccin、Tokyo Night、Rosé Pine、Gruvbox Material、Nord、Vesper、Dracula、Poimandres，其中五套有明暗两版
-- 七款等宽字体可选（JetBrains Mono、Fira Code、Geist Mono……），终端用 WebGL 渲染
-- 基于 Tauri，用系统自带的 WebView，不额外打包一整个 Chromium
-
-> 我们花在玻璃边缘那一道高光上的时间，比你想的多，也比我们愿意承认的多。
-
-### 还有一些
-
-- SSH 隧道（本地端口转发）
-- 导入 `~/.ssh/config`（要经跳板机的主机暂时会跳过），导出连接配置
-- 同一个连接开多个终端
 - 连接分组、收藏、最近使用、拖拽排序，自动识别服务器发行版并配上图标
-- 断线自动重连
-- 关窗保护：还有没保存的文件或正在传的任务时，关窗前先问你
+- 导入 `~/.ssh/config`（要经跳板机的主机暂时会跳过），导出连接配置
+- SSH 隧道（本地端口转发）
+- 还有没保存的文件或正在传的任务时，关窗前会先问你
+
+### 外观
+
+- iOS 风格的液态玻璃界面，深色、浅色两套
+- 自带深浅两张壁纸，也能换成自己的；玻璃的通透程度可以调
+- 终端主题：自家的墨樱（深色）和墨樱 · 昼（浅色），以及 Catppuccin、Tokyo Night、Rosé Pine、Gruvbox Material、Nord、Vesper、Dracula、Poimandres
+- 七款等宽字体可选，终端用 WebGL 渲染
 - 中文 / English
 
-> 传到 97% 的时候手滑点了关闭？它会拦住你。不客气。
+## 截图
+
+截图会跟着你的 GitHub 深浅色主题切换。
+
+**首页**：所有连接一览，正在进行的会话放在最上面
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/screenshots/home-dark.webp" />
+  <img src=".github/assets/screenshots/home-light.webp" alt="首页：会话卡片和连接列表" />
+</picture>
+
+**设置**：深浅色、玻璃效果和壁纸
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/screenshots/settings-dark.webp" />
+  <img src=".github/assets/screenshots/settings-light.webp" alt="设置：外观" />
+</picture>
 
 ## 下载
 
-去 [Releases](https://github.com/ASAMUL/xin-ssh/releases/latest) 下载对应系统的安装包：Windows 选 `-setup.exe`；macOS 选 `.dmg`，Apple 芯片选 `aarch64`，Intel 选 `x64`；Linux 有 `AppImage`、`deb` 和 `rpm`。macOS 和 Linux 版是实验性的。
+去 [Releases](https://github.com/ASAMUL/xin-ssh/releases/latest) 下载对应系统的安装包：
 
-安装包暂时没有数字签名，所以第一次打开时：
+- **Windows**：`-setup.exe`
+- **macOS**：`.dmg`，Apple 芯片选 `aarch64`，Intel 选 `x64`
+- **Linux**：`AppImage`、`deb` 或 `rpm`
 
-- **Windows** 可能会弹出「Windows 已保护你的电脑」。它是好意，只是还不认识我们。点「更多信息」→「仍要运行」就行
+macOS 和 Linux 版是实验性的，欢迎在 issue 里告诉我们实际情况。
+
+安装包暂时没有数字签名，第一次打开时：
+
+- **Windows** 可能弹出「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」
 - **macOS** 如果提示「已损坏，无法打开」，在终端里运行 `xattr -cr "/Applications/Xin SSH.app"` 再打开
-
-## 现状
-
-Xin SSH 还在早期（0.1.0），功能迭代很快，有 bug 很正常。
-
-目前主要在 Windows 11 上开发和测试。Tauri 是跨平台的，所以 macOS 和 Linux 理论上也能跑。「理论上」这三个字有多重，你懂的。欢迎在 issue 里告诉我们实际情况。
 
 ## 从源码运行
 
@@ -144,6 +138,7 @@ pnpm test          # 跑前端单元测试
 | 界面 | Vue 3、Nuxt UI 4、Tailwind CSS 4、Pinia、vue-i18n |
 | 终端 | xterm.js 6（WebGL 渲染） |
 | 编辑器 | CodeMirror 6 |
+| 动画 | dotlottie-web |
 
 ## 参与贡献
 
@@ -153,9 +148,11 @@ pnpm test          # 跑前端单元测试
 
 ## 致谢
 
-Xin SSH 的很多代码，是和 [Claude](https://claude.com/claude-code)结对写出来的。这份 README 也是它写的。
+Xin SSH 的很多代码，是和 [Claude](https://claude.com/claude-code) 结对写出来的。这份 README 也是它写的。
 
 动态图标来自 [lucide-motion-vue](https://github.com/respeak-io/lucide-motion-vue)。图形是 [Lucide](https://lucide.dev)（ISC），动效改编自 [lucide-animated](https://lucide-animated.com)（MIT）和 [animate-ui](https://github.com/imskyleen/animate-ui)（MIT + Commons Clause）。
+
+空状态和连接失败时的两只猫来自 [LottieFiles](https://lottiefiles.com)，按 Lottie Simple License 分发，不在本项目的 MIT 许可范围内，详见 [src/assets/lottie/LICENSE.md](src/assets/lottie/LICENSE.md)。会话卡片上打盹的那只是我们自己画的。
 
 ## 许可证
 
