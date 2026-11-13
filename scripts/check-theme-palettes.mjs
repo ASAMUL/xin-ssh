@@ -1,10 +1,11 @@
 // 主题调色板体检：ls / vim 之类的程序把语义压在固定的 ANSI 槽位上
 //   blue=目录  green=可执行  cyan=符号链接  red=归档  magenta=图片  yellow=管道/设备
 // 所以这几个槽位之间必须**肉眼可分**，否则主题再好看，`ls` 出来也是一坨。
-// 这里算三件事：
+// 这里算四件事：
 //   1. 槽位两两之间的感知色差 ΔE（CIE76，粗筛用），撞色即报
 //   2. 每个颜色对背景的 WCAG 对比度，太低判为看不清
 //   3. brightBlack（自动补全提示、注释）对背景的对比度——要暗，但得读得出
+//   4. ls 的「黑字彩色底」色块：黑压在绿 / 黄上要读得出
 //
 // 用法：node scripts/check-theme-palettes.mjs
 
@@ -27,6 +28,11 @@ const MIN_CONTRAST = { xin: 4.5, classic: 3 };
 // 门槛照公认好看的浅色主题定（Catppuccin Latte 黄 2.6、粉 2.8）；正文字色仍按上面的标准
 const MIN_LIGHT_ACCENT_CONTRAST = 2.5;
 const MIN_DIM_CONTRAST = 3;
+// ls 用黑字压在彩色底上标两类东西：tw=30;42（/tmp 这种所有人可写、带粘滞位的目录，每台机器 ls / 都看得到）、
+// sg=30;43（setgid）。黑同时是字、绿 / 黄同时是底，单看对背景的对比度查不出来——
+// 墨樱·昼 2026-11-13 的 tmp 就糊在这里（灰黑 #3a3a3c 压翠绿 #008c39，2.6:1）
+const BADGE_PAIRS = [["black", "green"], ["black", "yellow"]];
+const MIN_BADGE_CONTRAST = 4.5;
 // 经典组是上游原版配色（Vesper / Poimandres 的 green/cyan 本来就贴得很近），
 // 「原汁原味」正是这一组存在的理由，撞色也不该由我们去改——只提示不算失败。
 const PALETTE_EXEMPT_GROUPS = ["classic"];
@@ -102,6 +108,13 @@ for (const theme of variants) {
       : minContrast;
     if (ratio < floor) {
       notes.push(`低对比 ${slot} ${ratio.toFixed(2)}:1 < ${floor} (${theme.xterm[slot]})`);
+    }
+  }
+
+  for (const [text, fill] of BADGE_PAIRS) {
+    const ratio = contrastRatio(theme.xterm[text], theme.xterm[fill]);
+    if (ratio < MIN_BADGE_CONTRAST) {
+      notes.push(`色块看不清 ${text} 字压 ${fill} 底 ${ratio.toFixed(2)}:1 < ${MIN_BADGE_CONTRAST} (${theme.xterm[text]} on ${theme.xterm[fill]})`);
     }
   }
 
